@@ -33,7 +33,7 @@ npm run dev      # servidor local
 npm run build    # build de producción en dist/
 ```
 
-Deploy: push a `main` reconstruye… (fase 1: push manual de `dist/` a la rama `gh-pages`).
+Deploy a GitHub Pages: `npm run deploy` (construye y empuja `dist/` a la rama `gh-pages`).
 
 ## Configuración pendiente
 
