@@ -118,7 +118,16 @@ async function pushOutbox() {
       await db.outbox.where('table').equals(table).delete()
       continue
     }
-    const { error } = await supabase.from(table).upsert(rows)
+    let { error } = await supabase.from(table).upsert(rows)
+    if (error && table === 'entries' && /foreign key/i.test(error.message)) {
+      // Recovery: the server lost rows this device still references (e.g. a
+      // server-side wipe). The device is the source of truth — re-push the
+      // whole local catalog, then retry the entries.
+      const [allProducts, allSessions] = await Promise.all([db.products.toArray(), db.sessions.toArray()])
+      await supabase.from('products').upsert(allProducts.map(productToRow))
+      await supabase.from('sessions').upsert(allSessions.map(sessionToRow))
+      ;({ error } = await supabase.from(table).upsert(rows))
+    }
     if (error) throw new Error(`push ${table}: ${error.message}`)
     await db.outbox.where('table').equals(table).delete()
   }
@@ -175,6 +184,12 @@ async function resolveLookups() {
 
 let skipAiThisSession = false
 
+/** Called on manual sync so a newly added OpenAI key is picked up without reopening the app. */
+export function resetAiSkip() {
+  skipAiThisSession = false
+  setState({ aiKeyMissing: false })
+}
+
 async function resolveAi() {
   if (skipAiThisSession) return
   const pending = await db.products.where('needsAi').equals(1).toArray()
@@ -208,6 +223,49 @@ async function resolveAi() {
   }
 }
 
+// Products identified before the image/category pipeline improved: retry the
+// lookup once per app run to upgrade user-submitted OFF photos to retailer
+// shots and fill in a missing category. Never touches a name the user can see.
+const upgradeAttempted = new Set<string>()
+
+async function upgradeCatalog() {
+  const candidates = await db.products
+    .filter(
+      (p) =>
+        !!p.barcode &&
+        p.needsLookup === 0 &&
+        (!p.category || !p.imageUrl || p.imageUrl.includes('openfoodfacts')),
+    )
+    .toArray()
+  for (const p of candidates) {
+    if (upgradeAttempted.has(p.id)) continue
+    upgradeAttempted.add(p.id)
+    let result
+    try {
+      result = await lookupBarcode(p.barcode!)
+    } catch {
+      upgradeAttempted.delete(p.id) // network hiccup — retry next sync
+      continue
+    }
+    if (!result) continue
+    const changes: Partial<Product> = {}
+    const betterImage = result.imageUrl && !result.imageUrl.includes('openfoodfacts')
+    if (betterImage && result.imageUrl !== p.imageUrl) {
+      if (p.imageUrl) await db.images.delete(p.imageUrl)
+      changes.imageUrl = result.imageUrl
+    } else if (!p.imageUrl && result.imageUrl) {
+      changes.imageUrl = result.imageUrl
+    }
+    if (!p.category && result.category) changes.category = result.category
+    if (!p.name && result.name) changes.name = result.name
+    if (Object.keys(changes).length > 0) {
+      changes.updatedAt = Date.now()
+      await db.products.update(p.id, changes)
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+}
+
 /** Download remote product images so thumbnails work offline. */
 async function cacheImages() {
   const products = await db.products.filter((p) => !!p.imageUrl).toArray()
@@ -231,20 +289,29 @@ export async function syncNow() {
   if (syncing || !navigator.onLine) return
   syncing = true
   setState({ syncing: true, lastError: null })
-  try {
-    await pushOutbox()
-    await uploadPhotos()
-    await resolveLookups()
-    await resolveAi()
-    await pushOutbox() // push rows updated by the resolvers
-    await cacheImages()
-    setState({ lastError: null })
-  } catch (err) {
-    setState({ lastError: err instanceof Error ? err.message : String(err) })
-  } finally {
-    syncing = false
-    setState({ syncing: false, pending: await countPending() })
+  // Each stage is isolated: one failing (e.g. a push conflict) must never
+  // block identification, photo upload, or image caching.
+  const errors: string[] = []
+  const stages: [string, () => Promise<void>][] = [
+    ['push', pushOutbox],
+    ['fotos', uploadPhotos],
+    ['identificar', resolveLookups],
+    ['ia', resolveAi],
+    ['push', pushOutbox], // rows updated by the resolvers
+    ['catálogo', upgradeCatalog],
+    ['push', pushOutbox],
+    ['imágenes', cacheImages],
+  ]
+  for (const [label, stage] of stages) {
+    try {
+      await stage()
+    } catch (err) {
+      errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
+  setState({ lastError: errors[0] ?? null })
+  syncing = false
+  setState({ syncing: false, pending: await countPending() })
 }
 
 /** Restore from the server if local storage is empty (e.g. reinstalled app). */

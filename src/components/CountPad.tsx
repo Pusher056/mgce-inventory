@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { db, setEntry, updateProduct, savePhoto } from '../db'
-import { syncNow } from '../sync'
+import { resetAiSkip, syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import type { Product } from '../types'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
@@ -141,6 +141,19 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               >
                 📷 Foto
               </button>
+              {(product.barcode || product.photoId) && product.needsLookup === 0 && product.needsAi === 0 && (
+                <button
+                  className="small"
+                  style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
+                  onClick={async () => {
+                    resetAiSkip()
+                    await updateProduct(product.id, product.barcode ? { needsLookup: 1 } : { needsAi: 1 })
+                    void syncNow()
+                  }}
+                >
+                  🔄 Re-identificar
+                </button>
+              )}
             </div>
           </div>
         </div>

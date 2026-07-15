@@ -1,24 +1,19 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
-import { getSyncState, subscribeSync, syncNow } from './sync'
+import { getSyncState, resetAiSkip, subscribeSync, syncNow } from './sync'
 import Home from './components/Home'
 import SessionView from './components/SessionView'
 import type { Session } from './types'
 
 export default function App() {
-  const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem('activeSession'))
+  // Always open on the menu (list of conteos), per user preference
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
   const session: Session | undefined = useLiveQuery(
     () => (sessionId ? db.sessions.get(sessionId) : undefined),
     [sessionId],
   )
-
-  // Remember the open session so the app reopens right where the user was
-  useEffect(() => {
-    if (sessionId) localStorage.setItem('activeSession', sessionId)
-    else localStorage.removeItem('activeSession')
-  }, [sessionId])
 
   const [showAiWarn, setShowAiWarn] = useState(true)
 
@@ -33,7 +28,10 @@ export default function App() {
         <h1>{session ? session.name : 'MGCE Inventario'}</h1>
         <button
           className="sync-pill"
-          onClick={() => void syncNow()}
+          onClick={() => {
+            resetAiSkip()
+            void syncNow()
+          }}
           title="Tocar para sincronizar ahora"
         >
           <span className={`dot ${sync.syncing ? 'syncing' : sync.online ? 'online' : 'offline'}`} />

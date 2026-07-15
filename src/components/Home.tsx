@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, createSession } from '../db'
+import { db, createSession, deleteSession } from '../db'
 import { syncNow } from '../sync'
 import type { Session } from '../types'
+import SwipeRow from './SwipeRow'
 
 export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
   const sessions = useLiveQuery(() => db.sessions.orderBy('startedAt').reverse().toArray(), []) ?? []
@@ -17,22 +18,31 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
 
       <div style={{ marginTop: 20 }}>
         {sessions.map((s) => (
-          <button key={s.id} className="session-row" onClick={() => onOpen(s)}>
-            <div style={{ fontSize: 26 }}>📋</div>
-            <div className="info">
-              <div className="name">{s.name}</div>
-              <div className="muted small">
-                {new Date(s.startedAt).toLocaleDateString('es-US', {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+          <SwipeRow
+            key={s.id}
+            onDelete={() => {
+              if (window.confirm(`¿Eliminar "${s.name}" y todo su conteo? Esto no se puede deshacer.`)) {
+                void deleteSession(s.id)
+              }
+            }}
+          >
+            <button className="session-row" style={{ marginBottom: 0 }} onClick={() => onOpen(s)}>
+              <div style={{ fontSize: 26 }}>📋</div>
+              <div className="info">
+                <div className="name">{s.name}</div>
+                <div className="muted small">
+                  {new Date(s.startedAt).toLocaleDateString('es-US', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
               </div>
-            </div>
-            <div style={{ color: 'var(--muted)' }}>›</div>
-          </button>
+              <div style={{ color: 'var(--muted)' }}>›</div>
+            </button>
+          </SwipeRow>
         ))}
         {sessions.length === 0 && (
           <div className="muted" style={{ textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>

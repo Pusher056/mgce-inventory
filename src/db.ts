@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { supabase } from './supabase'
 import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -81,6 +82,24 @@ export async function setEntry(sessionId: string, productId: string, bottles: nu
   await db.entries.add(e)
   await queueSync('entries', e.id)
   return e
+}
+
+/** Delete a count (session) and its entries, locally and on the server. */
+export async function deleteSession(id: string) {
+  const entryIds = (await db.entries.where('sessionId').equals(id).toArray()).map((e) => e.id)
+  await db.entries.where('sessionId').equals(id).delete()
+  await db.sessions.delete(id)
+  // Ghost outbox rows for deleted records are filtered out at push time,
+  // but clean them anyway.
+  await db.outbox.where('id').anyOf([id, ...entryIds]).delete()
+  try {
+    if (navigator.onLine) {
+      // entries cascade via FK
+      await supabase.from('sessions').delete().eq('id', id)
+    }
+  } catch {
+    // offline — the server copy stays; it only resurfaces on a fresh install
+  }
 }
 
 export async function deleteEntry(id: string) {

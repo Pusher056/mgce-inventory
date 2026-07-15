@@ -1,11 +1,9 @@
 import { useRef, useState, type ReactNode } from 'react'
 
-const ACTION_W = 176 // two 88px buttons revealed on the left
-
 /**
  * Swipe the row to the right (like deleting an email in Outlook/Gmail)
- * to reveal Eliminar / Ajustar. Uses pointer events so it also works
- * with a mouse. Vertical scrolling is preserved via touch-action: pan-y.
+ * to reveal Eliminar (and optionally Ajustar). Uses pointer events so it
+ * also works with a mouse. Vertical scrolling is preserved via touch-action: pan-y.
  */
 export default function SwipeRow({
   onDelete,
@@ -13,9 +11,10 @@ export default function SwipeRow({
   children,
 }: {
   onDelete: () => void
-  onAdjust: () => void
+  onAdjust?: () => void
   children: ReactNode
 }) {
+  const ACTION_W = onAdjust ? 176 : 88
   const [dx, setDx] = useState(0)
   const drag = useRef<{ startX: number; startY: number; base: number; active: boolean; moved: boolean } | null>(null)
 
@@ -70,17 +69,19 @@ export default function SwipeRow({
           <br />
           Eliminar
         </button>
-        <button
-          className="swipe-adjust"
-          onClick={() => {
-            setDx(0)
-            onAdjust()
-          }}
-        >
-          ✎
-          <br />
-          Ajustar
-        </button>
+        {onAdjust && (
+          <button
+            className="swipe-adjust"
+            onClick={() => {
+              setDx(0)
+              onAdjust()
+            }}
+          >
+            ✎
+            <br />
+            Ajustar
+          </button>
+        )}
       </div>
       <div
         className="swipe-content"

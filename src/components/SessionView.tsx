@@ -193,7 +193,11 @@ export default function SessionView({ session }: { session: Session }) {
                     >
                       <div className="name">
                         {p.name ||
-                          (p.barcode ? `(identificando) …${p.barcode.slice(-6)}` : '(foto — nombre pendiente)')}
+                          (p.needsLookup === 1 || p.needsAi === 1
+                            ? p.barcode
+                              ? `(identificando) …${p.barcode.slice(-6)}`
+                              : '(foto — nombre pendiente)'
+                            : '(sin identificar — tócalo y ponle nombre)')}
                       </div>
                       <div className="muted small">
                         {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
@@ -283,6 +287,7 @@ export default function SessionView({ session }: { session: Session }) {
       {modal.t === 'picker' && (
         <ProductPicker
           products={products}
+          entries={entries}
           onPick={(p) => setModal({ t: 'count', productId: p.id })}
           onCreate={(name) => setModal({ t: 'looseOrCase', draft: { kind: 'manual', name } })}
           onClose={() => setModal({ t: 'none' })}

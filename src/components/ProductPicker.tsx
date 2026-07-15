@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react'
-import type { Product } from '../types'
+import type { Entry, Product } from '../types'
+import { totalBottles } from '../types'
 import { Thumb } from './Thumb'
 
 interface Props {
   products: Product[]
+  /** Entries of the current session — used to show live stock per product */
+  entries: Entry[]
   onPick: (p: Product) => void
   onCreate: (name: string) => void
   onClose: () => void
 }
 
-export default function ProductPicker({ products, onPick, onCreate, onClose }: Props) {
+export default function ProductPicker({ products, entries, onPick, onCreate, onClose }: Props) {
   const [q, setQ] = useState('')
+  const stock = useMemo(() => new Map(entries.map((e) => [e.productId, e])), [entries])
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -38,17 +42,30 @@ export default function ProductPicker({ products, onPick, onCreate, onClose }: P
           ＋ Crear producto nuevo{q.trim() ? `: “${q.trim()}”` : ''}
         </button>
         <div style={{ marginTop: 14 }}>
-          {filtered.map((p) => (
-            <button key={p.id} className="product-row" onClick={() => onPick(p)}>
-              <Thumb product={p} />
-              <div className="info">
-                <div className="name">{p.name || `(sin identificar) ${p.barcode ?? ''}`}</div>
-                <div className="muted small">
-                  {p.brand ?? ''} · {p.unitsPerCase}/caja
+          {filtered.map((p) => {
+            const e = stock.get(p.id)
+            const total = e ? totalBottles(e, p.unitsPerCase) : 0
+            return (
+              <button key={p.id} className="product-row" onClick={() => onPick(p)}>
+                <Thumb product={p} />
+                <div className="info">
+                  <div className="name">{p.name || `(sin identificar) ${p.barcode ?? ''}`}</div>
+                  <div className="muted small">
+                    {p.brand ? `${p.brand} · ` : ''}
+                    {p.unitsPerCase}/caja
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+                {total > 0 ? (
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="qty" style={{ color: 'var(--green)' }}>{total}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>en stock</div>
+                  </div>
+                ) : (
+                  <div style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>OUT OF STOCK</div>
+                )}
+              </button>
+            )
+          })}
           {filtered.length === 0 && <div className="muted" style={{ textAlign: 'center', padding: 20 }}>Sin resultados</div>}
         </div>
         <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
