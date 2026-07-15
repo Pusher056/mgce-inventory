@@ -15,46 +15,46 @@ function fetchWithTimeout(url: string, ms: number): Promise<Response> {
 }
 
 /**
- * Resolve a barcode to a product. Tries Open Food Facts directly (free, CORS-enabled),
- * then falls back to the `identify` edge function (which tries more sources).
+ * Resolve a barcode to a product. The `identify` edge function merges
+ * Open Food Facts (clean names + wine/liquor categories) with UPCitemdb
+ * (professional retailer images). Falls back to Open Food Facts directly
+ * if the edge function is unreachable.
  * Returns null when no source knows the product; throws on network failure
  * (so the caller keeps it queued for retry).
  */
 export async function lookupBarcode(barcode: string): Promise<LookupResult | null> {
   try {
-    const r = await fetchWithTimeout(
-      `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,quantity,image_front_url,categories_tags`,
-      6000,
-    )
-    if (r.ok) {
-      const j = await r.json()
-      if (j.status === 1 && j.product?.product_name) {
-        const p = j.product
-        const isAlcohol = (p.categories_tags ?? []).some((t: string) => /alcohol|wine|beer|spirit|liquor/.test(t))
-        const qty = p.quantity ? ` ${p.quantity}` : ''
+    const { data, error } = await supabase.functions.invoke('identify', { body: { barcode } })
+    if (!error && data) {
+      if (data.error === 'not_found') return null
+      if (!data.error && data.name) {
+        const qty = data.quantity ? ` ${data.quantity}` : ''
         return {
-          name: `${p.product_name}${qty}`.trim(),
-          brand: p.brands ? String(p.brands).split(',')[0].trim() : null,
-          imageUrl: p.image_front_url ?? null,
-          category: isAlcohol ? 'alcohol' : null,
+          name: `${data.name}${qty}`.trim().replace(/\s+/g, ' '),
+          brand: data.brand ?? null,
+          imageUrl: data.imageUrl ?? null,
+          category: (data.category as Category | null) ?? null,
         }
       }
-      // OFF answered "not found" — try the edge function's extra sources
     }
   } catch {
-    // network error → fall through to edge function; if that also fails we throw
+    // edge function unreachable — try Open Food Facts directly below
   }
 
-  const { data, error } = await supabase.functions.invoke('identify', { body: { barcode } })
-  if (error) throw new Error(`identify failed: ${error.message}`)
-  if (!data || data.error === 'not_found') return null
-  if (data.error) throw new Error(`identify error: ${data.error}`)
-  const qty = data.quantity ? ` ${data.quantity}` : ''
+  const r = await fetchWithTimeout(
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,quantity,image_front_url,categories_tags`,
+    6000,
+  )
+  if (!r.ok) throw new Error(`off ${r.status}`)
+  const j = await r.json()
+  if (j.status !== 1 || !j.product?.product_name) return null
+  const p = j.product
+  const qty = p.quantity ? ` ${p.quantity}` : ''
   return {
-    name: `${data.name}${qty}`.trim(),
-    brand: data.brand ?? null,
-    imageUrl: data.imageUrl ?? null,
-    category: (data.category as Category | null) ?? null,
+    name: `${p.product_name}${qty}`.trim(),
+    brand: p.brands ? String(p.brands).split(',')[0].trim() : null,
+    imageUrl: p.image_front_url ?? null,
+    category: null,
   }
 }
 

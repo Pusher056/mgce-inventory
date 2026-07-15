@@ -167,6 +167,31 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   color: var(--amber);
 }
 
+/* ---------- swipe to delete ---------- */
+.swipe-wrap { position: relative; overflow: hidden; border-radius: var(--radius); margin-bottom: 8px; }
+.swipe-actions { position: absolute; inset: 0 auto 0 0; display: flex; }
+.swipe-actions button {
+  flex: 1;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.swipe-delete { background: var(--red); color: #fff; }
+.swipe-adjust { background: var(--bg3); color: var(--text); }
+.swipe-content { position: relative; touch-action: pan-y; }
+.swipe-content .product-row { margin-bottom: 0; }
+
+.cat-header {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 16px 2px 8px;
+}
+.cat-header .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
+
 /* ---------- modal / sheet ---------- */
 .sheet-backdrop {
   position: fixed;

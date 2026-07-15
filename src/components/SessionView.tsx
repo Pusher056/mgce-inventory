@@ -1,28 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, createProduct, savePhoto } from '../db'
+import { db, createProduct, savePhoto, setEntry } from '../db'
 import { syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
-import type { Product, Session } from '../types'
-import { totalBottles } from '../types'
+import type { Category, Entry, Product, Session } from '../types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, totalBottles } from '../types'
 import Scanner from './Scanner'
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
 import UnitsSheet from './UnitsSheet'
 import ProductPicker from './ProductPicker'
 import PhotoModal from './PhotoModal'
+import SwipeRow from './SwipeRow'
+
+type Draft =
+  | { kind: 'barcode'; barcode: string }
+  | { kind: 'photo'; blob: Blob; previewUrl: string }
+  | { kind: 'manual'; name: string }
 
 type Modal =
   | { t: 'none' }
   | { t: 'scanner' }
-  | { t: 'newBarcode'; barcode: string }
-  | { t: 'newPhoto'; blob: Blob; previewUrl: string }
-  | { t: 'newManual'; name: string }
-  | { t: 'count'; productId: string }
+  | { t: 'looseOrCase'; draft: Draft }
+  | { t: 'units'; draft: Draft }
+  | { t: 'count'; productId: string; initial?: { bottles?: number; cases?: number } }
   | { t: 'picker' }
   | { t: 'photo'; productId: string }
   | { t: 'export' }
+
+function draftTitle(d: Draft): string {
+  if (d.kind === 'barcode') return 'Producto nuevo'
+  if (d.kind === 'photo') return 'Producto desde foto'
+  return d.name || 'Producto nuevo'
+}
+function draftSubtitle(d: Draft): string | undefined {
+  if (d.kind === 'barcode') return `Código: ${d.barcode} — el nombre se identificará al haber señal`
+  if (d.kind === 'photo') return 'La IA lo identificará al haber señal'
+  return undefined
+}
 
 export default function SessionView({ session }: { session: Session }) {
   const [modal, setModal] = useState<Modal>({ t: 'none' })
@@ -56,18 +72,67 @@ export default function SessionView({ session }: { session: Session }) {
     { cases: 0, bottles: 0 },
   )
 
+  // Group counted products by category; pending-identification items first so
+  // the user sees them resolve and jump to their category on sync.
+  const groups = useMemo(() => {
+    const byCat = new Map<Category | 'pending', Entry[]>()
+    for (const e of visibleEntries) {
+      const p = productMap.get(e.productId)
+      if (!p) continue
+      const key: Category | 'pending' =
+        p.needsLookup === 1 || p.needsAi === 1 ? 'pending' : (p.category ?? 'other')
+      const list = byCat.get(key) ?? []
+      list.push(e)
+      byCat.set(key, list)
+    }
+    const order: (Category | 'pending')[] = ['pending', ...CATEGORY_ORDER]
+    return order
+      .filter((k) => byCat.has(k))
+      .map((k) => ({
+        key: k,
+        label: k === 'pending' ? 'Identificando…' : CATEGORY_LABELS[k],
+        entries: (byCat.get(k) ?? []).sort((a, b) => b.updatedAt - a.updatedAt),
+      }))
+  }, [visibleEntries, productMap])
+
   async function handleScan(barcode: string) {
     const existing = await db.products.where('barcode').equals(barcode).first()
     if (existing) {
       setModal({ t: 'count', productId: existing.id })
     } else {
-      setModal({ t: 'newBarcode', barcode })
+      setModal({ t: 'looseOrCase', draft: { kind: 'barcode', barcode } })
     }
   }
 
   async function handlePhotoFile(file: File) {
     const blob = await fileToJpeg(file)
-    setModal({ t: 'newPhoto', blob, previewUrl: URL.createObjectURL(blob) })
+    setModal({ t: 'looseOrCase', draft: { kind: 'photo', blob, previewUrl: URL.createObjectURL(blob) } })
+  }
+
+  async function createFromDraft(d: Draft, unitsPerCase: number): Promise<Product> {
+    let p: Product
+    if (d.kind === 'barcode') {
+      p = await createProduct({ barcode: d.barcode, needsLookup: 1, unitsPerCase })
+    } else if (d.kind === 'photo') {
+      p = await createProduct({ needsAi: 1, unitsPerCase })
+      await savePhoto(p.id, d.blob)
+      URL.revokeObjectURL(d.previewUrl)
+    } else {
+      p = await createProduct({ name: d.name, unitsPerCase })
+    }
+    void syncNow()
+    return p
+  }
+
+  function closeDraft(d: Draft) {
+    if (d.kind === 'photo') URL.revokeObjectURL(d.previewUrl)
+    setModal({ t: 'none' })
+  }
+
+  async function removeFromCount(e: Entry) {
+    // Zeroing (not deleting) keeps the server row consistent via normal sync
+    await setEntry(e.sessionId, e.productId, 0, 0)
+    void syncNow()
   }
 
   const countProduct: Product | undefined = modal.t === 'count' ? productMap.get(modal.productId) : undefined
@@ -100,40 +165,49 @@ export default function SessionView({ session }: { session: Session }) {
         }}
       />
 
-      <div style={{ marginTop: 18, flex: 1 }}>
-        <div className="muted small" style={{ marginBottom: 8 }}>
-          {visibleEntries.length === 0
-            ? 'Todavía no hay productos contados. Escanea la primera botella 👆'
-            : `${visibleEntries.length} producto${visibleEntries.length === 1 ? '' : 's'} contado${visibleEntries.length === 1 ? '' : 's'}`}
-        </div>
-        {[...visibleEntries]
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .map((e) => {
-            const p = productMap.get(e.productId)
-            if (!p) return null
-            return (
-              <div key={e.id} className="product-row" style={{ padding: '8px 10px' }}>
-                <Thumb product={p} onClick={() => setModal({ t: 'photo', productId: p.id })} />
-                <button
-                  style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
-                  onClick={() => setModal({ t: 'count', productId: p.id })}
+      <div style={{ marginTop: 10, flex: 1 }}>
+        {visibleEntries.length === 0 && (
+          <div className="muted small" style={{ marginTop: 10 }}>
+            Todavía no hay productos contados. Escanea la primera botella 👆
+          </div>
+        )}
+        {groups.map((g) => (
+          <div key={g.key}>
+            <div className="cat-header">
+              {g.label} <span className="muted">· {g.entries.length}</span>
+            </div>
+            {g.entries.map((e) => {
+              const p = productMap.get(e.productId)
+              if (!p) return null
+              return (
+                <SwipeRow
+                  key={e.id}
+                  onDelete={() => void removeFromCount(e)}
+                  onAdjust={() => setModal({ t: 'count', productId: p.id })}
                 >
-                  <div className="name">
-                    {p.name ||
-                      (p.barcode ? `(identificando) …${p.barcode.slice(-6)}` : '(foto — nombre pendiente)')}
-                    {p.needsLookup === 1 && <span className="badge" style={{ marginLeft: 6 }}>⏳</span>}
-                    {p.needsAi === 1 && <span className="badge" style={{ marginLeft: 6 }}>IA⏳</span>}
+                  <div className="product-row" style={{ padding: '8px 10px' }}>
+                    <Thumb product={p} onClick={() => setModal({ t: 'photo', productId: p.id })} />
+                    <button
+                      style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
+                      onClick={() => setModal({ t: 'count', productId: p.id })}
+                    >
+                      <div className="name">
+                        {p.name ||
+                          (p.barcode ? `(identificando) …${p.barcode.slice(-6)}` : '(foto — nombre pendiente)')}
+                      </div>
+                      <div className="muted small">
+                        {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
+                        {e.cases > 0 && e.bottles > 0 && ' + '}
+                        {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
+                      </div>
+                    </button>
+                    <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
                   </div>
-                  <div className="muted small">
-                    {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
-                    {e.cases > 0 && e.bottles > 0 && ' + '}
-                    {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
-                  </div>
-                </button>
-                <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
-              </div>
-            )
-          })}
+                </SwipeRow>
+              )
+            })}
+          </div>
+        ))}
       </div>
 
       {visibleEntries.length > 0 && (
@@ -152,47 +226,57 @@ export default function SessionView({ session }: { session: Session }) {
         <Scanner onScan={(code) => void handleScan(code)} onClose={() => setModal({ t: 'none' })} />
       )}
 
-      {modal.t === 'newBarcode' && (
-        <UnitsSheet
-          title="Producto nuevo"
-          subtitle={`Código: ${modal.barcode} — el nombre se identificará al haber señal`}
-          onPick={async (units) => {
-            const p = await createProduct({ barcode: modal.barcode, needsLookup: 1, unitsPerCase: units })
-            setModal({ t: 'count', productId: p.id })
-            void syncNow()
-          }}
-          onClose={() => setModal({ t: 'none' })}
-        />
+      {modal.t === 'looseOrCase' && (
+        <div className="sheet-backdrop" onClick={() => closeDraft(modal.draft)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            {modal.draft.kind === 'photo' && (
+              <img
+                src={modal.draft.previewUrl}
+                alt=""
+                style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12, marginBottom: 8 }}
+              />
+            )}
+            <h2>{draftTitle(modal.draft)}</h2>
+            {draftSubtitle(modal.draft) && <div className="muted small">{draftSubtitle(modal.draft)}</div>}
+            <div style={{ marginTop: 16, fontWeight: 700 }}>¿Qué estás contando?</div>
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              <button
+                className="big-btn primary"
+                style={{ minHeight: 84 }}
+                onClick={async () => {
+                  const draft = modal.draft
+                  const p = await createFromDraft(draft, 12)
+                  setModal({ t: 'count', productId: p.id, initial: { bottles: 1 } })
+                }}
+              >
+                🍾 Botella suelta
+              </button>
+              <button
+                className="big-btn"
+                style={{ minHeight: 84 }}
+                onClick={() => setModal({ t: 'units', draft: modal.draft })}
+              >
+                📦 Caja
+              </button>
+            </div>
+            <button className="big-btn ghost" style={{ marginTop: 12 }} onClick={() => closeDraft(modal.draft)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
-      {modal.t === 'newPhoto' && (
+      {modal.t === 'units' && (
         <UnitsSheet
-          title="Producto desde foto"
-          subtitle="La IA lo identificará al haber señal"
-          imageSrc={modal.previewUrl}
+          title={draftTitle(modal.draft)}
+          subtitle={draftSubtitle(modal.draft)}
+          imageSrc={modal.draft.kind === 'photo' ? modal.draft.previewUrl : undefined}
           onPick={async (units) => {
-            const p = await createProduct({ needsAi: 1, unitsPerCase: units })
-            await savePhoto(p.id, modal.blob)
-            URL.revokeObjectURL(modal.previewUrl)
-            setModal({ t: 'count', productId: p.id })
-            void syncNow()
+            const draft = modal.draft
+            const p = await createFromDraft(draft, units)
+            setModal({ t: 'count', productId: p.id, initial: { cases: 1 } })
           }}
-          onClose={() => {
-            URL.revokeObjectURL(modal.previewUrl)
-            setModal({ t: 'none' })
-          }}
-        />
-      )}
-
-      {modal.t === 'newManual' && (
-        <UnitsSheet
-          title={modal.name || 'Producto nuevo'}
-          onPick={async (units) => {
-            const p = await createProduct({ name: modal.name, unitsPerCase: units })
-            setModal({ t: 'count', productId: p.id })
-            void syncNow()
-          }}
-          onClose={() => setModal({ t: 'none' })}
+          onClose={() => closeDraft(modal.draft)}
         />
       )}
 
@@ -200,7 +284,7 @@ export default function SessionView({ session }: { session: Session }) {
         <ProductPicker
           products={products}
           onPick={(p) => setModal({ t: 'count', productId: p.id })}
-          onCreate={(name) => setModal({ t: 'newManual', name })}
+          onCreate={(name) => setModal({ t: 'looseOrCase', draft: { kind: 'manual', name } })}
           onClose={() => setModal({ t: 'none' })}
         />
       )}
@@ -209,6 +293,7 @@ export default function SessionView({ session }: { session: Session }) {
         <CountPad
           sessionId={session.id}
           product={countProduct}
+          initial={modal.initial}
           onDone={() => setModal({ t: 'none' })}
           onScanNext={() => setModal({ t: 'scanner' })}
         />

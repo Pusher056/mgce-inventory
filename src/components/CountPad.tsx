@@ -1,7 +1,9 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { db, setEntry, updateProduct } from '../db'
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { db, setEntry, updateProduct, savePhoto } from '../db'
 import { syncNow } from '../sync'
+import { fileToJpeg } from '../image'
 import type { Product } from '../types'
+import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
 import { Thumb } from './Thumb'
 import UnitsSheet from './UnitsSheet'
 
@@ -42,18 +44,22 @@ function Counter({
 interface Props {
   sessionId: string
   product: Product
+  /** Pre-filled counts for a brand-new product (from the "suelta o caja" choice) */
+  initial?: { bottles?: number; cases?: number }
   onDone: () => void
   onScanNext: () => void
 }
 
-export default function CountPad({ sessionId, product, onDone, onScanNext }: Props) {
+export default function CountPad({ sessionId, product, initial, onDone, onScanNext }: Props) {
   const [cases, setCases] = useState(0)
   const [bottles, setBottles] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [editUnits, setEditUnits] = useState(false)
+  const [editCategory, setEditCategory] = useState(false)
   const [editName, setEditName] = useState(false)
   const [name, setName] = useState(product.name)
   const [nameDirty, setNameDirty] = useState(false)
+  const photoRef = useRef<HTMLInputElement>(null)
 
   // If the background lookup resolves the name while this sheet is open,
   // adopt it — unless the user is typing their own.
@@ -70,9 +76,13 @@ export default function CountPad({ sessionId, product, onDone, onScanNext }: Pro
         if (e) {
           setCases(e.cases)
           setBottles(e.bottles)
+        } else {
+          setCases(initial?.cases ?? 0)
+          setBottles(initial?.bottles ?? 0)
         }
         setLoaded(true)
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, product.id])
 
   async function save() {
@@ -89,7 +99,7 @@ export default function CountPad({ sessionId, product, onDone, onScanNext }: Pro
     <div className="sheet-backdrop">
       <div className="sheet">
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
-          <Thumb product={product} />
+          <Thumb product={product} onClick={() => photoRef.current?.click()} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {editName ? (
               <input
@@ -109,15 +119,47 @@ export default function CountPad({ sessionId, product, onDone, onScanNext }: Pro
                 {product.needsAi === 1 && <span className="badge" style={{ marginLeft: 6 }}>IA pendiente</span>}
               </div>
             )}
-            <button
-              className="small"
-              style={{ background: 'var(--bg3)', padding: '4px 10px', marginTop: 4, borderRadius: 999, color: 'var(--muted)' }}
-              onClick={() => setEditUnits(true)}
-            >
-              {product.unitsPerCase} botellas/caja ✎
-            </button>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
+                onClick={() => setEditUnits(true)}
+              >
+                {product.unitsPerCase}/caja ✎
+              </button>
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--accent)' }}
+                onClick={() => setEditCategory(true)}
+              >
+                {CATEGORY_LABELS[product.category ?? 'other']} ▾
+              </button>
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
+                onClick={() => photoRef.current?.click()}
+              >
+                📷 Foto
+              </button>
+            </div>
           </div>
         </div>
+
+        <input
+          ref={photoRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (!f) return
+            const blob = await fileToJpeg(f)
+            await savePhoto(product.id, blob)
+            void syncNow()
+          }}
+        />
 
         {loaded && (
           <>
@@ -165,6 +207,30 @@ export default function CountPad({ sessionId, product, onDone, onScanNext }: Pro
           }}
           onClose={() => setEditUnits(false)}
         />
+      )}
+
+      {editCategory && (
+        <div className="sheet-backdrop" onClick={() => setEditCategory(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>Categoría</h2>
+            {CATEGORY_ORDER.map((c) => (
+              <button
+                key={c}
+                className="big-btn"
+                style={{
+                  marginTop: 8,
+                  outline: product.category === c ? '2px solid var(--accent)' : 'none',
+                }}
+                onClick={async () => {
+                  await updateProduct(product.id, { category: c })
+                  setEditCategory(false)
+                }}
+              >
+                {CATEGORY_LABELS[c]}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

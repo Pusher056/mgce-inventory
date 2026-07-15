@@ -1,4 +1,38 @@
-export type Category = 'alcohol' | 'soft' | 'other'
+export type Category =
+  | 'red_wine'
+  | 'white_wine'
+  | 'rose_wine'
+  | 'sparkling'
+  | 'spirits'
+  | 'beer'
+  | 'soft'
+  | 'water'
+  | 'other'
+
+// Warehouse vocabulary is English (the team speaks English); app chrome is Spanish for now
+export const CATEGORY_LABELS: Record<Category, string> = {
+  spirits: 'Hard Liquor',
+  red_wine: 'Red Wine',
+  white_wine: 'White Wine',
+  rose_wine: 'Rosé',
+  sparkling: 'Champagne & Sparkling',
+  beer: 'Beer',
+  soft: 'Soft Drinks',
+  water: 'Water',
+  other: 'Otros',
+}
+
+export const CATEGORY_ORDER: Category[] = [
+  'spirits',
+  'red_wine',
+  'white_wine',
+  'rose_wine',
+  'sparkling',
+  'beer',
+  'soft',
+  'water',
+  'other',
+]
 
 export interface Product {
   id: string

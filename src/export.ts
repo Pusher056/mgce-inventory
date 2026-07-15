@@ -1,10 +1,11 @@
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import type { Entry, Product, Session } from './types'
-import { totalBottles } from './types'
+import type { Category, Entry, Product, Session } from './types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, totalBottles } from './types'
 
 interface Row {
+  categoria: string
   producto: string
   marca: string
   codigo: string
@@ -15,11 +16,14 @@ interface Row {
 }
 
 export function buildRows(session: Session, entries: Entry[], products: Map<string, Product>): Row[] {
-  const rows: Row[] = []
+  const rows: (Row & { catIdx: number })[] = []
   for (const e of entries) {
     const p = products.get(e.productId)
     if (!p) continue
+    const cat: Category = p.category ?? 'other'
     rows.push({
+      categoria: CATEGORY_LABELS[cat],
+      catIdx: CATEGORY_ORDER.indexOf(cat),
       producto: p.name || (p.barcode ? `(sin identificar) ${p.barcode}` : '(sin nombre)'),
       marca: p.brand ?? '',
       codigo: p.barcode ?? '',
@@ -29,7 +33,7 @@ export function buildRows(session: Session, entries: Entry[], products: Map<stri
       totalBotellas: totalBottles(e, p.unitsPerCase),
     })
   }
-  rows.sort((a, b) => a.producto.localeCompare(b.producto, 'es'))
+  rows.sort((a, b) => a.catIdx - b.catIdx || a.producto.localeCompare(b.producto, 'es'))
   return rows
 }
 
@@ -43,6 +47,7 @@ function fileStem(session: Session): string {
 export function exportExcel(session: Session, entries: Entry[], products: Map<string, Product>) {
   const rows = buildRows(session, entries, products)
   const data = rows.map((r) => ({
+    'Categoría': r.categoria,
     Producto: r.producto,
     Marca: r.marca,
     'Código': r.codigo,
@@ -52,6 +57,7 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
     'Total botellas': r.totalBotellas,
   }))
   data.push({
+    'Categoría': '',
     Producto: 'TOTAL',
     Marca: '',
     'Código': '',
@@ -61,7 +67,7 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
     'Total botellas': rows.reduce((s, r) => s + r.totalBotellas, 0),
   })
   const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [{ wch: 38 }, { wch: 16 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 15 }, { wch: 13 }]
+  ws['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 16 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 15 }, { wch: 13 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
   XLSX.writeFile(wb, `${fileStem(session)}.xlsx`)
@@ -83,10 +89,27 @@ export function exportPdf(session: Session, entries: Entry[], products: Map<stri
   )
   doc.setTextColor(0)
 
+  // Category shown as full-width section rows (like the in-app grouping)
+  const body: (string | number | object)[][] = []
+  let lastCat = ''
+  for (const r of rows) {
+    if (r.categoria !== lastCat) {
+      lastCat = r.categoria
+      body.push([
+        {
+          content: r.categoria,
+          colSpan: 7,
+          styles: { fillColor: [226, 232, 240] as [number, number, number], fontStyle: 'bold' as const, textColor: 20 },
+        },
+      ])
+    }
+    body.push([r.producto, r.marca, r.codigo, r.cajas, r.botPorCaja, r.botellasSueltas, r.totalBotellas])
+  }
+
   autoTable(doc, {
     startY: 28,
     head: [['Producto', 'Marca', 'Código', 'Cajas', 'Bot/caja', 'Sueltas', 'Total bot.']],
-    body: rows.map((r) => [r.producto, r.marca, r.codigo, r.cajas, r.botPorCaja, r.botellasSueltas, r.totalBotellas]),
+    body,
     foot: [[
       'TOTAL', '', '',
       String(rows.reduce((s, r) => s + r.cajas, 0)), '',
