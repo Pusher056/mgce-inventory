@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { categoryFromText } from './classify'
 import type { Category } from './types'
 
 export interface LookupResult {
@@ -33,7 +34,7 @@ export async function lookupBarcode(barcode: string): Promise<LookupResult | nul
           name: `${data.name}${qty}`.trim().replace(/\s+/g, ' '),
           brand: data.brand ?? null,
           imageUrl: data.imageUrl ?? null,
-          category: (data.category as Category | null) ?? null,
+          category: (data.category as Category | null) ?? categoryFromText(data.name, data.brand),
         }
       }
     }
@@ -54,7 +55,7 @@ export async function lookupBarcode(barcode: string): Promise<LookupResult | nul
     name: `${p.product_name}${qty}`.trim(),
     brand: p.brands ? String(p.brands).split(',')[0].trim() : null,
     imageUrl: p.image_front_url ?? null,
-    category: null,
+    category: categoryFromText(p.product_name, p.brands),
   }
 }
 

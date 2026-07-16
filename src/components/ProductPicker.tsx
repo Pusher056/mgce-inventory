@@ -23,6 +23,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
     return sorted.filter(
       (p) =>
         p.name.toLowerCase().includes(needle) ||
+        (p.alias ?? '').toLowerCase().includes(needle) ||
         (p.brand ?? '').toLowerCase().includes(needle) ||
         (p.barcode ?? '').includes(needle),
     )
@@ -51,6 +52,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
                 <div className="info">
                   <div className="name">{p.name || `(sin identificar) ${p.barcode ?? ''}`}</div>
                   <div className="muted small">
+                    {p.alias ? `"${p.alias}" · ` : ''}
                     {p.brand ? `${p.brand} · ` : ''}
                     {p.unitsPerCase}/caja
                   </div>

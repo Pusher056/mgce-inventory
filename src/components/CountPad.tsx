@@ -57,8 +57,13 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   const [editUnits, setEditUnits] = useState(false)
   const [editCategory, setEditCategory] = useState(false)
   const [editName, setEditName] = useState(false)
+  const [editAlias, setEditAlias] = useState(false)
+  const [alias, setAlias] = useState(product.alias ?? '')
   const [name, setName] = useState(product.name)
   const [nameDirty, setNameDirty] = useState(false)
+  // Counting cases of a product whose bottles-per-case was never confirmed →
+  // ask on save (the user prefers entering how many cases first)
+  const [askUnitsThen, setAskUnitsThen] = useState<null | 'done' | 'scan'>(null)
   const photoRef = useRef<HTMLInputElement>(null)
 
   // If the background lookup resolves the name while this sheet is open,
@@ -89,8 +94,21 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
     if (nameDirty && name.trim() !== product.name) {
       await updateProduct(product.id, { name: name.trim() })
     }
+    if (alias.trim() !== (product.alias ?? '')) {
+      await updateProduct(product.id, { alias: alias.trim() || null })
+    }
     await setEntry(sessionId, product.id, bottles, cases)
     void syncNow()
+  }
+
+  async function saveThen(next: 'done' | 'scan') {
+    if (cases > 0 && product.unitsConfirmed !== 1) {
+      setAskUnitsThen(next) // confirm bottles-per-case first
+      return
+    }
+    await save()
+    if (next === 'done') onDone()
+    else onScanNext()
   }
 
   const total = cases * product.unitsPerCase + bottles
@@ -141,6 +159,13 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               >
                 📷 Foto
               </button>
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
+                onClick={() => setEditAlias(true)}
+              >
+                🏷 {product.alias || 'Apodo'}
+              </button>
               {(product.barcode || product.photoId) && product.needsLookup === 0 && product.needsAi === 0 && (
                 <button
                   className="small"
@@ -185,23 +210,11 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           Total: <b style={{ color: 'var(--text)' }}>{total}</b> botellas
         </div>
 
-        <button
-          className="big-btn green"
-          onClick={async () => {
-            await save()
-            onScanNext()
-          }}
-        >
+        <button className="big-btn green" onClick={() => void saveThen('scan')}>
           ✓ Guardar y escanear otro
         </button>
         <div className="btn-row" style={{ marginTop: 10 }}>
-          <button
-            className="big-btn"
-            onClick={async () => {
-              await save()
-              onDone()
-            }}
-          >
+          <button className="big-btn" onClick={() => void saveThen('done')}>
             Guardar
           </button>
           <button className="big-btn ghost" onClick={onDone}>
@@ -215,11 +228,55 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           title={name || 'Producto'}
           onPick={async (n) => {
             // parent passes a live product (useLiveQuery), so the new value re-renders
-            await updateProduct(product.id, { unitsPerCase: n })
+            await updateProduct(product.id, { unitsPerCase: n, unitsConfirmed: 1 })
             setEditUnits(false)
           }}
           onClose={() => setEditUnits(false)}
         />
+      )}
+
+      {askUnitsThen && (
+        <UnitsSheet
+          title={name || 'Producto'}
+          subtitle={`Estás guardando ${cases} caja${cases === 1 ? '' : 's'}`}
+          onPick={async (n) => {
+            const next = askUnitsThen
+            await updateProduct(product.id, { unitsPerCase: n, unitsConfirmed: 1 })
+            setAskUnitsThen(null)
+            await save()
+            if (next === 'done') onDone()
+            else onScanNext()
+          }}
+          onClose={() => setAskUnitsThen(null)}
+        />
+      )}
+
+      {editAlias && (
+        <div className="sheet-backdrop" onClick={() => setEditAlias(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>Apodo del producto</h2>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              ¿Cómo le dicen en el trabajo? (p. ej. "Whispering Angel"). El buscador lo encuentra por
+              el nombre oficial o por este apodo.
+            </div>
+            <input
+              autoFocus
+              value={alias}
+              placeholder="Apodo…"
+              onChange={(e) => setAlias(e.target.value)}
+            />
+            <button
+              className="big-btn primary"
+              style={{ marginTop: 14 }}
+              onClick={async () => {
+                await updateProduct(product.id, { alias: alias.trim() || null })
+                setEditAlias(false)
+              }}
+            >
+              Guardar apodo
+            </button>
+          </div>
+        </div>
       )}
 
       {editCategory && (

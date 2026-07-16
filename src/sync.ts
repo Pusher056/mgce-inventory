@@ -1,7 +1,8 @@
 import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
-import type { Entry, Product, Session } from './types'
+import { categoryFromText } from './classify'
+import type { Category, Entry, Product, Session } from './types'
 
 /**
  * Offline-first sync engine.
@@ -62,9 +63,11 @@ function productToRow(p: Product) {
     id: p.id,
     barcode: p.barcode,
     name: p.name,
+    alias: p.alias ?? null,
     brand: p.brand,
     category: p.category,
     units_per_case: p.unitsPerCase,
+    units_confirmed: p.unitsConfirmed === 1,
     image_url: p.imageUrl,
     photo_path: p.photoId ? `${p.id}.jpg` : null,
     needs_lookup: p.needsLookup === 1,
@@ -237,8 +240,10 @@ async function upgradeCatalog() {
         (!p.category || !p.imageUrl || p.imageUrl.includes('openfoodfacts')),
     )
     .toArray()
+  let budget = 4 // UPCitemdb's free tier rate-limits; upgrade a few per cycle
   for (const p of candidates) {
     if (upgradeAttempted.has(p.id)) continue
+    if (budget-- <= 0) break
     upgradeAttempted.add(p.id)
     let result
     try {
@@ -262,6 +267,52 @@ async function upgradeCatalog() {
       changes.updatedAt = Date.now()
       await db.products.update(p.id, changes)
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+}
+
+/** Categorize named-but-uncategorized products from keywords in the name (no network). */
+async function categorizeLocal() {
+  const candidates = await db.products.filter((p) => !!p.name && !p.category).toArray()
+  for (const p of candidates) {
+    const cat = categoryFromText(p.name, p.alias, p.brand)
+    if (cat) {
+      await db.products.update(p.id, { category: cat, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+}
+
+// Last resort for names the keyword classifier can't place: ask OpenAI in one
+// batched call (text-only, cheap). Once per product per app run.
+const aiCatAttempted = new Set<string>()
+
+async function aiCategorize() {
+  if (skipAiThisSession) return
+  const candidates = (await db.products.filter((p) => !!p.name && !p.category).toArray()).filter(
+    (p) => !aiCatAttempted.has(p.id),
+  )
+  if (candidates.length === 0) return
+  const batch = candidates.slice(0, 20)
+  batch.forEach((p) => aiCatAttempted.add(p.id))
+  const { data, error } = await supabase.functions.invoke('identify', {
+    body: { names: batch.map((p) => `${p.name}${p.brand ? ` (${p.brand})` : ''}`) },
+  })
+  if (error) {
+    batch.forEach((p) => aiCatAttempted.delete(p.id)) // retry next sync
+    throw new Error(`categorize: ${error.message}`)
+  }
+  if (data?.error === 'no_openai_key') {
+    skipAiThisSession = true
+    setState({ aiKeyMissing: true })
+    return
+  }
+  const cats: (Category | null)[] = data?.categories ?? []
+  for (let i = 0; i < batch.length; i++) {
+    const cat = cats[i]
+    if (cat) {
+      await db.products.update(batch[i].id, { category: cat, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'products', id: batch[i].id, ts: Date.now() })
     }
   }
 }
@@ -299,6 +350,8 @@ export async function syncNow() {
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers
     ['catálogo', upgradeCatalog],
+    ['categorías', categorizeLocal],
+    ['categorías-ia', aiCategorize],
     ['push', pushOutbox],
     ['imágenes', cacheImages],
   ]
@@ -331,9 +384,11 @@ export async function initialPullIfEmpty() {
           id: r.id,
           barcode: r.barcode,
           name: r.name ?? '',
+          alias: r.alias ?? null,
           brand: r.brand,
           category: r.category,
           unitsPerCase: r.units_per_case ?? 12,
+          unitsConfirmed: r.units_confirmed ? 1 : (0 as 0 | 1),
           imageUrl: r.image_url,
           photoId: null,
           needsLookup: r.needs_lookup ? 1 : (0 as 0 | 1),

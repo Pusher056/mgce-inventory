@@ -38,9 +38,13 @@ export interface Product {
   id: string
   barcode: string | null
   name: string
+  /** Nombre con el que el equipo conoce el producto (p. ej. "Whispering Angel") — buscable */
+  alias: string | null
   brand: string | null
   category: Category | null
   unitsPerCase: number
+  /** El usuario ya confirmó las botellas/caja; si no, se pregunta al contar cajas por primera vez */
+  unitsConfirmed: 0 | 1
   /** Remote product image from barcode lookup */
   imageUrl: string | null
   /** Local photo taken by the user (key into `photos` table) */

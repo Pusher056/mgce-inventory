@@ -9,7 +9,6 @@ import { CATEGORY_LABELS, CATEGORY_ORDER, totalBottles } from '../types'
 import Scanner from './Scanner'
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
-import UnitsSheet from './UnitsSheet'
 import ProductPicker from './ProductPicker'
 import PhotoModal from './PhotoModal'
 import SwipeRow from './SwipeRow'
@@ -23,7 +22,6 @@ type Modal =
   | { t: 'none' }
   | { t: 'scanner' }
   | { t: 'looseOrCase'; draft: Draft }
-  | { t: 'units'; draft: Draft }
   | { t: 'count'; productId: string; initial?: { bottles?: number; cases?: number } }
   | { t: 'picker' }
   | { t: 'photo'; productId: string }
@@ -258,7 +256,11 @@ export default function SessionView({ session }: { session: Session }) {
               <button
                 className="big-btn"
                 style={{ minHeight: 84 }}
-                onClick={() => setModal({ t: 'units', draft: modal.draft })}
+                onClick={async () => {
+                  // bottles-per-case gets asked at save time, after they enter how many cases
+                  const p = await createFromDraft(modal.draft, 12)
+                  setModal({ t: 'count', productId: p.id, initial: { cases: 1 } })
+                }}
               >
                 📦 Caja
               </button>
@@ -268,20 +270,6 @@ export default function SessionView({ session }: { session: Session }) {
             </button>
           </div>
         </div>
-      )}
-
-      {modal.t === 'units' && (
-        <UnitsSheet
-          title={draftTitle(modal.draft)}
-          subtitle={draftSubtitle(modal.draft)}
-          imageSrc={modal.draft.kind === 'photo' ? modal.draft.previewUrl : undefined}
-          onPick={async (units) => {
-            const draft = modal.draft
-            const p = await createFromDraft(draft, units)
-            setModal({ t: 'count', productId: p.id, initial: { cases: 1 } })
-          }}
-          onClose={() => closeDraft(modal.draft)}
-        />
       )}
 
       {modal.t === 'picker' && (
