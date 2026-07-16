@@ -427,7 +427,27 @@ export async function initialPullIfEmpty() {
   }
 }
 
+/**
+ * One-time cleanup: before v1.1, "eliminar" zeroed the entry instead of
+ * deleting it, so test items lingered as 0/0 ghosts (visible in Buscar).
+ * From v1.1 on, 0/0 saved on purpose means "out of stock" and is kept.
+ */
+async function purgeLegacyZeroEntries() {
+  if (localStorage.getItem('purgeZeroEntriesV1')) return
+  const zeros = await db.entries.filter((e) => e.bottles === 0 && e.cases === 0).toArray()
+  for (const e of zeros) {
+    await db.entries.delete(e.id)
+    try {
+      if (navigator.onLine) await supabase.from('entries').delete().eq('id', e.id)
+    } catch {
+      /* best effort */
+    }
+  }
+  localStorage.setItem('purgeZeroEntriesV1', '1')
+}
+
 export function startSyncLoop() {
+  void purgeLegacyZeroEntries()
   const onOnline = () => {
     setState({ online: true })
     void syncNow()

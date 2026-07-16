@@ -18,7 +18,9 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const sorted = [...products].sort((a, b) => (a.name || 'zzz').localeCompare(b.name || 'zzz', 'es'))
+    // Only products that belong to this inventory (deleted ones don't reappear)
+    const inInventory = products.filter((p) => stock.has(p.id))
+    const sorted = inInventory.sort((a, b) => (a.name || 'zzz').localeCompare(b.name || 'zzz', 'es'))
     if (!needle) return sorted
     return sorted.filter(
       (p) =>
@@ -27,7 +29,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
         (p.brand ?? '').toLowerCase().includes(needle) ||
         (p.barcode ?? '').includes(needle),
     )
-  }, [products, q])
+  }, [products, q, stock])
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>

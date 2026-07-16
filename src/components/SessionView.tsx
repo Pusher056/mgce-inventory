@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, createProduct, savePhoto, setEntry } from '../db'
+import { db, createProduct, deleteEntry, savePhoto } from '../db'
 import { syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
@@ -59,7 +59,8 @@ export default function SessionView({ session }: { session: Session }) {
     }
   }, [])
 
-  const visibleEntries = entries.filter((e) => e.bottles > 0 || e.cases > 0)
+  // All entries are the inventory — including 0/0, which means "out of stock"
+  const visibleEntries = entries
   const totals = visibleEntries.reduce(
     (acc, e) => {
       const p = productMap.get(e.productId)
@@ -128,9 +129,9 @@ export default function SessionView({ session }: { session: Session }) {
   }
 
   async function removeFromCount(e: Entry) {
-    // Zeroing (not deleting) keeps the server row consistent via normal sync
-    await setEntry(e.sessionId, e.productId, 0, 0)
-    void syncNow()
+    // Real delete — the product leaves the inventory (and Buscar).
+    // Saving 0 in the counter instead keeps it listed as OUT OF STOCK.
+    await deleteEntry(e.id)
   }
 
   const countProduct: Product | undefined = modal.t === 'count' ? productMap.get(modal.productId) : undefined
@@ -201,9 +202,14 @@ export default function SessionView({ session }: { session: Session }) {
                         {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
                         {e.cases > 0 && e.bottles > 0 && ' + '}
                         {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
+                        {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
                       </div>
                     </button>
-                    <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
+                    {totalBottles(e, p.unitsPerCase) > 0 ? (
+                      <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
+                    ) : (
+                      <div style={{ color: 'var(--red)', fontSize: 11, fontWeight: 800 }}>OUT OF STOCK</div>
+                    )}
                   </div>
                 </SwipeRow>
               )

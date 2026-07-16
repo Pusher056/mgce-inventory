@@ -104,9 +104,18 @@ export async function deleteSession(id: string) {
   }
 }
 
+/**
+ * Remove a product from the inventory for real (swipe → Eliminar).
+ * Saving a count of 0 is different: that keeps the row as "out of stock".
+ */
 export async function deleteEntry(id: string) {
-  // Phase 1: local delete only; server rows are overwritten on next count.
   await db.entries.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  try {
+    if (navigator.onLine) await supabase.from('entries').delete().eq('id', id)
+  } catch {
+    // offline — server ghost only resurfaces on a fresh install
+  }
 }
 
 export async function savePhoto(productId: string, blob: Blob): Promise<string> {
