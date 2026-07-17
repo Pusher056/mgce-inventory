@@ -66,6 +66,8 @@ function productToRow(p: Product) {
     alias: p.alias ?? null,
     brand: p.brand,
     category: p.category,
+    category_locked: p.categoryLocked === 1,
+    photo_preferred: p.photoPreferred === 1,
     units_per_case: p.unitsPerCase,
     units_confirmed: p.unitsConfirmed === 1,
     image_url: p.imageUrl,
@@ -219,6 +221,8 @@ async function resolveAi() {
       changes.name = result.name
       if (!p.brand && result.brand) changes.brand = result.brand
       if (!p.category && result.category) changes.category = result.category
+      // professional product image found by name — beats the warehouse snapshot
+      if (!p.imageUrl && result.imageUrl) changes.imageUrl = result.imageUrl
     }
     await db.products.update(p.id, changes)
     await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
@@ -271,9 +275,38 @@ async function upgradeCatalog() {
   }
 }
 
-/** Categorize named-but-uncategorized products from keywords in the name (no network). */
+// Photo-identified products (no barcode) whose only image is the warehouse
+// snapshot: search a professional image by name, once per product per run.
+const photoUpgradeAttempted = new Set<string>()
+
+async function upgradePhotoProducts() {
+  const candidates = await db.products
+    .filter((p) => !p.barcode && !!p.name && !p.imageUrl && p.needsAi === 0)
+    .toArray()
+  let budget = 3
+  for (const p of candidates) {
+    if (photoUpgradeAttempted.has(p.id)) continue
+    if (budget-- <= 0) break
+    photoUpgradeAttempted.add(p.id)
+    const { data, error } = await supabase.functions.invoke('identify', {
+      body: { imageSearch: `${p.brand ?? ''} ${p.name}`.trim() },
+    })
+    if (error) {
+      photoUpgradeAttempted.delete(p.id) // retry next sync
+      continue
+    }
+    if (data?.imageUrl) {
+      await db.products.update(p.id, { imageUrl: data.imageUrl, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+}
+
+/** Provisional category from keywords in the name (instant, works offline). */
 async function categorizeLocal() {
-  const candidates = await db.products.filter((p) => !!p.name && !p.category).toArray()
+  const candidates = await db.products
+    .filter((p) => !!p.name && !p.category && p.categoryLocked !== 1)
+    .toArray()
   for (const p of candidates) {
     const cat = categoryFromText(p.name, p.alias, p.brand)
     if (cat) {
@@ -283,15 +316,16 @@ async function categorizeLocal() {
   }
 }
 
-// Last resort for names the keyword classifier can't place: ask OpenAI in one
-// batched call (text-only, cheap). Once per product per app run.
+// Precision pass: the AI verifies EVERY product's category (keywords confuse
+// e.g. still rosé vs sparkling rosé). Runs once per product per device
+// (catAiChecked). Categories the user set manually are locked and never touched.
 const aiCatAttempted = new Set<string>()
 
 async function aiCategorize() {
   if (skipAiThisSession) return
-  const candidates = (await db.products.filter((p) => !!p.name && !p.category).toArray()).filter(
-    (p) => !aiCatAttempted.has(p.id),
-  )
+  const candidates = (
+    await db.products.filter((p) => !!p.name && p.categoryLocked !== 1 && p.catAiChecked !== 1).toArray()
+  ).filter((p) => !aiCatAttempted.has(p.id))
   if (candidates.length === 0) return
   const batch = candidates.slice(0, 20)
   batch.forEach((p) => aiCatAttempted.add(p.id))
@@ -310,10 +344,13 @@ async function aiCategorize() {
   const cats: (Category | null)[] = data?.categories ?? []
   for (let i = 0; i < batch.length; i++) {
     const cat = cats[i]
-    if (cat) {
-      await db.products.update(batch[i].id, { category: cat, updatedAt: Date.now() })
+    const changes: Partial<Product> = { catAiChecked: 1 }
+    if (cat && cat !== batch[i].category) {
+      changes.category = cat
+      changes.updatedAt = Date.now()
       await db.outbox.add({ table: 'products', id: batch[i].id, ts: Date.now() })
     }
+    await db.products.update(batch[i].id, changes)
   }
 }
 
@@ -350,6 +387,7 @@ export async function syncNow() {
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers
     ['catálogo', upgradeCatalog],
+    ['fotos-catálogo', upgradePhotoProducts],
     ['categorías', categorizeLocal],
     ['categorías-ia', aiCategorize],
     ['push', pushOutbox],
@@ -387,6 +425,8 @@ export async function initialPullIfEmpty() {
           alias: r.alias ?? null,
           brand: r.brand,
           category: r.category,
+          categoryLocked: r.category_locked ? 1 : (0 as 0 | 1),
+          photoPreferred: r.photo_preferred ? 1 : (0 as 0 | 1),
           unitsPerCase: r.units_per_case ?? 12,
           unitsConfirmed: r.units_confirmed ? 1 : (0 as 0 | 1),
           imageUrl: r.image_url,

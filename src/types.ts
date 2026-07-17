@@ -42,6 +42,12 @@ export interface Product {
   alias: string | null
   brand: string | null
   category: Category | null
+  /** El usuario fijó la categoría a mano — la IA y el clasificador no la tocan */
+  categoryLocked: 0 | 1
+  /** Solo local: la IA ya verificó la categoría de este producto en este dispositivo */
+  catAiChecked?: 0 | 1
+  /** El usuario tomó foto a propósito (chip 📷) y la prefiere sobre la de internet */
+  photoPreferred: 0 | 1
   unitsPerCase: number
   /** El usuario ya confirmó las botellas/caja; si no, se pregunta al contar cajas por primera vez */
   unitsConfirmed: 0 | 1
@@ -98,4 +104,17 @@ export interface OutboxItem {
 
 export function totalBottles(e: { bottles: number; cases: number }, unitsPerCase: number): number {
   return e.cases * unitsPerCase + e.bottles
+}
+
+/**
+ * Marca + nombre de botella juntos (p. ej. "Whispering Angel Côtes de Provence Rosé").
+ * Si el nombre ya menciona la marca, no la repite.
+ */
+export function displayName(p: { name: string; brand: string | null }): string {
+  if (!p.name) return ''
+  const brandWord = p.brand?.split(' ')[0]?.toLowerCase()
+  if (p.brand && brandWord && !p.name.toLowerCase().includes(brandWord)) {
+    return `${p.brand} ${p.name}`
+  }
+  return p.name
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Entry, Product } from '../types'
-import { totalBottles } from '../types'
+import { displayName, totalBottles } from '../types'
 import { Thumb } from './Thumb'
 
 interface Props {
@@ -52,7 +52,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
               <button key={p.id} className="product-row" onClick={() => onPick(p)}>
                 <Thumb product={p} />
                 <div className="info">
-                  <div className="name">{p.name || `(sin identificar) ${p.barcode ?? ''}`}</div>
+                  <div className="name">{displayName(p) || `(sin identificar) ${p.barcode ?? ''}`}</div>
                   <div className="muted small">
                     {p.alias ? `"${p.alias}" · ` : ''}
                     {p.brand ? `${p.brand} · ` : ''}

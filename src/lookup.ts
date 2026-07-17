@@ -63,21 +63,27 @@ export interface AiResult {
   name: string
   brand: string | null
   category: Category | null
+  imageUrl: string | null
   noKey?: boolean
 }
 
-/** Identify a beverage from a photo via the edge function (OpenAI vision). */
+/**
+ * Identify a beverage from a photo via the edge function (OpenAI vision).
+ * The function also searches product databases by the identified name so the
+ * app can show a professional image instead of the warehouse snapshot.
+ */
 export async function identifyPhoto(blob: Blob): Promise<AiResult | null> {
   const dataUrl = await blobToDataUrl(blob)
   const { data, error } = await supabase.functions.invoke('identify', { body: { image: dataUrl } })
   if (error) throw new Error(`identify failed: ${error.message}`)
-  if (data?.error === 'no_openai_key') return { name: '', brand: null, category: null, noKey: true }
+  if (data?.error === 'no_openai_key') return { name: '', brand: null, category: null, imageUrl: null, noKey: true }
   if (data?.error || !data?.name) return null
   const size = data.size ? ` ${data.size}` : ''
   return {
     name: `${data.name}${size}`.trim().replace(/\s+/g, ' '),
     brand: data.brand ?? null,
     category: (data.category as Category | null) ?? null,
+    imageUrl: data.imageUrl ?? null,
   }
 }
 

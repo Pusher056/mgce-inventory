@@ -1,4 +1,5 @@
 import type { Product } from '../types'
+import { displayName } from '../types'
 import { useProductImage } from './Thumb'
 
 export default function PhotoModal({ product, onClose }: { product: Product; onClose: () => void }) {
@@ -7,7 +8,7 @@ export default function PhotoModal({ product, onClose }: { product: Product; onC
     <div className="photo-modal" onClick={onClose}>
       {src ? <img src={src} alt={product.name} /> : <div style={{ fontSize: 80 }}>🍾</div>}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 17 }}>{product.name || 'Sin identificar'}</div>
+        <div style={{ fontWeight: 700, fontSize: 17 }}>{displayName(product) || 'Sin identificar'}</div>
         {product.brand && <div className="muted">{product.brand}</div>}
         {product.barcode && <div className="muted small">{product.barcode}</div>}
       </div>

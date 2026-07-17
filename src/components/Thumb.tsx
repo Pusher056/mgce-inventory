@@ -3,8 +3,9 @@ import { db } from '../db'
 import type { Product } from '../types'
 
 /**
- * Best available image for a product: user photo (local blob) →
- * cached lookup image (offline-safe) → remote URL → bottle placeholder.
+ * Best available image for a product. Professional catalog image first;
+ * the user's own photo only when they took it on purpose (photoPreferred,
+ * via the 📷 chip) or when nothing better exists.
  */
 export function useProductImage(p: Product | undefined): string | null {
   const [src, setSrc] = useState<string | null>(null)
@@ -12,16 +13,17 @@ export function useProductImage(p: Product | undefined): string | null {
   useEffect(() => {
     let objectUrl: string | null = null
     let cancelled = false
+    async function fromPhoto(): Promise<boolean> {
+      if (!p?.photoId) return false
+      const photo = await db.photos.get(p.photoId)
+      if (!photo || cancelled) return false
+      objectUrl = URL.createObjectURL(photo.blob)
+      setSrc(objectUrl)
+      return true
+    }
     async function resolve() {
       if (!p) return setSrc(null)
-      if (p.photoId) {
-        const photo = await db.photos.get(p.photoId)
-        if (photo && !cancelled) {
-          objectUrl = URL.createObjectURL(photo.blob)
-          setSrc(objectUrl)
-          return
-        }
-      }
+      if (p.photoPreferred === 1 && (await fromPhoto())) return
       if (p.imageUrl) {
         const cached = await db.images.get(p.imageUrl)
         if (cancelled) return
@@ -33,6 +35,7 @@ export function useProductImage(p: Product | undefined): string | null {
         }
         return
       }
+      if (await fromPhoto()) return
       setSrc(null)
     }
     void resolve()
@@ -40,7 +43,7 @@ export function useProductImage(p: Product | undefined): string | null {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [p?.id, p?.photoId, p?.imageUrl])
+  }, [p?.id, p?.photoId, p?.imageUrl, p?.photoPreferred])
 
   return src
 }

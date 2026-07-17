@@ -51,6 +51,8 @@ export async function createProduct(partial: Partial<Product>): Promise<Product>
     alias: null,
     brand: null,
     category: null,
+    categoryLocked: 0,
+    photoPreferred: 0,
     unitsPerCase: 12,
     unitsConfirmed: 0,
     imageUrl: null,

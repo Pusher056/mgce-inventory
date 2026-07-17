@@ -5,7 +5,7 @@ import { syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
 import type { Category, Entry, Product, Session } from '../types'
-import { CATEGORY_LABELS, CATEGORY_ORDER, totalBottles } from '../types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, totalBottles } from '../types'
 import Scanner from './Scanner'
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
@@ -40,7 +40,24 @@ function draftSubtitle(d: Draft): string | undefined {
 
 export default function SessionView({ session }: { session: Session }) {
   const [modal, setModal] = useState<Modal>({ t: 'none' })
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('collapsedCats') ?? '[]'))
+    } catch {
+      return new Set()
+    }
+  })
   const fileRef = useRef<HTMLInputElement>(null)
+
+  function toggleCollapsed(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      localStorage.setItem('collapsedCats', JSON.stringify([...next]))
+      return next
+    })
+  }
 
   const entries = useLiveQuery(() => db.entries.where('sessionId').equals(session.id).toArray(), [session.id]) ?? []
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
@@ -172,10 +189,16 @@ export default function SessionView({ session }: { session: Session }) {
         )}
         {groups.map((g) => (
           <div key={g.key}>
-            <div className="cat-header">
+            <button
+              className="cat-header"
+              style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
+              onClick={() => toggleCollapsed(g.key)}
+            >
+              <span style={{ fontSize: 11 }}>{collapsed.has(g.key) ? '▶' : '▼'}</span>
               {g.label} <span className="muted">· {g.entries.length}</span>
-            </div>
-            {g.entries.map((e) => {
+            </button>
+            {!collapsed.has(g.key) &&
+              g.entries.map((e) => {
               const p = productMap.get(e.productId)
               if (!p) return null
               return (
@@ -191,7 +214,7 @@ export default function SessionView({ session }: { session: Session }) {
                       onClick={() => setModal({ t: 'count', productId: p.id })}
                     >
                       <div className="name">
-                        {p.name ||
+                        {displayName(p) ||
                           (p.needsLookup === 1 || p.needsAi === 1
                             ? p.barcode
                               ? `(identificando) …${p.barcode.slice(-6)}`

@@ -195,6 +195,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
             if (!f) return
             const blob = await fileToJpeg(f)
             await savePhoto(product.id, blob)
+            // taken on purpose → show this photo over any internet image
+            await updateProduct(product.id, { photoPreferred: 1 })
             void syncNow()
           }}
         />
@@ -292,7 +294,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                   outline: product.category === c ? '2px solid var(--accent)' : 'none',
                 }}
                 onClick={async () => {
-                  await updateProduct(product.id, { category: c })
+                  // manual choice is final: AI and keyword passes never override it
+                  await updateProduct(product.id, { category: c, categoryLocked: 1, catAiChecked: 1 })
                   setEditCategory(false)
                 }}
               >

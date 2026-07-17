@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Category, Entry, Product, Session } from './types'
-import { CATEGORY_LABELS, CATEGORY_ORDER, totalBottles } from './types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, totalBottles } from './types'
 
 interface Row {
   categoria: string
@@ -24,7 +24,7 @@ export function buildRows(session: Session, entries: Entry[], products: Map<stri
     rows.push({
       categoria: CATEGORY_LABELS[cat],
       catIdx: CATEGORY_ORDER.indexOf(cat),
-      producto: p.name || (p.barcode ? `(sin identificar) ${p.barcode}` : '(sin nombre)'),
+      producto: displayName(p) || (p.barcode ? `(sin identificar) ${p.barcode}` : '(sin nombre)'),
       marca: p.brand ?? '',
       codigo: p.barcode ?? '',
       cajas: e.cases,
