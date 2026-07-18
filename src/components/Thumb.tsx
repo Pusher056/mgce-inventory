@@ -50,9 +50,29 @@ export function useProductImage(p: Product | undefined): string | null {
 
 export function Thumb({ product, onClick }: { product: Product | undefined; onClick?: () => void }) {
   const src = useProductImage(product)
+  const [failed, setFailed] = useState(false)
+  const [photoFallback, setPhotoFallback] = useState<string | null>(null)
+
+  // Remote image unreachable (offline / hotlink blocked) → user photo → placeholder
+  async function handleError() {
+    setFailed(true)
+    if (product?.photoId) {
+      const photo = await db.photos.get(product.photoId)
+      if (photo) setPhotoFallback(URL.createObjectURL(photo.blob))
+    }
+  }
+  useEffect(() => {
+    setFailed(false)
+    return () => {
+      if (photoFallback) URL.revokeObjectURL(photoFallback)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src])
+
+  const shown = failed ? photoFallback : src
   return (
     <button className="thumb" onClick={onClick} aria-label="Ver foto">
-      {src ? <img src={src} alt="" loading="lazy" /> : <span>🍾</span>}
+      {shown ? <img src={shown} alt="" loading="lazy" onError={() => void handleError()} /> : <span>🍾</span>}
     </button>
   )
 }

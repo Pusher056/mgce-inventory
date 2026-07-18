@@ -491,8 +491,24 @@ async function purgeLegacyZeroEntries() {
   localStorage.setItem('purgeZeroEntriesV1', '1')
 }
 
+/** One-time fix: names saved with the size doubled ("750ml 750ml") by an old AI-path bug. */
+async function fixDoubledSizeNames() {
+  if (localStorage.getItem('fixDoubledSizesV1')) return
+  const rx = /\b(\d+(?:\.\d+)?\s?(?:ml|cl|l|oz)\b)([\s.]*\1)+/gi
+  const all = await db.products.toArray()
+  for (const p of all) {
+    const fixed = p.name.replace(rx, '$1').replace(/\s+/g, ' ').trim()
+    if (fixed !== p.name) {
+      await db.products.update(p.id, { name: fixed, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+  localStorage.setItem('fixDoubledSizesV1', '1')
+}
+
 export function startSyncLoop() {
   void purgeLegacyZeroEntries()
+  void fixDoubledSizeNames()
   const onOnline = () => {
     setState({ online: true })
     void syncNow()
