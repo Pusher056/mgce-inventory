@@ -78,7 +78,10 @@ export async function identifyPhoto(blob: Blob): Promise<AiResult | null> {
   if (error) throw new Error(`identify failed: ${error.message}`)
   if (data?.error === 'no_openai_key') return { name: '', brand: null, category: null, imageUrl: null, noKey: true }
   if (data?.error || !data?.name) return null
-  const size = data.size ? ` ${data.size}` : ''
+  // avoid "750ml 750ml" when the AI already put the size inside the name
+  const sizeCompact = (data.size ?? '').replace(/\s+/g, '').toLowerCase()
+  const nameCompact = String(data.name).replace(/\s+/g, '').toLowerCase()
+  const size = data.size && !nameCompact.includes(sizeCompact) ? ` ${data.size}` : ''
   return {
     name: `${data.name}${size}`.trim().replace(/\s+/g, ' '),
     brand: data.brand ?? null,

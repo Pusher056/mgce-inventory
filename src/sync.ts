@@ -168,8 +168,13 @@ async function resolveLookups() {
       continue // network/service hiccup — keep queued, retry next sync
     }
     if (result === null) {
-      // No database knows this barcode; user names it manually (or via photo+AI)
-      await db.products.update(p.id, { needsLookup: 0, updatedAt: Date.now() })
+      // No database knows this barcode. Ladder step 2: if the scanner saved a
+      // backup snapshot, hand it to the AI (it reads the back label's text).
+      await db.products.update(p.id, {
+        needsLookup: 0,
+        ...(p.photoId ? { needsAi: 1 as const } : {}),
+        updatedAt: Date.now(),
+      })
     } else {
       const changes: Partial<Product> = {
         needsLookup: 0,

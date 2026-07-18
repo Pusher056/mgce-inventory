@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, createProduct, deleteEntry, savePhoto } from '../db'
-import { syncNow } from '../sync'
+import { db, createProduct, deleteEntry, savePhoto, updateProduct } from '../db'
+import { resetAiSkip, syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
 import type { Category, Entry, Product, Session } from '../types'
@@ -14,7 +14,7 @@ import PhotoModal from './PhotoModal'
 import SwipeRow from './SwipeRow'
 
 type Draft =
-  | { kind: 'barcode'; barcode: string }
+  | { kind: 'barcode'; barcode: string; frame?: Blob }
   | { kind: 'photo'; blob: Blob; previewUrl: string }
   | { kind: 'manual'; name: string }
 
@@ -48,6 +48,9 @@ export default function SessionView({ session }: { session: Session }) {
     }
   })
   const fileRef = useRef<HTMLInputElement>(null)
+  // Ladder step 3: one-tap front photo for a product nothing could identify
+  const rowPhotoRef = useRef<HTMLInputElement>(null)
+  const rowPhotoProductRef = useRef<string | null>(null)
 
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
@@ -111,12 +114,12 @@ export default function SessionView({ session }: { session: Session }) {
       }))
   }, [visibleEntries, productMap])
 
-  async function handleScan(barcode: string) {
+  async function handleScan(barcode: string, frame?: Blob) {
     const existing = await db.products.where('barcode').equals(barcode).first()
     if (existing) {
       setModal({ t: 'count', productId: existing.id })
     } else {
-      setModal({ t: 'looseOrCase', draft: { kind: 'barcode', barcode } })
+      setModal({ t: 'looseOrCase', draft: { kind: 'barcode', barcode, frame } })
     }
   }
 
@@ -129,6 +132,9 @@ export default function SessionView({ session }: { session: Session }) {
     let p: Product
     if (d.kind === 'barcode') {
       p = await createProduct({ barcode: d.barcode, needsLookup: 1, unitsPerCase })
+      // backup snapshot from the scanner: if no database knows this barcode,
+      // the AI reads the bottle's back label from it automatically
+      if (d.frame) await savePhoto(p.id, d.frame)
     } else if (d.kind === 'photo') {
       p = await createProduct({ needsAi: 1, unitsPerCase })
       await savePhoto(p.id, d.blob)
@@ -180,6 +186,25 @@ export default function SessionView({ session }: { session: Session }) {
           if (f) void handlePhotoFile(f)
         }}
       />
+      <input
+        ref={rowPhotoRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={async (e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          const productId = rowPhotoProductRef.current
+          rowPhotoProductRef.current = null
+          if (!f || !productId) return
+          const blob = await fileToJpeg(f)
+          await savePhoto(productId, blob)
+          await updateProduct(productId, { needsAi: 1 })
+          resetAiSkip()
+          void syncNow()
+        }}
+      />
 
       <div style={{ marginTop: 10, flex: 1 }}>
         {visibleEntries.length === 0 && (
@@ -228,6 +253,17 @@ export default function SessionView({ session }: { session: Session }) {
                         {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
                       </div>
                     </button>
+                    {!p.name && p.needsLookup === 0 && p.needsAi === 0 && (
+                      <button
+                        className="row-cam"
+                        onClick={() => {
+                          rowPhotoProductRef.current = p.id
+                          rowPhotoRef.current?.click()
+                        }}
+                      >
+                        📷 identificar
+                      </button>
+                    )}
                     {totalBottles(e, p.unitsPerCase) > 0 ? (
                       <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
                     ) : (
@@ -254,7 +290,7 @@ export default function SessionView({ session }: { session: Session }) {
       {/* ---------- modals ---------- */}
 
       {modal.t === 'scanner' && (
-        <Scanner onScan={(code) => void handleScan(code)} onClose={() => setModal({ t: 'none' })} />
+        <Scanner onScan={(code, frame) => void handleScan(code, frame)} onClose={() => setModal({ t: 'none' })} />
       )}
 
       {modal.t === 'looseOrCase' && (

@@ -17,8 +17,23 @@ const detector = new BarcodeDetector({
 })
 
 interface Props {
-  onScan: (barcode: string) => void
+  /** frame: sharp snapshot of the bottle taken at the exact decode moment (backup for AI id) */
+  onScan: (barcode: string, frame?: Blob) => void
   onClose: () => void
+}
+
+/** Capture the current video frame — it is sharp by definition: the barcode just decoded on it. */
+function captureFrame(video: HTMLVideoElement): Promise<Blob | undefined> {
+  try {
+    const scale = Math.min(1, 1024 / Math.max(video.videoWidth || 1, video.videoHeight || 1))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round((video.videoWidth || 1) * scale)
+    canvas.height = Math.round((video.videoHeight || 1) * scale)
+    canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height)
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b ?? undefined), 'image/jpeg', 0.75))
+  } catch {
+    return Promise.resolve(undefined)
+  }
 }
 
 export default function Scanner({ onScan, onClose }: Props) {
@@ -64,7 +79,8 @@ export default function Scanner({ onScan, onClose }: Props) {
               doneRef.current = true
               setHit(true)
               beep()
-              setTimeout(() => onScan(code.rawValue), 220)
+              const frame = await captureFrame(video)
+              setTimeout(() => onScan(code.rawValue, frame), 200)
             }
           } catch {
             // detection error on a frame — keep trying
