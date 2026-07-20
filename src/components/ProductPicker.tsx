@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Entry, Product } from '../types'
 import { displayName, totalBottles } from '../types'
 import { Thumb } from './Thumb'
@@ -15,6 +15,11 @@ interface Props {
 export default function ProductPicker({ products, entries, onPick, onCreate, onClose }: Props) {
   const [q, setQ] = useState('')
   const stock = useMemo(() => new Map(entries.map((e) => [e.productId, e])), [entries])
+
+  // Drag the header down to dismiss (like native iOS sheets)
+  const [dy, setDy] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const dragStart = useRef(0)
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -34,8 +39,38 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ minHeight: '70dvh' }}>
-        <h2>Buscar producto</h2>
+      <div
+        className="sheet"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          minHeight: '70dvh',
+          transform: `translateY(${dy}px)`,
+          transition: dragging ? 'none' : 'transform 0.18s ease',
+        }}
+      >
+        <div
+          className="sheet-grab"
+          onPointerDown={(e) => {
+            dragStart.current = e.clientY
+            setDragging(true)
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+          onPointerMove={(e) => {
+            if (dragging) setDy(Math.max(0, e.clientY - dragStart.current))
+          }}
+          onPointerUp={() => {
+            setDragging(false)
+            if (dy > 110) onClose()
+            else setDy(0)
+          }}
+          onPointerCancel={() => {
+            setDragging(false)
+            setDy(0)
+          }}
+        >
+          <div className="grab-bar" />
+          <h2>Buscar producto</h2>
+        </div>
         <input
           placeholder="Nombre, marca o código…"
           value={q}

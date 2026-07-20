@@ -116,7 +116,14 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   const total = cases * product.unitsPerCase + bottles
 
   return (
-    <div className="sheet-backdrop">
+    // tap outside the card closes without saving (e.target check: only the
+    // real backdrop, not clicks bubbling from nested sheets)
+    <div
+      className="sheet-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDone()
+      }}
+    >
       <div className="sheet">
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
           <Thumb product={product} onClick={() => photoRef.current?.click()} />

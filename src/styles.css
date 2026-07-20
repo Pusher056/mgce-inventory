@@ -223,6 +223,8 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   overflow-y: auto;
 }
 .sheet h2 { margin: 0 0 4px; font-size: 19px; }
+.sheet-grab { touch-action: none; cursor: grab; padding-bottom: 4px; }
+.grab-bar { width: 44px; height: 5px; border-radius: 3px; background: var(--bg3); margin: 0 auto 12px; }
 
 .units-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
 .units-grid button {
