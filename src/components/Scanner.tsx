@@ -13,13 +13,16 @@ prepareZXingModule({
 })
 
 const detector = new BarcodeDetector({
-  formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf'],
+  // qr_code: shelf-location labels (B-5-6) for chain-assigning ubicaciones
+  formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'qr_code'],
 })
 
 interface Props {
   /** frame: sharp snapshot of the bottle taken at the exact decode moment (backup for AI id) */
   onScan: (barcode: string, frame?: Blob) => void
   onClose: () => void
+  /** shelf-location mode active: products scanned now get this ubicación */
+  activeLocation?: string | null
 }
 
 /** Capture the current video frame — it is sharp by definition: the barcode just decoded on it. */
@@ -36,7 +39,7 @@ function captureFrame(video: HTMLVideoElement): Promise<Blob | undefined> {
   }
 }
 
-export default function Scanner({ onScan, onClose }: Props) {
+export default function Scanner({ onScan, onClose, activeLocation }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [hit, setHit] = useState(false)
@@ -74,7 +77,8 @@ export default function Scanner({ onScan, onClose }: Props) {
           busy = true
           try {
             const codes = await detector.detect(video)
-            const code = codes.find((c) => c.rawValue.length >= 6)
+            // short codes only pass as QR (shelf locations like "B-5-6")
+            const code = codes.find((c) => c.rawValue.length >= 6 || c.format === 'qr_code')
             if (code && !doneRef.current) {
               doneRef.current = true
               setHit(true)
@@ -120,7 +124,8 @@ export default function Scanner({ onScan, onClose }: Props) {
 
   function submitManual() {
     const code = manualCode.trim()
-    if (code.length >= 6) {
+    // barcodes are 6+ digits; also accept typed shelf locations ("B-5-6")
+    if (code.length >= 6 || /^[A-Za-z]{1,3}-\d{1,2}(-\d{1,2})?$/.test(code)) {
       doneRef.current = true
       onScan(code)
     }
@@ -132,6 +137,7 @@ export default function Scanner({ onScan, onClose }: Props) {
       <div className="scan-overlay">
         <div className={`scan-box${hit ? ' hit' : ''}`} />
         <div className="scan-hint">{error ?? 'Apunta al código de barras'}</div>
+        {activeLocation && <div className="scan-loc">📍 Ubicando en {activeLocation}</div>}
       </div>
       <div className="scanner-top">
         <button onClick={onClose}>✕ Cerrar</button>

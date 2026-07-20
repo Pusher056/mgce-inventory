@@ -4,10 +4,12 @@ import { db, createSession, deleteSession } from '../db'
 import { syncNow } from '../sync'
 import type { Session } from '../types'
 import SwipeRow from './SwipeRow'
+import QrSheet from './QrSheet'
 
 export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
   const sessions = useLiveQuery(() => db.sessions.orderBy('startedAt').reverse().toArray(), []) ?? []
   const [creating, setCreating] = useState(false)
+  const [showQr, setShowQr] = useState(false)
   const [name, setName] = useState('Beverage Storage')
 
   return (
@@ -52,6 +54,12 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
           </div>
         )}
       </div>
+
+      <button className="big-btn ghost" style={{ marginTop: 'auto' }} onClick={() => setShowQr(true)}>
+        🖨 QRs de ubicación de shelves
+      </button>
+
+      {showQr && <QrSheet onClose={() => setShowQr(false)} />}
 
       {creating && (
         <div className="sheet-backdrop" onClick={() => setCreating(false)}>

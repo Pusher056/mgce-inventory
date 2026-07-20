@@ -285,6 +285,15 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 }
 .scan-box.hit { border-color: var(--green); }
 .scan-hint { color: #fff; margin-top: 16px; font-size: 15px; text-shadow: 0 1px 4px #000; }
+.scan-loc {
+  margin-top: 10px;
+  background: var(--amber);
+  color: #451a03;
+  font-weight: 800;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+}
 .scanner-bar {
   position: absolute;
   bottom: 0;
@@ -352,3 +361,20 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .totals-bar .nums { flex: 1; font-size: 14px; color: var(--muted); }
 .totals-bar .nums b { color: var(--text); font-size: 16px; }
 .totals-bar button { background: var(--green); color: #052e16; font-weight: 800; padding: 14px 20px; font-size: 15px; }
+
+/* ---------- printable shelf QR labels ---------- */
+.qr-print-area { display: none; }
+@media print {
+  #root { display: none !important; }
+  .sheet-backdrop { display: none !important; }
+  html, body { background: #fff !important; }
+  .qr-print-area {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    padding: 16px;
+  }
+  .qr-label { text-align: center; break-inside: avoid; }
+  .qr-label img { width: 5cm; height: 5cm; }
+  .qr-label div { font: 800 24pt Arial, sans-serif; color: #000; }
+}

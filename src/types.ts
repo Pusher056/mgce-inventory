@@ -48,6 +48,8 @@ export interface Product {
   catAiChecked?: 0 | 1
   /** El usuario tomó foto a propósito (chip 📷) y la prefiere sobre la de internet */
   photoPreferred: 0 | 1
+  /** Ubicación física estilo Target: LETRA-shelfstand-shelf, p. ej. "B-5-6" */
+  location: string | null
   unitsPerCase: number
   /** El usuario ya confirmó las botellas/caja; si no, se pregunta al contar cajas por primera vez */
   unitsConfirmed: 0 | 1
@@ -104,6 +106,12 @@ export interface OutboxItem {
 
 export function totalBottles(e: { bottles: number; cases: number }, unitsPerCase: number): number {
   return e.cases * unitsPerCase + e.bottles
+}
+
+/** "B-5-6", "D-12-3"… — reconoce un código de ubicación (QR de shelf o texto) */
+export function parseLocation(text: string): string | null {
+  const m = text.trim().toUpperCase().match(/^(?:LOC[:\-])?([A-Z]{1,3}-\d{1,2}(?:-\d{1,2})?)$/)
+  return m ? m[1] : null
 }
 
 /**

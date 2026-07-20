@@ -5,7 +5,7 @@ import { resetAiSkip, syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
 import type { Category, Entry, Product, Session } from '../types'
-import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, totalBottles } from '../types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, parseLocation, totalBottles } from '../types'
 import Scanner from './Scanner'
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
@@ -51,6 +51,8 @@ export default function SessionView({ session }: { session: Session }) {
   // Ladder step 3: one-tap front photo for a product nothing could identify
   const rowPhotoRef = useRef<HTMLInputElement>(null)
   const rowPhotoProductRef = useRef<string | null>(null)
+  // Shelf-location mode: scan a shelf QR (B-5-6) → every product scanned after gets that ubicación
+  const [activeLocation, setActiveLocation] = useState<string | null>(null)
 
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
@@ -115,8 +117,19 @@ export default function SessionView({ session }: { session: Session }) {
   }, [visibleEntries, productMap])
 
   async function handleScan(barcode: string, frame?: Blob) {
+    // A shelf QR switches location mode and keeps scanning
+    const loc = parseLocation(barcode)
+    if (loc) {
+      setActiveLocation(loc)
+      setModal({ t: 'none' })
+      setTimeout(() => setModal({ t: 'scanner' }), 50) // remount scanner for the next read
+      return
+    }
     const existing = await db.products.where('barcode').equals(barcode).first()
     if (existing) {
+      if (activeLocation && existing.location !== activeLocation) {
+        await updateProduct(existing.id, { location: activeLocation })
+      }
       setModal({ t: 'count', productId: existing.id })
     } else {
       setModal({ t: 'looseOrCase', draft: { kind: 'barcode', barcode, frame } })
@@ -131,7 +144,7 @@ export default function SessionView({ session }: { session: Session }) {
   async function createFromDraft(d: Draft, unitsPerCase: number): Promise<Product> {
     let p: Product
     if (d.kind === 'barcode') {
-      p = await createProduct({ barcode: d.barcode, needsLookup: 1, unitsPerCase })
+      p = await createProduct({ barcode: d.barcode, needsLookup: 1, unitsPerCase, location: activeLocation })
       // backup snapshot from the scanner: if no database knows this barcode,
       // the AI reads the bottle's back label from it automatically
       if (d.frame) await savePhoto(p.id, d.frame)
@@ -174,6 +187,22 @@ export default function SessionView({ session }: { session: Session }) {
           🔍 Buscar
         </button>
       </div>
+      {activeLocation && (
+        <button
+          className="small"
+          style={{
+            marginTop: 10,
+            background: 'var(--bg2)',
+            color: 'var(--amber)',
+            fontWeight: 800,
+            padding: '10px 14px',
+            borderRadius: 999,
+          }}
+          onClick={() => setActiveLocation(null)}
+        >
+          📍 Ubicando en {activeLocation} — tocar para salir ✕
+        </button>
+      )}
       <input
         ref={fileRef}
         type="file"
@@ -252,6 +281,11 @@ export default function SessionView({ session }: { session: Session }) {
                         {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
                         {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
                       </div>
+                      {p.location && (
+                        <div className="small" style={{ color: 'var(--amber)', fontWeight: 700 }}>
+                          📍 {p.location}
+                        </div>
+                      )}
                     </button>
                     {!p.name && p.needsLookup === 0 && p.needsAi === 0 && (
                       <button
@@ -290,7 +324,11 @@ export default function SessionView({ session }: { session: Session }) {
       {/* ---------- modals ---------- */}
 
       {modal.t === 'scanner' && (
-        <Scanner onScan={(code, frame) => void handleScan(code, frame)} onClose={() => setModal({ t: 'none' })} />
+        <Scanner
+          onScan={(code, frame) => void handleScan(code, frame)}
+          onClose={() => setModal({ t: 'none' })}
+          activeLocation={activeLocation}
+        />
       )}
 
       {modal.t === 'looseOrCase' && (

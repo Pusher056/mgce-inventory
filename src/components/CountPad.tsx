@@ -59,6 +59,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   const [editName, setEditName] = useState(false)
   const [editAlias, setEditAlias] = useState(false)
   const [alias, setAlias] = useState(product.alias ?? '')
+  const [editLocation, setEditLocation] = useState(false)
+  const [location, setLocation] = useState(product.location ?? '')
   const [name, setName] = useState(product.name)
   const [nameDirty, setNameDirty] = useState(false)
   // Counting cases of a product whose bottles-per-case was never confirmed →
@@ -166,6 +168,13 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               >
                 🏷 {product.alias || 'Apodo'}
               </button>
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--amber)' }}
+                onClick={() => setEditLocation(true)}
+              >
+                📍 {product.location || 'Ubicación'}
+              </button>
               {(product.barcode || product.photoId) && product.needsLookup === 0 && product.needsAi === 0 && (
                 <button
                   className="small"
@@ -251,6 +260,35 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           }}
           onClose={() => setAskUnitsThen(null)}
         />
+      )}
+
+      {editLocation && (
+        <div className="sheet-backdrop" onClick={() => setEditLocation(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>Ubicación</h2>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              Formato: LETRA-shelfstand-shelf (p. ej. B-5-6). También se asigna sola escaneando el QR
+              del shelf antes de escanear botellas.
+            </div>
+            <input
+              autoFocus
+              value={location}
+              placeholder="B-5-6"
+              style={{ textTransform: 'uppercase', fontSize: 22, textAlign: 'center' }}
+              onChange={(e) => setLocation(e.target.value.toUpperCase())}
+            />
+            <button
+              className="big-btn primary"
+              style={{ marginTop: 14 }}
+              onClick={async () => {
+                await updateProduct(product.id, { location: location.trim().toUpperCase() || null })
+                setEditLocation(false)
+              }}
+            >
+              Guardar ubicación
+            </button>
+          </div>
+        </div>
       )}
 
       {editAlias && (

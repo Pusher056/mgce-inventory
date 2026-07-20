@@ -7,6 +7,7 @@ import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, totalBottles } from './ty
 interface Row {
   categoria: string
   producto: string
+  ubicacion: string
   marca: string
   codigo: string
   cajas: number
@@ -25,6 +26,7 @@ export function buildRows(session: Session, entries: Entry[], products: Map<stri
       categoria: CATEGORY_LABELS[cat],
       catIdx: CATEGORY_ORDER.indexOf(cat),
       producto: displayName(p) || (p.barcode ? `(sin identificar) ${p.barcode}` : '(sin nombre)'),
+      ubicacion: p.location ?? '',
       marca: p.brand ?? '',
       codigo: p.barcode ?? '',
       cajas: e.cases,
@@ -49,6 +51,7 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
   const data = rows.map((r) => ({
     'Categoría': r.categoria,
     Producto: r.producto,
+    'Ubicación': r.ubicacion,
     Marca: r.marca,
     'Código': r.codigo,
     Cajas: r.cajas,
@@ -59,6 +62,7 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
   data.push({
     'Categoría': '',
     Producto: 'TOTAL',
+    'Ubicación': '',
     Marca: '',
     'Código': '',
     Cajas: rows.reduce((s, r) => s + r.cajas, 0),
@@ -67,7 +71,7 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
     'Total botellas': rows.reduce((s, r) => s + r.totalBotellas, 0),
   })
   const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 16 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 15 }, { wch: 13 }]
+  ws['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 15 }, { wch: 13 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
   XLSX.writeFile(wb, `${fileStem(session)}.xlsx`)
@@ -98,20 +102,20 @@ export function exportPdf(session: Session, entries: Entry[], products: Map<stri
       body.push([
         {
           content: r.categoria,
-          colSpan: 7,
+          colSpan: 8,
           styles: { fillColor: [226, 232, 240] as [number, number, number], fontStyle: 'bold' as const, textColor: 20 },
         },
       ])
     }
-    body.push([r.producto, r.marca, r.codigo, r.cajas, r.botPorCaja, r.botellasSueltas, r.totalBotellas])
+    body.push([r.producto, r.ubicacion, r.marca, r.codigo, r.cajas, r.botPorCaja, r.botellasSueltas, r.totalBotellas])
   }
 
   autoTable(doc, {
     startY: 28,
-    head: [['Producto', 'Marca', 'Código', 'Cajas', 'Bot/caja', 'Sueltas', 'Total bot.']],
+    head: [['Producto', 'Ubic.', 'Marca', 'Código', 'Cajas', 'Bot/caja', 'Sueltas', 'Total bot.']],
     body,
     foot: [[
-      'TOTAL', '', '',
+      'TOTAL', '', '', '',
       String(rows.reduce((s, r) => s + r.cajas, 0)), '',
       String(rows.reduce((s, r) => s + r.botellasSueltas, 0)),
       String(rows.reduce((s, r) => s + r.totalBotellas, 0)),
@@ -120,11 +124,12 @@ export function exportPdf(session: Session, entries: Entry[], products: Map<stri
     headStyles: { fillColor: [15, 23, 42] },
     footStyles: { fillColor: [226, 232, 240], textColor: 20, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 60 },
-      3: { halign: 'right' },
+      0: { cellWidth: 52 },
+      1: { fontStyle: 'bold' },
       4: { halign: 'right' },
       5: { halign: 'right' },
-      6: { halign: 'right', fontStyle: 'bold' },
+      6: { halign: 'right' },
+      7: { halign: 'right', fontStyle: 'bold' },
     },
     didDrawPage: () => {
       const page = doc.getCurrentPageInfo().pageNumber
