@@ -1,7 +1,7 @@
 import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
-import { categoryFromText } from './classify'
+import { categoryFromText, subcategoryFromText, categoryForSubcategory } from './classify'
 import type { Category, Entry, Product, Session } from './types'
 
 /**
@@ -66,7 +66,9 @@ function productToRow(p: Product) {
     alias: p.alias ?? null,
     brand: p.brand,
     category: p.category,
+    subcategory: p.subcategory ?? null,
     category_locked: p.categoryLocked === 1,
+    subcategory_locked: p.subcategoryLocked === 1,
     photo_preferred: p.photoPreferred === 1,
     location: p.location ?? null,
     units_per_case: p.unitsPerCase,
@@ -308,15 +310,26 @@ async function upgradePhotoProducts() {
   }
 }
 
-/** Provisional category from keywords in the name (instant, works offline). */
+/** Provisional category + subcategory from keywords in the name (instant, offline). */
 async function categorizeLocal() {
-  const candidates = await db.products
-    .filter((p) => !!p.name && !p.category && p.categoryLocked !== 1)
-    .toArray()
-  for (const p of candidates) {
-    const cat = categoryFromText(p.name, p.alias, p.brand)
-    if (cat) {
-      await db.products.update(p.id, { category: cat, updatedAt: Date.now() })
+  const all = await db.products.filter((p) => !!p.name).toArray()
+  for (const p of all) {
+    const changes: Partial<Product> = {}
+    const sub = p.subcategory ?? (p.subcategoryLocked !== 1 ? subcategoryFromText(p.name, p.alias, p.brand) : null)
+    if (sub && sub !== p.subcategory) changes.subcategory = sub
+    if (p.categoryLocked !== 1) {
+      // The subcategory (Tequila, Riesling…) is a reliable signal; use it to set
+      // OR correct the category. Fall back to keywords when there's no subcategory.
+      const derived = categoryForSubcategory(sub)
+      if (derived && derived !== p.category) changes.category = derived
+      else if (!p.category) {
+        const cat = categoryFromText(p.name, p.alias, p.brand)
+        if (cat) changes.category = cat
+      }
+    }
+    if (Object.keys(changes).length > 0) {
+      changes.updatedAt = Date.now()
+      await db.products.update(p.id, changes)
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
   }
@@ -348,15 +361,26 @@ async function aiCategorize() {
     return
   }
   const cats: (Category | null)[] = data?.categories ?? []
+  const subs: (string | null)[] = data?.subcategories ?? []
   for (let i = 0; i < batch.length; i++) {
     const cat = cats[i]
+    const sub = subs[i]
+    const p = batch[i]
     const changes: Partial<Product> = { catAiChecked: 1 }
-    if (cat && cat !== batch[i].category) {
+    let dirty = false
+    if (cat && cat !== p.category && p.categoryLocked !== 1) {
       changes.category = cat
-      changes.updatedAt = Date.now()
-      await db.outbox.add({ table: 'products', id: batch[i].id, ts: Date.now() })
+      dirty = true
     }
-    await db.products.update(batch[i].id, changes)
+    if (sub && sub !== p.subcategory && p.subcategoryLocked !== 1) {
+      changes.subcategory = sub
+      dirty = true
+    }
+    if (dirty) {
+      changes.updatedAt = Date.now()
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+    await db.products.update(p.id, changes)
   }
 }
 
@@ -431,7 +455,9 @@ export async function initialPullIfEmpty() {
           alias: r.alias ?? null,
           brand: r.brand,
           category: r.category,
+          subcategory: r.subcategory ?? null,
           categoryLocked: r.category_locked ? 1 : (0 as 0 | 1),
+          subcategoryLocked: r.subcategory_locked ? 1 : (0 as 0 | 1),
           photoPreferred: r.photo_preferred ? 1 : (0 as 0 | 1),
           location: r.location ?? null,
           unitsPerCase: r.units_per_case ?? 12,

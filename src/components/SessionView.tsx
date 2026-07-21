@@ -93,8 +93,8 @@ export default function SessionView({ session }: { session: Session }) {
     { cases: 0, bottles: 0 },
   )
 
-  // Group counted products by category; pending-identification items first so
-  // the user sees them resolve and jump to their category on sync.
+  // Group counted products by category, then by subcategory (Tequila, Riesling…)
+  // within each. Pending-identification items first so the user sees them resolve.
   const groups = useMemo(() => {
     const byCat = new Map<Category | 'pending', Entry[]>()
     for (const e of visibleEntries) {
@@ -109,11 +109,29 @@ export default function SessionView({ session }: { session: Session }) {
     const order: (Category | 'pending')[] = ['pending', ...CATEGORY_ORDER]
     return order
       .filter((k) => byCat.has(k))
-      .map((k) => ({
-        key: k,
-        label: k === 'pending' ? 'Identificando…' : CATEGORY_LABELS[k],
-        entries: (byCat.get(k) ?? []).sort((a, b) => b.updatedAt - a.updatedAt),
-      }))
+      .map((k) => {
+        const entries = (byCat.get(k) ?? []).sort((a, b) => b.updatedAt - a.updatedAt)
+        // sub-group by subcategory (skip for pending / soft / water — no need)
+        const subMap = new Map<string, Entry[]>()
+        for (const e of entries) {
+          const p = productMap.get(e.productId)
+          const sub = k === 'pending' ? '' : (p?.subcategory ?? '')
+          const arr = subMap.get(sub) ?? []
+          arr.push(e)
+          subMap.set(sub, arr)
+        }
+        const hasSubs = [...subMap.keys()].some((s) => s !== '') && subMap.size > 1
+        const subgroups = [...subMap.entries()]
+          .sort((a, b) => (a[0] || 'zzz').localeCompare(b[0] || 'zzz', 'es'))
+          .map(([sub, ents]) => ({ sub, ents }))
+        return {
+          key: k,
+          label: k === 'pending' ? 'Identificando…' : CATEGORY_LABELS[k],
+          count: entries.length,
+          hasSubs,
+          subgroups,
+        }
+      })
   }, [visibleEntries, productMap])
 
   async function handleScan(barcode: string, frame?: Blob) {
@@ -171,6 +189,62 @@ export default function SessionView({ session }: { session: Session }) {
   }
 
   const countProduct: Product | undefined = modal.t === 'count' ? productMap.get(modal.productId) : undefined
+
+  function renderRow(e: Entry) {
+    const p = productMap.get(e.productId)
+    if (!p) return null
+    return (
+      <SwipeRow
+        key={e.id}
+        onDelete={() => void removeFromCount(e)}
+        onAdjust={() => setModal({ t: 'count', productId: p.id })}
+      >
+        <div className="product-row" style={{ padding: '8px 10px' }}>
+          <Thumb product={p} onClick={() => setModal({ t: 'photo', productId: p.id })} />
+          <button
+            style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
+            onClick={() => setModal({ t: 'count', productId: p.id })}
+          >
+            <div className="name">
+              {displayName(p) ||
+                (p.needsLookup === 1 || p.needsAi === 1
+                  ? p.barcode
+                    ? `(identificando) …${p.barcode.slice(-6)}`
+                    : '(foto — nombre pendiente)'
+                  : '(sin identificar — tócalo y ponle nombre)')}
+            </div>
+            <div className="muted small">
+              {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
+              {e.cases > 0 && e.bottles > 0 && ' + '}
+              {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
+              {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
+            </div>
+            {p.location && (
+              <div className="small" style={{ color: 'var(--amber)', fontWeight: 700 }}>
+                📍 {p.location}
+              </div>
+            )}
+          </button>
+          {!p.name && p.needsLookup === 0 && p.needsAi === 0 && (
+            <button
+              className="row-cam"
+              onClick={() => {
+                rowPhotoProductRef.current = p.id
+                rowPhotoRef.current?.click()
+              }}
+            >
+              📷 identificar
+            </button>
+          )}
+          {totalBottles(e, p.unitsPerCase) > 0 ? (
+            <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
+          ) : (
+            <div style={{ color: 'var(--red)', fontSize: 11, fontWeight: 800 }}>OUT OF STOCK</div>
+          )}
+        </div>
+      </SwipeRow>
+    )
+  }
 
   return (
     <div className="screen">
@@ -249,64 +323,28 @@ export default function SessionView({ session }: { session: Session }) {
               onClick={() => toggleCollapsed(g.key)}
             >
               <span style={{ fontSize: 11 }}>{collapsed.has(g.key) ? '▶' : '▼'}</span>
-              {g.label} <span className="muted">· {g.entries.length}</span>
+              {g.label} <span className="muted">· {g.count}</span>
             </button>
             {!collapsed.has(g.key) &&
-              g.entries.map((e) => {
-              const p = productMap.get(e.productId)
-              if (!p) return null
-              return (
-                <SwipeRow
-                  key={e.id}
-                  onDelete={() => void removeFromCount(e)}
-                  onAdjust={() => setModal({ t: 'count', productId: p.id })}
-                >
-                  <div className="product-row" style={{ padding: '8px 10px' }}>
-                    <Thumb product={p} onClick={() => setModal({ t: 'photo', productId: p.id })} />
-                    <button
-                      style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
-                      onClick={() => setModal({ t: 'count', productId: p.id })}
-                    >
-                      <div className="name">
-                        {displayName(p) ||
-                          (p.needsLookup === 1 || p.needsAi === 1
-                            ? p.barcode
-                              ? `(identificando) …${p.barcode.slice(-6)}`
-                              : '(foto — nombre pendiente)'
-                            : '(sin identificar — tócalo y ponle nombre)')}
-                      </div>
-                      <div className="muted small">
-                        {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
-                        {e.cases > 0 && e.bottles > 0 && ' + '}
-                        {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
-                        {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
-                      </div>
-                      {p.location && (
-                        <div className="small" style={{ color: 'var(--amber)', fontWeight: 700 }}>
-                          📍 {p.location}
-                        </div>
-                      )}
-                    </button>
-                    {!p.name && p.needsLookup === 0 && p.needsAi === 0 && (
-                      <button
-                        className="row-cam"
-                        onClick={() => {
-                          rowPhotoProductRef.current = p.id
-                          rowPhotoRef.current?.click()
-                        }}
-                      >
-                        📷 identificar
+              g.subgroups.map(({ sub, ents }) => {
+                const subKey = `${g.key}::${sub}`
+                const showSubHeader = g.hasSubs && sub !== ''
+                const subCollapsed = showSubHeader && collapsed.has(subKey)
+                return (
+                  <div key={subKey}>
+                    {showSubHeader && (
+                      <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
+                        <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
+                        {sub} <span className="muted">· {ents.length}</span>
                       </button>
                     )}
-                    {totalBottles(e, p.unitsPerCase) > 0 ? (
-                      <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
-                    ) : (
-                      <div style={{ color: 'var(--red)', fontSize: 11, fontWeight: 800 }}>OUT OF STOCK</div>
+                    {g.hasSubs && sub === '' && ents.length > 0 && (
+                      <div className="subcat-header muted">Sin tipo</div>
                     )}
+                    {!subCollapsed && ents.map((e) => renderRow(e))}
                   </div>
-                </SwipeRow>
-              )
-            })}
+                )
+              })}
           </div>
         ))}
       </div>

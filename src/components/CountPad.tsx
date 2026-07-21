@@ -6,6 +6,7 @@ import type { Product } from '../types'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
 import { Thumb } from './Thumb'
 import UnitsSheet from './UnitsSheet'
+import PhotoModal from './PhotoModal'
 
 function Counter({
   label,
@@ -66,7 +67,10 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   // Counting cases of a product whose bottles-per-case was never confirmed →
   // ask on save (the user prefers entering how many cases first)
   const [askUnitsThen, setAskUnitsThen] = useState<null | 'done' | 'scan'>(null)
-  const photoRef = useRef<HTMLInputElement>(null)
+  const [viewPhoto, setViewPhoto] = useState(false)
+  const [reidentify, setReidentify] = useState(false)
+  const photoRef = useRef<HTMLInputElement>(null) // replace displayed photo
+  const aiPhotoRef = useRef<HTMLInputElement>(null) // photo to re-identify with AI
 
   // If the background lookup resolves the name while this sheet is open,
   // adopt it — unless the user is typing their own.
@@ -126,7 +130,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
     >
       <div className="sheet">
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
-          <Thumb product={product} onClick={() => photoRef.current?.click()} />
+          <Thumb product={product} onClick={() => setViewPhoto(true)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {editName ? (
               <input
@@ -159,14 +163,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--accent)' }}
                 onClick={() => setEditCategory(true)}
               >
-                {CATEGORY_LABELS[product.category ?? 'other']} ▾
-              </button>
-              <button
-                className="small"
-                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
-                onClick={() => photoRef.current?.click()}
-              >
-                📷 Foto
+                {CATEGORY_LABELS[product.category ?? 'other']}
+                {product.subcategory ? ` › ${product.subcategory}` : ''} ▾
               </button>
               <button
                 className="small"
@@ -182,23 +180,18 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               >
                 📍 {product.location || 'Ubicación'}
               </button>
-              {(product.barcode || product.photoId) && product.needsLookup === 0 && product.needsAi === 0 && (
-                <button
-                  className="small"
-                  style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
-                  onClick={async () => {
-                    resetAiSkip()
-                    await updateProduct(product.id, product.barcode ? { needsLookup: 1 } : { needsAi: 1 })
-                    void syncNow()
-                  }}
-                >
-                  🔄 Re-identificar
-                </button>
-              )}
+              <button
+                className="small"
+                style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--accent)' }}
+                onClick={() => setReidentify(true)}
+              >
+                🔄 Arreglar / re-identificar
+              </button>
             </div>
           </div>
         </div>
 
+        {/* Replace the DISPLAYED photo with one the user takes on purpose */}
         <input
           ref={photoRef}
           type="file"
@@ -211,9 +204,40 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
             if (!f) return
             const blob = await fileToJpeg(f)
             await savePhoto(product.id, blob)
-            // taken on purpose → show this photo over any internet image
             await updateProduct(product.id, { photoPreferred: 1 })
             void syncNow()
+          }}
+        />
+        {/* Re-identify: photo replaces the (wrong) name/category via AI */}
+        <input
+          ref={aiPhotoRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (!f) return
+            const blob = await fileToJpeg(f)
+            await savePhoto(product.id, blob)
+            // clear wrong data so the AI refills it fresh (and finds a pro image)
+            await updateProduct(product.id, {
+              name: '',
+              brand: null,
+              category: null,
+              subcategory: null,
+              categoryLocked: 0,
+              subcategoryLocked: 0,
+              photoPreferred: 0,
+              imageUrl: null,
+              needsAi: 1,
+            })
+            setName('')
+            setNameDirty(false)
+            resetAiSkip()
+            void syncNow()
+            setReidentify(false)
           }}
         />
 
@@ -267,6 +291,61 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           }}
           onClose={() => setAskUnitsThen(null)}
         />
+      )}
+
+      {viewPhoto && <PhotoModal product={product} onClose={() => setViewPhoto(false)} />}
+
+      {reidentify && (
+        <div className="sheet-backdrop" onClick={() => setReidentify(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>Arreglar producto</h2>
+            <div className="muted small" style={{ marginBottom: 14 }}>
+              ¿El nombre o la categoría salieron mal? Vuelve a identificarlo — no pierdes el conteo.
+            </div>
+            <button className="big-btn primary" onClick={() => aiPhotoRef.current?.click()}>
+              📷 Tomar foto e identificar (IA)
+            </button>
+            {product.barcode && (
+              <button
+                className="big-btn"
+                style={{ marginTop: 10 }}
+                onClick={async () => {
+                  // clear wrong data and re-run the barcode lookup
+                  await updateProduct(product.id, {
+                    name: '',
+                    brand: null,
+                    category: null,
+                    subcategory: null,
+                    categoryLocked: 0,
+                    subcategoryLocked: 0,
+                    imageUrl: null,
+                    needsLookup: 1,
+                  })
+                  setName('')
+                  setNameDirty(false)
+                  resetAiSkip()
+                  void syncNow()
+                  setReidentify(false)
+                }}
+              >
+                🔢 Buscar el código otra vez
+              </button>
+            )}
+            <button
+              className="big-btn"
+              style={{ marginTop: 10 }}
+              onClick={() => {
+                setReidentify(false)
+                setEditName(true)
+              }}
+            >
+              ✏️ Escribir el nombre a mano
+            </button>
+            <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={() => setReidentify(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
       {editLocation && (
@@ -347,6 +426,19 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 {CATEGORY_LABELS[c]}
               </button>
             ))}
+            <div className="muted small" style={{ margin: '16px 0 6px' }}>
+              Tipo (Tequila, Riesling, Pinot Noir…) — opcional:
+            </div>
+            <input
+              defaultValue={product.subcategory ?? ''}
+              placeholder="Tipo dentro de la categoría"
+              onBlur={async (e) => {
+                const v = e.target.value.trim()
+                if (v !== (product.subcategory ?? '')) {
+                  await updateProduct(product.id, { subcategory: v || null, subcategoryLocked: v ? 1 : 0 })
+                }
+              }}
+            />
           </div>
         </div>
       )}

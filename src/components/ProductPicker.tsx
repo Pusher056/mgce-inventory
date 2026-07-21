@@ -32,6 +32,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
         p.name.toLowerCase().includes(needle) ||
         (p.alias ?? '').toLowerCase().includes(needle) ||
         (p.brand ?? '').toLowerCase().includes(needle) ||
+        (p.subcategory ?? '').toLowerCase().includes(needle) ||
         (p.location ?? '').toLowerCase().includes(needle) ||
         (p.barcode ?? '').includes(needle),
     )
@@ -91,6 +92,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
                   <div className="name">{displayName(p) || `(sin identificar) ${p.barcode ?? ''}`}</div>
                   <div className="muted small">
                     {p.location ? <b style={{ color: 'var(--amber)' }}>📍 {p.location} · </b> : ''}
+                    {p.subcategory ? <b style={{ color: 'var(--accent)' }}>{p.subcategory} · </b> : ''}
                     {p.alias ? `"${p.alias}" · ` : ''}
                     {p.brand ? `${p.brand} · ` : ''}
                     {p.unitsPerCase}/caja

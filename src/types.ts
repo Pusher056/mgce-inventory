@@ -42,8 +42,12 @@ export interface Product {
   alias: string | null
   brand: string | null
   category: Category | null
+  /** Tipo dentro de la categoría: para spirits "Tequila"/"Vodka"…, para vinos la uva "Riesling"/"Pinot Noir"… */
+  subcategory: string | null
   /** El usuario fijó la categoría a mano — la IA y el clasificador no la tocan */
   categoryLocked: 0 | 1
+  /** El usuario fijó la subcategoría a mano */
+  subcategoryLocked?: 0 | 1
   /** Solo local: la IA ya verificó la categoría de este producto en este dispositivo */
   catAiChecked?: 0 | 1
   /** El usuario tomó foto a propósito (chip 📷) y la prefiere sobre la de internet */
