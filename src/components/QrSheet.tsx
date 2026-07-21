@@ -35,14 +35,14 @@ export default function QrSheet({ onClose }: { onClose: () => void }) {
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <h2>🖨 QRs de ubicación</h2>
+        <h2>🖨 Location QR codes</h2>
         <div className="muted small" style={{ marginBottom: 12 }}>
-          Pega cada QR en su shelf. En el almacén: escanea el QR del shelf y luego escanea las
-          botellas — todas quedan ubicadas ahí automáticamente. Imprime desde una computadora.
+          Stick each QR on its shelf. In the warehouse: scan the shelf QR, then scan the
+          bottles — they all get placed there automatically. Print from a computer.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <label className="small muted">
-            Letra
+            Letter
             <input value={letter} onChange={(e) => setLetter(e.target.value.toUpperCase())} style={{ marginTop: 4 }} />
           </label>
           <label className="small muted">
@@ -57,7 +57,7 @@ export default function QrSheet({ onClose }: { onClose: () => void }) {
             />
           </label>
           <label className="small muted">
-            Shelves c/u
+            Shelves each
             <input
               type="number"
               min={1}
@@ -69,13 +69,13 @@ export default function QrSheet({ onClose }: { onClose: () => void }) {
           </label>
         </div>
         <div className="muted small" style={{ margin: '10px 0' }}>
-          {codes.length} etiquetas: {codes[0]?.code} … {codes[codes.length - 1]?.code}
+          {codes.length} labels: {codes[0]?.code} … {codes[codes.length - 1]?.code}
         </div>
         <button className="big-btn primary" onClick={() => window.print()}>
-          🖨 Imprimir
+          🖨 Print
         </button>
         <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
-          Cerrar
+          Close
         </button>
       </div>
 

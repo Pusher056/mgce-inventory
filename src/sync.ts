@@ -238,6 +238,35 @@ async function resolveAi() {
   }
 }
 
+// Only images hosted on retailer/CDN product domains are trusted. This is the
+// safety net against the removed web-image search that returned unrelated and
+// inappropriate pictures. Mirrors the edge function's allowlist.
+const PRODUCT_IMG_HOSTS =
+  /totalwine|reservebar|wine\.com|drizly|caskers|thewhiskyexchange|masterofmalt|klwines|binnys|samsclub|walmartimages|kroger|target\.com|scene7|liquidcommerce|openfoodfacts|images-na\.ssl-images-amazon|images\.amazon|shopify|squarespace-cdn|cloudfront|bevmo|instacart|gopuff/i
+
+function isTrustedImage(url: string | null | undefined): boolean {
+  return !!url && /^https:\/\//.test(url) && PRODUCT_IMG_HOSTS.test(url)
+}
+
+/**
+ * One-time cleanup: remove any product image that is NOT from a trusted product
+ * database/retailer (the junk from the old web-image search). Cleared images
+ * get re-fetched from safe sources by the upgrade passes; meanwhile the product
+ * shows its own photo or the bottle placeholder.
+ */
+async function sanitizeImages() {
+  if (localStorage.getItem('sanitizeImagesV2')) return
+  const all = await db.products.filter((p) => !!p.imageUrl).toArray()
+  for (const p of all) {
+    if (!isTrustedImage(p.imageUrl)) {
+      await db.images.delete(p.imageUrl!)
+      await db.products.update(p.id, { imageUrl: null, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+    }
+  }
+  localStorage.setItem('sanitizeImagesV2', '1')
+}
+
 // Products identified before the image/category pipeline improved: retry the
 // lookup once per app run to upgrade user-submitted OFF photos to retailer
 // shots and fill in a missing category. Never touches a name the user can see.
@@ -266,12 +295,15 @@ async function upgradeCatalog() {
     }
     if (!result) continue
     const changes: Partial<Product> = {}
-    const betterImage = result.imageUrl && !result.imageUrl.includes('openfoodfacts')
-    if (betterImage && result.imageUrl !== p.imageUrl) {
-      if (p.imageUrl) await db.images.delete(p.imageUrl)
-      changes.imageUrl = result.imageUrl
-    } else if (!p.imageUrl && result.imageUrl) {
-      changes.imageUrl = result.imageUrl
+    // only accept trusted retailer images; prefer non-OFF (studio shots)
+    if (isTrustedImage(result.imageUrl)) {
+      const betterImage = !result.imageUrl!.includes('openfoodfacts')
+      if (betterImage && result.imageUrl !== p.imageUrl) {
+        if (p.imageUrl) await db.images.delete(p.imageUrl)
+        changes.imageUrl = result.imageUrl
+      } else if (!p.imageUrl) {
+        changes.imageUrl = result.imageUrl
+      }
     }
     if (!p.category && result.category) changes.category = result.category
     if (!p.name && result.name) changes.name = result.name
@@ -303,7 +335,7 @@ async function upgradePhotoProducts() {
       photoUpgradeAttempted.delete(p.id) // retry next sync
       continue
     }
-    if (data?.imageUrl) {
+    if (isTrustedImage(data?.imageUrl)) {
       await db.products.update(p.id, { imageUrl: data.imageUrl, updatedAt: Date.now() })
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
@@ -416,6 +448,7 @@ export async function syncNow() {
     ['identificar', resolveLookups],
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers
+    ['fotos-limpieza', sanitizeImages],
     ['catálogo', upgradeCatalog],
     ['fotos-catálogo', upgradePhotoProducts],
     ['categorías', categorizeLocal],

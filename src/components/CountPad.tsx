@@ -136,7 +136,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               <input
                 autoFocus
                 value={name}
-                placeholder="Nombre del producto"
+                placeholder="Product name"
                 onChange={(e) => {
                   setName(e.target.value)
                   setNameDirty(true)
@@ -145,9 +145,9 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               />
             ) : (
               <div style={{ fontWeight: 700, fontSize: 16 }} onClick={() => setEditName(true)}>
-                {name || <span className="muted">Sin nombre — toca para escribir ✏️</span>}
-                {product.needsLookup === 1 && <span className="badge" style={{ marginLeft: 6 }}>identificando…</span>}
-                {product.needsAi === 1 && <span className="badge" style={{ marginLeft: 6 }}>IA pendiente</span>}
+                {name || <span className="muted">No name — tap to type ✏️</span>}
+                {product.needsLookup === 1 && <span className="badge" style={{ marginLeft: 6 }}>identifying…</span>}
+                {product.needsAi === 1 && <span className="badge" style={{ marginLeft: 6 }}>AI pending</span>}
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -156,7 +156,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
                 onClick={() => setEditUnits(true)}
               >
-                {product.unitsPerCase}/caja ✎
+                {product.unitsPerCase}/case ✎
               </button>
               <button
                 className="small"
@@ -171,21 +171,21 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--muted)' }}
                 onClick={() => setEditAlias(true)}
               >
-                🏷 {product.alias || 'Apodo'}
+                🏷 {product.alias || 'Nickname'}
               </button>
               <button
                 className="small"
                 style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--amber)' }}
                 onClick={() => setEditLocation(true)}
               >
-                📍 {product.location || 'Ubicación'}
+                📍 {product.location || 'Location'}
               </button>
               <button
                 className="small"
                 style={{ background: 'var(--bg3)', padding: '4px 10px', borderRadius: 999, color: 'var(--accent)' }}
                 onClick={() => setReidentify(true)}
               >
-                🔄 Arreglar / re-identificar
+                🔄 Fix / re-identify
               </button>
             </div>
           </div>
@@ -243,31 +243,31 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
 
         {loaded && (
           <>
-            <Counter label="CAJAS" value={cases} onChange={setCases} />
-            <Counter label="BOTELLAS SUELTAS" value={bottles} onChange={setBottles} />
+            <Counter label="CASES" value={cases} onChange={setCases} />
+            <Counter label="LOOSE BOTTLES" value={bottles} onChange={setBottles} />
           </>
         )}
 
         <div className="muted" style={{ textAlign: 'center', margin: '4px 0 14px' }}>
-          Total: <b style={{ color: 'var(--text)' }}>{total}</b> botellas
+          Total: <b style={{ color: 'var(--text)' }}>{total}</b> bottles
         </div>
 
         <button className="big-btn green" onClick={() => void saveThen('scan')}>
-          ✓ Guardar y escanear otro
+          ✓ Save and scan another
         </button>
         <div className="btn-row" style={{ marginTop: 10 }}>
           <button className="big-btn" onClick={() => void saveThen('done')}>
-            Guardar
+            Save
           </button>
           <button className="big-btn ghost" onClick={onDone}>
-            Cancelar
+            Cancel
           </button>
         </div>
       </div>
 
       {editUnits && (
         <UnitsSheet
-          title={name || 'Producto'}
+          title={name || 'Product'}
           onPick={async (n) => {
             // parent passes a live product (useLiveQuery), so the new value re-renders
             await updateProduct(product.id, { unitsPerCase: n, unitsConfirmed: 1 })
@@ -279,8 +279,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
 
       {askUnitsThen && (
         <UnitsSheet
-          title={name || 'Producto'}
-          subtitle={`Estás guardando ${cases} caja${cases === 1 ? '' : 's'}`}
+          title={name || 'Product'}
+          subtitle={`You're saving ${cases} case${cases === 1 ? '' : 's'}`}
           onPick={async (n) => {
             const next = askUnitsThen
             await updateProduct(product.id, { unitsPerCase: n, unitsConfirmed: 1 })
@@ -298,12 +298,12 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       {reidentify && (
         <div className="sheet-backdrop" onClick={() => setReidentify(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Arreglar producto</h2>
+            <h2>Fix product</h2>
             <div className="muted small" style={{ marginBottom: 14 }}>
-              ¿El nombre o la categoría salieron mal? Vuelve a identificarlo — no pierdes el conteo.
+              Wrong name or category? Identify it again — you won't lose the count.
             </div>
             <button className="big-btn primary" onClick={() => aiPhotoRef.current?.click()}>
-              📷 Tomar foto e identificar (IA)
+              📷 Take a photo & identify (AI)
             </button>
             {product.barcode && (
               <button
@@ -328,7 +328,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                   setReidentify(false)
                 }}
               >
-                🔢 Buscar el código otra vez
+                🔢 Look up the barcode again
               </button>
             )}
             <button
@@ -339,10 +339,10 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 setEditName(true)
               }}
             >
-              ✏️ Escribir el nombre a mano
+              ✏️ Type the name manually
             </button>
             <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={() => setReidentify(false)}>
-              Cancelar
+              Cancel
             </button>
           </div>
         </div>
@@ -351,10 +351,10 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       {editLocation && (
         <div className="sheet-backdrop" onClick={() => setEditLocation(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Ubicación</h2>
+            <h2>Location</h2>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              Formato: LETRA-shelfstand-shelf (p. ej. B-5-6). También se asigna sola escaneando el QR
-              del shelf antes de escanear botellas.
+              Format: LETTER-shelfstand-shelf (e.g. B-5-6). It's also set automatically by scanning the
+              shelf QR before scanning bottles.
             </div>
             <input
               autoFocus
@@ -371,7 +371,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 setEditLocation(false)
               }}
             >
-              Guardar ubicación
+              Save location
             </button>
           </div>
         </div>
@@ -380,15 +380,15 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       {editAlias && (
         <div className="sheet-backdrop" onClick={() => setEditAlias(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Apodo del producto</h2>
+            <h2>Product nickname</h2>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              ¿Cómo le dicen en el trabajo? (p. ej. "Whispering Angel"). El buscador lo encuentra por
-              el nombre oficial o por este apodo.
+              What does the team call it? (e.g. "Whispering Angel"). Search finds it by either the
+              official name or this nickname.
             </div>
             <input
               autoFocus
               value={alias}
-              placeholder="Apodo…"
+              placeholder="Nickname…"
               onChange={(e) => setAlias(e.target.value)}
             />
             <button
@@ -399,7 +399,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
                 setEditAlias(false)
               }}
             >
-              Guardar apodo
+              Save nickname
             </button>
           </div>
         </div>
@@ -408,7 +408,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       {editCategory && (
         <div className="sheet-backdrop" onClick={() => setEditCategory(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Categoría</h2>
+            <h2>Category</h2>
             {CATEGORY_ORDER.map((c) => (
               <button
                 key={c}
@@ -427,11 +427,11 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
               </button>
             ))}
             <div className="muted small" style={{ margin: '16px 0 6px' }}>
-              Tipo (Tequila, Riesling, Pinot Noir…) — opcional:
+              Type (Tequila, Riesling, Pinot Noir…) — optional:
             </div>
             <input
               defaultValue={product.subcategory ?? ''}
-              placeholder="Tipo dentro de la categoría"
+              placeholder="Type within the category"
               onBlur={async (e) => {
                 const v = e.target.value.trim()
                 if (v !== (product.subcategory ?? '')) {

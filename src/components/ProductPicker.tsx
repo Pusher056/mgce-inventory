@@ -70,16 +70,16 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
           }}
         >
           <div className="grab-bar" />
-          <h2>Buscar producto</h2>
+          <h2>Search product</h2>
         </div>
         <input
-          placeholder="Nombre, marca o código…"
+          placeholder="Name, brand or barcode…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={{ margin: '10px 0 14px' }}
         />
         <button className="big-btn primary" onClick={() => onCreate(q.trim())}>
-          ＋ Crear producto nuevo{q.trim() ? `: “${q.trim()}”` : ''}
+          ＋ Create new product{q.trim() ? `: “${q.trim()}”` : ''}
         </button>
         <div style={{ marginTop: 14 }}>
           {filtered.map((p) => {
@@ -89,19 +89,19 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
               <button key={p.id} className="product-row" onClick={() => onPick(p)}>
                 <Thumb product={p} />
                 <div className="info">
-                  <div className="name">{displayName(p) || `(sin identificar) ${p.barcode ?? ''}`}</div>
+                  <div className="name">{displayName(p) || `(unidentified) ${p.barcode ?? ''}`}</div>
                   <div className="muted small">
                     {p.location ? <b style={{ color: 'var(--amber)' }}>📍 {p.location} · </b> : ''}
                     {p.subcategory ? <b style={{ color: 'var(--accent)' }}>{p.subcategory} · </b> : ''}
                     {p.alias ? `"${p.alias}" · ` : ''}
                     {p.brand ? `${p.brand} · ` : ''}
-                    {p.unitsPerCase}/caja
+                    {p.unitsPerCase}/case
                   </div>
                 </div>
                 {total > 0 ? (
                   <div style={{ textAlign: 'right' }}>
                     <div className="qty" style={{ color: 'var(--green)' }}>{total}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>en stock</div>
+                    <div className="muted" style={{ fontSize: 11 }}>in stock</div>
                   </div>
                 ) : (
                   <div style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>OUT OF STOCK</div>
@@ -109,10 +109,10 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
               </button>
             )
           })}
-          {filtered.length === 0 && <div className="muted" style={{ textAlign: 'center', padding: 20 }}>Sin resultados</div>}
+          {filtered.length === 0 && <div className="muted" style={{ textAlign: 'center', padding: 20 }}>No results</div>}
         </div>
         <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
-          Cerrar
+          Close
         </button>
       </div>
     </div>

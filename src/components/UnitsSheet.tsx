@@ -32,7 +32,7 @@ export default function UnitsSheet({
         )}
         <h2>{title}</h2>
         {subtitle && <div className="muted small">{subtitle}</div>}
-        <div style={{ marginTop: 16, fontWeight: 700 }}>¿Cuántas botellas trae la caja?</div>
+        <div style={{ marginTop: 16, fontWeight: 700 }}>How many bottles per case?</div>
         {!custom ? (
           <div className="units-grid">
             {[6, 12, 24].map((n) => (
@@ -40,7 +40,7 @@ export default function UnitsSheet({
                 {n}
               </button>
             ))}
-            <button onClick={() => setCustom(true)}>Otro</button>
+            <button onClick={() => setCustom(true)}>Other</button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
@@ -49,7 +49,7 @@ export default function UnitsSheet({
               inputMode="numeric"
               min={1}
               max={99}
-              placeholder="p. ej. 18"
+              placeholder="e.g. 18"
               autoFocus
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -68,7 +68,7 @@ export default function UnitsSheet({
           </div>
         )}
         <button className="big-btn ghost" style={{ marginTop: 14 }} onClick={onClose}>
-          Cancelar
+          Cancel
         </button>
       </div>
     </div>

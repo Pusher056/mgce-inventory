@@ -94,8 +94,8 @@ export default function Scanner({ onScan, onClose, activeLocation }: Props) {
       } catch (e) {
         setError(
           e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')
-            ? 'Permiso de cámara denegado. Actívalo en Ajustes > Safari > Cámara.'
-            : `No se pudo abrir la cámara: ${e instanceof Error ? e.message : e}`,
+            ? 'Camera permission denied. Enable it in Settings > Safari > Camera.'
+            : `Could not open the camera: ${e instanceof Error ? e.message : e}`,
         )
       }
     }
@@ -136,12 +136,12 @@ export default function Scanner({ onScan, onClose, activeLocation }: Props) {
       <video ref={videoRef} playsInline muted autoPlay />
       <div className="scan-overlay">
         <div className={`scan-box${hit ? ' hit' : ''}`} />
-        <div className="scan-hint">{error ?? 'Apunta al código de barras'}</div>
-        {activeLocation && <div className="scan-loc">📍 Ubicando en {activeLocation}</div>}
+        <div className="scan-hint">{error ?? 'Point at the barcode'}</div>
+        {activeLocation && <div className="scan-loc">📍 Placing in {activeLocation}</div>}
       </div>
       <div className="scanner-top">
-        <button onClick={onClose}>✕ Cerrar</button>
-        {torchAvailable && <button onClick={toggleTorch}>{torchOn ? '🔦 Apagar luz' : '🔦 Luz'}</button>}
+        <button onClick={onClose}>✕ Close</button>
+        {torchAvailable && <button onClick={toggleTorch}>{torchOn ? '🔦 Light off' : '🔦 Light'}</button>}
       </div>
       <div className="scanner-bar">
         {manual ? (
@@ -150,7 +150,7 @@ export default function Scanner({ onScan, onClose, activeLocation }: Props) {
               autoFocus
               type="text"
               inputMode="numeric"
-              placeholder="Código de barras…"
+              placeholder="Barcode…"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submitManual()}
@@ -161,7 +161,7 @@ export default function Scanner({ onScan, onClose, activeLocation }: Props) {
             </button>
           </>
         ) : (
-          <button onClick={() => setManual(true)}>⌨️ Escribir código</button>
+          <button onClick={() => setManual(true)}>⌨️ Type barcode</button>
         )}
       </div>
     </div>

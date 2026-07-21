@@ -21,29 +21,29 @@ export default function App() {
     <>
       <div className="header">
         {sessionId && (
-          <button className="back-btn" onClick={() => setSessionId(null)} aria-label="Volver">
+          <button className="back-btn" onClick={() => setSessionId(null)} aria-label="Back">
             ‹
           </button>
         )}
-        <h1>{session ? session.name : 'MGCE Inventario'}</h1>
+        <h1>{session ? session.name : 'MGCE Inventory'}</h1>
         <button
           className="sync-pill"
           onClick={() => {
             resetAiSkip()
             void syncNow()
           }}
-          title="Tocar para sincronizar ahora"
+          title="Tap to sync now"
         >
           <span className={`dot ${sync.syncing ? 'syncing' : sync.online ? 'online' : 'offline'}`} />
           {sync.syncing
-            ? 'Sincronizando…'
+            ? 'Syncing…'
             : sync.online
               ? sync.pending > 0
-                ? `${sync.pending} pend.`
-                : 'Al día'
+                ? `${sync.pending} pending`
+                : 'Up to date'
               : sync.pending > 0
-                ? `Sin señal · ${sync.pending} pend.`
-                : 'Sin señal'}
+                ? `Offline · ${sync.pending} pending`
+                : 'Offline'}
         </button>
       </div>
 
@@ -51,7 +51,7 @@ export default function App() {
 
       {sync.aiKeyMissing && showAiWarn && (
         <div className="toast" onClick={() => setShowAiWarn(false)}>
-          ⚠️ Falta la API key de OpenAI — las fotos quedan guardadas
+          ⚠️ OpenAI API key missing — photos are saved for later
         </div>
       )}
     </>

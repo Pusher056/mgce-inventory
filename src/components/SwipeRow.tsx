@@ -67,7 +67,7 @@ export default function SwipeRow({
         >
           🗑
           <br />
-          Eliminar
+          Delete
         </button>
         {onAdjust && (
           <button
@@ -79,7 +79,7 @@ export default function SwipeRow({
           >
             ✎
             <br />
-            Ajustar
+            Adjust
           </button>
         )}
       </div>

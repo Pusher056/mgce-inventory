@@ -9,7 +9,6 @@ export type Category =
   | 'water'
   | 'other'
 
-// Warehouse vocabulary is English (the team speaks English); app chrome is Spanish for now
 export const CATEGORY_LABELS: Record<Category, string> = {
   spirits: 'Hard Liquor',
   red_wine: 'Red Wine',
@@ -19,7 +18,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   beer: 'Beer',
   soft: 'Soft Drinks',
   water: 'Water',
-  other: 'Otros',
+  other: 'Other',
 }
 
 export const CATEGORY_ORDER: Category[] = [

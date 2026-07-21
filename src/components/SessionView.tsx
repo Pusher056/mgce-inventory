@@ -28,13 +28,13 @@ type Modal =
   | { t: 'export' }
 
 function draftTitle(d: Draft): string {
-  if (d.kind === 'barcode') return 'Producto nuevo'
-  if (d.kind === 'photo') return 'Producto desde foto'
-  return d.name || 'Producto nuevo'
+  if (d.kind === 'barcode') return 'New product'
+  if (d.kind === 'photo') return 'Product from photo'
+  return d.name || 'New product'
 }
 function draftSubtitle(d: Draft): string | undefined {
-  if (d.kind === 'barcode') return `Código: ${d.barcode} — el nombre se identificará al haber señal`
-  if (d.kind === 'photo') return 'La IA lo identificará al haber señal'
+  if (d.kind === 'barcode') return `Barcode: ${d.barcode} — name resolves when you have signal`
+  if (d.kind === 'photo') return 'AI will identify it when you have signal'
   return undefined
 }
 
@@ -126,7 +126,7 @@ export default function SessionView({ session }: { session: Session }) {
           .map(([sub, ents]) => ({ sub, ents }))
         return {
           key: k,
-          label: k === 'pending' ? 'Identificando…' : CATEGORY_LABELS[k],
+          label: k === 'pending' ? 'Identifying…' : CATEGORY_LABELS[k],
           count: entries.length,
           hasSubs,
           subgroups,
@@ -209,15 +209,15 @@ export default function SessionView({ session }: { session: Session }) {
               {displayName(p) ||
                 (p.needsLookup === 1 || p.needsAi === 1
                   ? p.barcode
-                    ? `(identificando) …${p.barcode.slice(-6)}`
-                    : '(foto — nombre pendiente)'
-                  : '(sin identificar — tócalo y ponle nombre)')}
+                    ? `(identifying) …${p.barcode.slice(-6)}`
+                    : '(photo — name pending)'
+                  : '(unidentified — tap to name it)')}
             </div>
             <div className="muted small">
-              {e.cases > 0 && `${e.cases} caja${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
+              {e.cases > 0 && `${e.cases} case${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
               {e.cases > 0 && e.bottles > 0 && ' + '}
-              {e.bottles > 0 && `${e.bottles} suelta${e.bottles === 1 ? '' : 's'}`}
-              {e.cases === 0 && e.bottles === 0 && 'sin existencias'}
+              {e.bottles > 0 && `${e.bottles} loose`}
+              {e.cases === 0 && e.bottles === 0 && 'out of stock'}
             </div>
             {p.location && (
               <div className="small" style={{ color: 'var(--amber)', fontWeight: 700 }}>
@@ -233,7 +233,7 @@ export default function SessionView({ session }: { session: Session }) {
                 rowPhotoRef.current?.click()
               }}
             >
-              📷 identificar
+              📷 identify
             </button>
           )}
           {totalBottles(e, p.unitsPerCase) > 0 ? (
@@ -250,15 +250,15 @@ export default function SessionView({ session }: { session: Session }) {
     <div className="screen">
       <div className="btn-row" style={{ marginTop: 8 }}>
         <button className="big-btn primary" style={{ flex: 2 }} onClick={() => setModal({ t: 'scanner' })}>
-          📷 Escanear
+          📷 Scan
         </button>
       </div>
       <div className="btn-row" style={{ marginTop: 10 }}>
         <button className="big-btn" onClick={() => fileRef.current?.click()}>
-          🖼 Foto
+          🖼 Photo
         </button>
         <button className="big-btn" onClick={() => setModal({ t: 'picker' })}>
-          🔍 Buscar
+          🔍 Search
         </button>
       </div>
       {activeLocation && (
@@ -274,7 +274,7 @@ export default function SessionView({ session }: { session: Session }) {
           }}
           onClick={() => setActiveLocation(null)}
         >
-          📍 Ubicando en {activeLocation} — tocar para salir ✕
+          📍 Placing in {activeLocation} — tap to exit ✕
         </button>
       )}
       <input
@@ -312,7 +312,7 @@ export default function SessionView({ session }: { session: Session }) {
       <div style={{ marginTop: 10, flex: 1 }}>
         {visibleEntries.length === 0 && (
           <div className="muted small" style={{ marginTop: 10 }}>
-            Todavía no hay productos contados. Escanea la primera botella 👆
+            No products counted yet. Scan the first bottle 👆
           </div>
         )}
         {groups.map((g) => (
@@ -339,7 +339,7 @@ export default function SessionView({ session }: { session: Session }) {
                       </button>
                     )}
                     {g.hasSubs && sub === '' && ents.length > 0 && (
-                      <div className="subcat-header muted">Sin tipo</div>
+                      <div className="subcat-header muted">No type</div>
                     )}
                     {!subCollapsed && ents.map((e) => renderRow(e))}
                   </div>
@@ -352,10 +352,10 @@ export default function SessionView({ session }: { session: Session }) {
       {visibleEntries.length > 0 && (
         <div className="totals-bar">
           <div className="nums">
-            <b>{totals.bottles}</b> botellas · {totals.cases} caja{totals.cases === 1 ? '' : 's'} ·{' '}
-            {visibleEntries.length} producto{visibleEntries.length === 1 ? '' : 's'}
+            <b>{totals.bottles}</b> bottles · {totals.cases} case{totals.cases === 1 ? '' : 's'} ·{' '}
+            {visibleEntries.length} product{visibleEntries.length === 1 ? '' : 's'}
           </div>
-          <button onClick={() => setModal({ t: 'export' })}>Exportar</button>
+          <button onClick={() => setModal({ t: 'export' })}>Export</button>
         </div>
       )}
 
@@ -381,7 +381,7 @@ export default function SessionView({ session }: { session: Session }) {
             )}
             <h2>{draftTitle(modal.draft)}</h2>
             {draftSubtitle(modal.draft) && <div className="muted small">{draftSubtitle(modal.draft)}</div>}
-            <div style={{ marginTop: 16, fontWeight: 700 }}>¿Qué estás contando?</div>
+            <div style={{ marginTop: 16, fontWeight: 700 }}>What are you counting?</div>
             <div className="btn-row" style={{ marginTop: 12 }}>
               <button
                 className="big-btn primary"
@@ -392,7 +392,7 @@ export default function SessionView({ session }: { session: Session }) {
                   setModal({ t: 'count', productId: p.id, initial: { bottles: 1 } })
                 }}
               >
-                🍾 Botella suelta
+                🍾 Loose bottle
               </button>
               <button
                 className="big-btn"
@@ -403,11 +403,11 @@ export default function SessionView({ session }: { session: Session }) {
                   setModal({ t: 'count', productId: p.id, initial: { cases: 1 } })
                 }}
               >
-                📦 Caja
+                📦 Case
               </button>
             </div>
             <button className="big-btn ghost" style={{ marginTop: 12 }} onClick={() => closeDraft(modal.draft)}>
-              Cancelar
+              Cancel
             </button>
           </div>
         </div>
@@ -440,18 +440,18 @@ export default function SessionView({ session }: { session: Session }) {
       {modal.t === 'export' && (
         <div className="sheet-backdrop" onClick={() => setModal({ t: 'none' })}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Exportar inventario</h2>
+            <h2>Export inventory</h2>
             <div className="muted small" style={{ marginBottom: 16 }}>
-              {session.name} · {visibleEntries.length} productos · {totals.bottles} botellas
+              {session.name} · {visibleEntries.length} products · {totals.bottles} bottles
             </div>
             <button className="big-btn primary" onClick={() => exportPdf(session, visibleEntries, productMap)}>
-              📄 Descargar PDF
+              📄 Download PDF
             </button>
             <button className="big-btn" style={{ marginTop: 10 }} onClick={() => exportExcel(session, visibleEntries, productMap)}>
-              📊 Descargar Excel
+              📊 Download Excel
             </button>
             <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={() => setModal({ t: 'none' })}>
-              Cerrar
+              Close
             </button>
           </div>
         </div>

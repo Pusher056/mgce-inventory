@@ -15,7 +15,7 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
   return (
     <div className="screen">
       <button className="big-btn primary" style={{ marginTop: 12 }} onClick={() => setCreating(true)}>
-        ＋ Nuevo conteo
+        ＋ New count
       </button>
 
       <div style={{ marginTop: 20 }}>
@@ -23,7 +23,7 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
           <SwipeRow
             key={s.id}
             onDelete={() => {
-              if (window.confirm(`¿Eliminar "${s.name}" y todo su conteo? Esto no se puede deshacer.`)) {
+              if (window.confirm(`Delete "${s.name}" and its entire count? This cannot be undone.`)) {
                 void deleteSession(s.id)
               }
             }}
@@ -33,7 +33,7 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
               <div className="info">
                 <div className="name">{s.name}</div>
                 <div className="muted small">
-                  {new Date(s.startedAt).toLocaleDateString('es-US', {
+                  {new Date(s.startedAt).toLocaleDateString('en-US', {
                     weekday: 'short',
                     day: 'numeric',
                     month: 'short',
@@ -48,15 +48,15 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
         ))}
         {sessions.length === 0 && (
           <div className="muted" style={{ textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
-            Sin conteos todavía.
+            No counts yet.
             <br />
-            Crea el primero para el jueves 👆
+            Create your first one 👆
           </div>
         )}
       </div>
 
       <button className="big-btn ghost" style={{ marginTop: 'auto' }} onClick={() => setShowQr(true)}>
-        🖨 QRs de ubicación de shelves
+        🖨 Shelf location QR codes
       </button>
 
       {showQr && <QrSheet onClose={() => setShowQr(false)} />}
@@ -64,8 +64,8 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
       {creating && (
         <div className="sheet-backdrop" onClick={() => setCreating(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Nuevo conteo</h2>
-            <div className="muted small" style={{ marginBottom: 12 }}>¿Qué almacén vas a contar?</div>
+            <h2>New count</h2>
+            <div className="muted small" style={{ marginBottom: 12 }}>Which storage are you counting?</div>
             <input value={name} onChange={(e) => setName(e.target.value)} autoFocus onFocus={(e) => e.target.select()} />
             <button
               className="big-btn green"
@@ -77,7 +77,7 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
                 void syncNow()
               }}
             >
-              Empezar conteo
+              Start count
             </button>
           </div>
         </div>

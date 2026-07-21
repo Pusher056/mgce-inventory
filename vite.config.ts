@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: 'MGCE Inventario',
-        short_name: 'Inventario',
-        description: 'Inventario de bebidas — MGCE Catering',
+        name: 'MGCE Inventory',
+        short_name: 'Inventory',
+        description: 'Beverage inventory — MGCE Catering',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
