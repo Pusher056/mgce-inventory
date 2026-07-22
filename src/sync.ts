@@ -281,7 +281,7 @@ async function upgradeCatalog() {
         (!p.category || !p.imageUrl || p.imageUrl.includes('openfoodfacts')),
     )
     .toArray()
-  let budget = 4 // UPCitemdb's free tier rate-limits; upgrade a few per cycle
+  let budget = 8 // a few per cycle (UPCitemdb's free tier rate-limits)
   for (const p of candidates) {
     if (upgradeAttempted.has(p.id)) continue
     if (budget-- <= 0) break
@@ -552,10 +552,11 @@ async function purgeLegacyZeroEntries() {
   localStorage.setItem('purgeZeroEntriesV1', '1')
 }
 
-/** One-time fix: names saved with the size doubled ("750ml 750ml") by an old AI-path bug. */
+/** One-time fix: names with the size doubled ("750ml 750ml", "33 fl oz 33 fl oz"). */
 async function fixDoubledSizeNames() {
-  if (localStorage.getItem('fixDoubledSizesV1')) return
-  const rx = /\b(\d+(?:\.\d+)?\s?(?:ml|cl|l|oz)\b)([\s.]*\1)+/gi
+  if (localStorage.getItem('fixDoubledSizesV2')) return
+  // size token: number + optional "fl" + unit (ml/cl/l/oz)
+  const rx = /\b(\d+(?:\.\d+)?\s?(?:fl\s?)?(?:ml|cl|l|oz)\b)([\s.]*\1)+/gi
   const all = await db.products.toArray()
   for (const p of all) {
     const fixed = p.name.replace(rx, '$1').replace(/\s+/g, ' ').trim()
@@ -564,7 +565,7 @@ async function fixDoubledSizeNames() {
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
   }
-  localStorage.setItem('fixDoubledSizesV1', '1')
+  localStorage.setItem('fixDoubledSizesV2', '1')
 }
 
 export function startSyncLoop() {

@@ -23,6 +23,11 @@ export function useProductImage(p: Product | undefined): string | null {
     }
     async function resolve() {
       if (!p) return setSrc(null)
+      // A barcode product's saved photo is the scanner's auto-captured BACK LABEL
+      // (used only to feed the AI) — never show it as the product image. Only
+      // show a user photo taken on purpose (photoPreferred) or a photo-created
+      // product's own shot (no barcode).
+      const userPhotoOk = p.photoPreferred === 1 || !p.barcode
       if (p.photoPreferred === 1 && (await fromPhoto())) return
       if (p.imageUrl) {
         const cached = await db.images.get(p.imageUrl)
@@ -35,7 +40,7 @@ export function useProductImage(p: Product | undefined): string | null {
         }
         return
       }
-      if (await fromPhoto()) return
+      if (userPhotoOk && (await fromPhoto())) return
       setSrc(null)
     }
     void resolve()
@@ -53,10 +58,12 @@ export function Thumb({ product, onClick }: { product: Product | undefined; onCl
   const [failed, setFailed] = useState(false)
   const [photoFallback, setPhotoFallback] = useState<string | null>(null)
 
-  // Remote image unreachable (offline / hotlink blocked) → user photo → placeholder
+  // Remote image unreachable (offline / hotlink blocked) → user photo (only if
+  // safe to show — not a barcode back-label) → placeholder
   async function handleError() {
     setFailed(true)
-    if (product?.photoId) {
+    const userPhotoOk = product && (product.photoPreferred === 1 || !product.barcode)
+    if (userPhotoOk && product?.photoId) {
       const photo = await db.photos.get(product.photoId)
       if (photo) setPhotoFallback(URL.createObjectURL(photo.blob))
     }

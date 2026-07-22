@@ -328,18 +328,17 @@ export default function SessionView({ session }: { session: Session }) {
             {!collapsed.has(g.key) &&
               g.subgroups.map(({ sub, ents }) => {
                 const subKey = `${g.key}::${sub}`
-                const showSubHeader = g.hasSubs && sub !== ''
+                // Show a collapsible header for every sub-group when the category
+                // has types — including the "No type" bucket, so it can collapse.
+                const showSubHeader = g.hasSubs
                 const subCollapsed = showSubHeader && collapsed.has(subKey)
                 return (
                   <div key={subKey}>
                     {showSubHeader && (
                       <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
                         <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
-                        {sub} <span className="muted">· {ents.length}</span>
+                        {sub || 'No type'} <span className="muted">· {ents.length}</span>
                       </button>
-                    )}
-                    {g.hasSubs && sub === '' && ents.length > 0 && (
-                      <div className="subcat-header muted">No type</div>
                     )}
                     {!subCollapsed && ents.map((e) => renderRow(e))}
                   </div>
