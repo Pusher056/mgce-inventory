@@ -93,8 +93,9 @@ export default function SessionView({ session }: { session: Session }) {
     { cases: 0, bottles: 0 },
   )
 
-  // Group counted products by category, then by subcategory (Tequila, Riesling…)
-  // within each. Pending-identification items first so the user sees them resolve.
+  // Group counted products by category. ONLY Liquor sub-groups by type
+  // (Tequila, Vodka…); every other category is a flat list. Products without a
+  // type just list under Liquor directly — no "No type" bucket.
   const groups = useMemo(() => {
     const byCat = new Map<Category | 'pending', Entry[]>()
     for (const e of visibleEntries) {
@@ -111,25 +112,32 @@ export default function SessionView({ session }: { session: Session }) {
       .filter((k) => byCat.has(k))
       .map((k) => {
         const entries = (byCat.get(k) ?? []).sort((a, b) => b.updatedAt - a.updatedAt)
-        // sub-group by subcategory (skip for pending / soft / water — no need)
-        const subMap = new Map<string, Entry[]>()
-        for (const e of entries) {
-          const p = productMap.get(e.productId)
-          const sub = k === 'pending' ? '' : (p?.subcategory ?? '')
-          const arr = subMap.get(sub) ?? []
-          arr.push(e)
-          subMap.set(sub, arr)
+        // Typed sub-groups only for Liquor
+        const typed: { sub: string; ents: Entry[] }[] = []
+        const untyped: Entry[] = []
+        if (k === 'spirits') {
+          const subMap = new Map<string, Entry[]>()
+          for (const e of entries) {
+            const sub = productMap.get(e.productId)?.subcategory ?? ''
+            if (!sub) untyped.push(e)
+            else {
+              const arr = subMap.get(sub) ?? []
+              arr.push(e)
+              subMap.set(sub, arr)
+            }
+          }
+          for (const [sub, ents] of [...subMap.entries()].sort((a, b) => a[0].localeCompare(b[0], 'en'))) {
+            typed.push({ sub, ents })
+          }
+        } else {
+          untyped.push(...entries)
         }
-        const hasSubs = [...subMap.keys()].some((s) => s !== '') && subMap.size > 1
-        const subgroups = [...subMap.entries()]
-          .sort((a, b) => (a[0] || 'zzz').localeCompare(b[0] || 'zzz', 'es'))
-          .map(([sub, ents]) => ({ sub, ents }))
         return {
           key: k,
           label: k === 'pending' ? 'Identifying…' : CATEGORY_LABELS[k],
           count: entries.length,
-          hasSubs,
-          subgroups,
+          typed,
+          untyped,
         }
       })
   }, [visibleEntries, productMap])
@@ -325,25 +333,26 @@ export default function SessionView({ session }: { session: Session }) {
               <span style={{ fontSize: 11 }}>{collapsed.has(g.key) ? '▶' : '▼'}</span>
               {g.label} <span className="muted">· {g.count}</span>
             </button>
-            {!collapsed.has(g.key) &&
-              g.subgroups.map(({ sub, ents }) => {
-                const subKey = `${g.key}::${sub}`
-                // Show a collapsible header for every sub-group when the category
-                // has types — including the "No type" bucket, so it can collapse.
-                const showSubHeader = g.hasSubs
-                const subCollapsed = showSubHeader && collapsed.has(subKey)
-                return (
-                  <div key={subKey}>
-                    {showSubHeader && (
+            {!collapsed.has(g.key) && (
+              <>
+                {/* Liquor: collapsible type sub-groups (Tequila, Vodka…) */}
+                {g.typed.map(({ sub, ents }) => {
+                  const subKey = `${g.key}::${sub}`
+                  const subCollapsed = collapsed.has(subKey)
+                  return (
+                    <div key={subKey}>
                       <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
                         <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
-                        {sub || 'No type'} <span className="muted">· {ents.length}</span>
+                        {sub} <span className="muted">· {ents.length}</span>
                       </button>
-                    )}
-                    {!subCollapsed && ents.map((e) => renderRow(e))}
-                  </div>
-                )
-              })}
+                      {!subCollapsed && ents.map((e) => renderRow(e))}
+                    </div>
+                  )
+                })}
+                {/* Untyped products list directly under the category, no header */}
+                {g.untyped.map((e) => renderRow(e))}
+              </>
+            )}
           </div>
         ))}
       </div>

@@ -10,7 +10,7 @@ export type Category =
   | 'other'
 
 export const CATEGORY_LABELS: Record<Category, string> = {
-  spirits: 'Hard Liquor',
+  spirits: 'Liquor',
   red_wine: 'Red Wine',
   white_wine: 'White Wine',
   rose_wine: 'Rosé',

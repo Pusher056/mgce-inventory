@@ -2,7 +2,7 @@ import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
 import { categoryFromText, subcategoryFromText, categoryForSubcategory } from './classify'
-import type { Category, Entry, Product, Session } from './types'
+import type { Entry, Product, Session } from './types'
 
 /**
  * Offline-first sync engine.
@@ -248,38 +248,14 @@ function isTrustedImage(url: string | null | undefined): boolean {
   return !!url && /^https:\/\//.test(url) && PRODUCT_IMG_HOSTS.test(url)
 }
 
-/**
- * One-time cleanup: remove any product image that is NOT from a trusted product
- * database/retailer (the junk from the old web-image search). Cleared images
- * get re-fetched from safe sources by the upgrade passes; meanwhile the product
- * shows its own photo or the bottle placeholder.
- */
-async function sanitizeImages() {
-  if (localStorage.getItem('sanitizeImagesV2')) return
-  const all = await db.products.filter((p) => !!p.imageUrl).toArray()
-  for (const p of all) {
-    if (!isTrustedImage(p.imageUrl)) {
-      await db.images.delete(p.imageUrl!)
-      await db.products.update(p.id, { imageUrl: null, updatedAt: Date.now() })
-      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
-    }
-  }
-  localStorage.setItem('sanitizeImagesV2', '1')
-}
-
-// Products identified before the image/category pipeline improved: retry the
-// lookup once per app run to upgrade user-submitted OFF photos to retailer
-// shots and fill in a missing category. Never touches a name the user can see.
+// Fetch a professional image for barcode products that don't have one yet.
+// IMPORTANT: this ONLY sets the image. It NEVER changes name/category/subcategory
+// — fetching a photo must never change what the product is (past bug).
 const upgradeAttempted = new Set<string>()
 
 async function upgradeCatalog() {
   const candidates = await db.products
-    .filter(
-      (p) =>
-        !!p.barcode &&
-        p.needsLookup === 0 &&
-        (!p.category || !p.imageUrl || p.imageUrl.includes('openfoodfacts')),
-    )
+    .filter((p) => !!p.barcode && p.needsLookup === 0 && !p.imageUrl)
     .toArray()
   let budget = 8 // a few per cycle (UPCitemdb's free tier rate-limits)
   for (const p of candidates) {
@@ -293,23 +269,9 @@ async function upgradeCatalog() {
       upgradeAttempted.delete(p.id) // network hiccup — retry next sync
       continue
     }
-    if (!result) continue
-    const changes: Partial<Product> = {}
-    // only accept trusted retailer images; prefer non-OFF (studio shots)
-    if (isTrustedImage(result.imageUrl)) {
-      const betterImage = !result.imageUrl!.includes('openfoodfacts')
-      if (betterImage && result.imageUrl !== p.imageUrl) {
-        if (p.imageUrl) await db.images.delete(p.imageUrl)
-        changes.imageUrl = result.imageUrl
-      } else if (!p.imageUrl) {
-        changes.imageUrl = result.imageUrl
-      }
-    }
-    if (!p.category && result.category) changes.category = result.category
-    if (!p.name && result.name) changes.name = result.name
-    if (Object.keys(changes).length > 0) {
-      changes.updatedAt = Date.now()
-      await db.products.update(p.id, changes)
+    // image only — identity (name/category) is never touched here
+    if (result && isTrustedImage(result.imageUrl)) {
+      await db.products.update(p.id, { imageUrl: result.imageUrl, updatedAt: Date.now() })
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
   }
@@ -342,22 +304,23 @@ async function upgradePhotoProducts() {
   }
 }
 
-/** Provisional category + subcategory from keywords in the name (instant, offline). */
+/**
+ * Fill category/subcategory ONLY when empty — never overrides an existing value.
+ * Deterministic keyword classifier (no AI), so grouping never churns or moves
+ * products around on later syncs.
+ */
 async function categorizeLocal() {
-  const all = await db.products.filter((p) => !!p.name).toArray()
+  const all = await db.products.filter((p) => !!p.name && (!p.category || !p.subcategory)).toArray()
   for (const p of all) {
     const changes: Partial<Product> = {}
-    const sub = p.subcategory ?? (p.subcategoryLocked !== 1 ? subcategoryFromText(p.name, p.alias, p.brand) : null)
-    if (sub && sub !== p.subcategory) changes.subcategory = sub
-    if (p.categoryLocked !== 1) {
-      // The subcategory (Tequila, Riesling…) is a reliable signal; use it to set
-      // OR correct the category. Fall back to keywords when there's no subcategory.
-      const derived = categoryForSubcategory(sub)
-      if (derived && derived !== p.category) changes.category = derived
-      else if (!p.category) {
-        const cat = categoryFromText(p.name, p.alias, p.brand)
-        if (cat) changes.category = cat
-      }
+    if (!p.subcategory && p.subcategoryLocked !== 1) {
+      const sub = subcategoryFromText(p.name, p.alias, p.brand)
+      if (sub) changes.subcategory = sub
+    }
+    if (!p.category && p.categoryLocked !== 1) {
+      const sub = changes.subcategory ?? p.subcategory
+      const cat = categoryForSubcategory(sub) ?? categoryFromText(p.name, p.alias, p.brand)
+      if (cat) changes.category = cat
     }
     if (Object.keys(changes).length > 0) {
       changes.updatedAt = Date.now()
@@ -367,53 +330,31 @@ async function categorizeLocal() {
   }
 }
 
-// Precision pass: the AI verifies EVERY product's category (keywords confuse
-// e.g. still rosé vs sparkling rosé). Runs once per product per device
-// (catAiChecked). Categories the user set manually are locked and never touched.
-const aiCatAttempted = new Set<string>()
-
-async function aiCategorize() {
-  if (skipAiThisSession) return
-  const candidates = (
-    await db.products.filter((p) => !!p.name && p.categoryLocked !== 1 && p.catAiChecked !== 1).toArray()
-  ).filter((p) => !aiCatAttempted.has(p.id))
-  if (candidates.length === 0) return
-  const batch = candidates.slice(0, 20)
-  batch.forEach((p) => aiCatAttempted.add(p.id))
-  const { data, error } = await supabase.functions.invoke('identify', {
-    body: { names: batch.map((p) => `${p.name}${p.brand ? ` (${p.brand})` : ''}`) },
-  })
-  if (error) {
-    batch.forEach((p) => aiCatAttempted.delete(p.id)) // retry next sync
-    throw new Error(`categorize: ${error.message}`)
-  }
-  if (data?.error === 'no_openai_key') {
-    skipAiThisSession = true
-    setState({ aiKeyMissing: true })
-    return
-  }
-  const cats: (Category | null)[] = data?.categories ?? []
-  const subs: (string | null)[] = data?.subcategories ?? []
-  for (let i = 0; i < batch.length; i++) {
-    const cat = cats[i]
-    const sub = subs[i]
-    const p = batch[i]
-    const changes: Partial<Product> = { catAiChecked: 1 }
-    let dirty = false
-    if (cat && cat !== p.category && p.categoryLocked !== 1) {
-      changes.category = cat
-      dirty = true
+/**
+ * One-time deterministic re-classification to undo the AI re-categorization
+ * that mislabeled products (a liquor turned into Prosecco, tequilas left with
+ * no type). For non-locked products, if the keyword classifier confidently
+ * knows the type, set subcategory + derive category from it. Products it can't
+ * place keep what they had. Runs once (flag), so it never churns.
+ */
+async function reclassifyDeterministic() {
+  if (localStorage.getItem('reclassifyV1')) return
+  const all = await db.products.filter((p) => !!p.name).toArray()
+  for (const p of all) {
+    const changes: Partial<Product> = {}
+    if (p.subcategoryLocked !== 1) {
+      const sub = subcategoryFromText(p.name, p.alias, p.brand)
+      if (sub && sub !== p.subcategory) changes.subcategory = sub
+      const derived = categoryForSubcategory(sub)
+      if (derived && p.categoryLocked !== 1 && derived !== p.category) changes.category = derived
     }
-    if (sub && sub !== p.subcategory && p.subcategoryLocked !== 1) {
-      changes.subcategory = sub
-      dirty = true
-    }
-    if (dirty) {
+    if (Object.keys(changes).length > 0) {
       changes.updatedAt = Date.now()
+      await db.products.update(p.id, changes)
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
-    await db.products.update(p.id, changes)
   }
+  localStorage.setItem('reclassifyV1', '1')
 }
 
 /** Download remote product images so thumbnails work offline. */
@@ -448,11 +389,10 @@ export async function syncNow() {
     ['identificar', resolveLookups],
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers
-    ['fotos-limpieza', sanitizeImages],
+    ['reclasificar', reclassifyDeterministic],
     ['catálogo', upgradeCatalog],
     ['fotos-catálogo', upgradePhotoProducts],
     ['categorías', categorizeLocal],
-    ['categorías-ia', aiCategorize],
     ['push', pushOutbox],
     ['imágenes', cacheImages],
   ]
