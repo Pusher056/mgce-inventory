@@ -12,6 +12,7 @@ import CountPad from './CountPad'
 import ProductPicker from './ProductPicker'
 import PhotoModal from './PhotoModal'
 import SwipeRow from './SwipeRow'
+import OrganizeSheet from './OrganizeSheet'
 
 type Draft =
   | { kind: 'barcode'; barcode: string; frame?: Blob }
@@ -25,6 +26,7 @@ type Modal =
   | { t: 'count'; productId: string; initial?: { bottles?: number; cases?: number } }
   | { t: 'picker' }
   | { t: 'photo'; productId: string }
+  | { t: 'organize' }
   | { t: 'export' }
 
 function draftTitle(d: Draft): string {
@@ -269,6 +271,15 @@ export default function SessionView({ session }: { session: Session }) {
           🔍 Search
         </button>
       </div>
+      {visibleEntries.length > 0 && (
+        <button
+          className="big-btn ghost"
+          style={{ marginTop: 10, minHeight: 46, fontSize: 15 }}
+          onClick={() => setModal({ t: 'organize' })}
+        >
+          🗂 Organize (photos & locations)
+        </button>
+      )}
       {activeLocation && (
         <button
           className="small"
@@ -439,6 +450,10 @@ export default function SessionView({ session }: { session: Session }) {
           onDone={() => setModal({ t: 'none' })}
           onScanNext={() => setModal({ t: 'scanner' })}
         />
+      )}
+
+      {modal.t === 'organize' && (
+        <OrganizeSheet products={products} entries={entries} onClose={() => setModal({ t: 'none' })} />
       )}
 
       {modal.t === 'photo' && productMap.get(modal.productId) && (

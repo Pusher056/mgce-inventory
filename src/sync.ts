@@ -1,7 +1,12 @@
 import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
-import { categoryFromText, subcategoryFromText, categoryForSubcategory } from './classify'
+import {
+  categoryFromText,
+  subcategoryFromText,
+  categoryForSubcategory,
+  LEGACY_SUBCATEGORY_RENAMES,
+} from './classify'
 import type { Entry, Product, Session } from './types'
 
 /**
@@ -277,31 +282,84 @@ async function upgradeCatalog() {
   }
 }
 
-// Photo-identified products (no barcode) whose only image is the warehouse
-// snapshot: search a professional image by name, once per product per run.
-const photoUpgradeAttempted = new Set<string>()
+/**
+ * Fill MISSING subcategories with the AI (it knows brands: "Blanco" by
+ * El Tequileño is a Tequila, "Grove 42" is a Gin — things no keyword list can
+ * catch). Strictly additive: only products whose subcategory is empty are sent,
+ * and an existing subcategory/category is NEVER overwritten, so nothing that is
+ * already filed correctly can move.
+ */
+const aiSubAttempted = new Set<string>()
 
-async function upgradePhotoProducts() {
-  const candidates = await db.products
-    .filter((p) => !p.barcode && !!p.name && !p.imageUrl && p.needsAi === 0)
-    .toArray()
-  let budget = 3
-  for (const p of candidates) {
-    if (photoUpgradeAttempted.has(p.id)) continue
-    if (budget-- <= 0) break
-    photoUpgradeAttempted.add(p.id)
-    const { data, error } = await supabase.functions.invoke('identify', {
-      body: { imageSearch: `${p.brand ?? ''} ${p.name}`.trim() },
-    })
-    if (error) {
-      photoUpgradeAttempted.delete(p.id) // retry next sync
-      continue
+async function aiFillMissingTypes() {
+  if (skipAiThisSession) return
+  const candidates = (
+    await db.products
+      .filter((p) => !!p.name && !p.subcategory && p.subcategoryLocked !== 1)
+      .toArray()
+  ).filter((p) => !aiSubAttempted.has(p.id))
+  if (candidates.length === 0) return
+  const batch = candidates.slice(0, 20)
+  batch.forEach((p) => aiSubAttempted.add(p.id))
+  const { data, error } = await supabase.functions.invoke('identify', {
+    body: { names: batch.map((p) => `${p.name}${p.brand ? ` (${p.brand})` : ''}`) },
+  })
+  if (error) {
+    batch.forEach((p) => aiSubAttempted.delete(p.id)) // retry next sync
+    throw new Error(`types: ${error.message}`)
+  }
+  if (data?.error === 'no_openai_key') {
+    skipAiThisSession = true
+    setState({ aiKeyMissing: true })
+    return
+  }
+  const subs: (string | null)[] = data?.subcategories ?? []
+  for (let i = 0; i < batch.length; i++) {
+    const sub = subs[i]
+    const p = batch[i]
+    if (!sub || p.subcategory) continue // never overwrite
+    const changes: Partial<Product> = { subcategory: sub, updatedAt: Date.now() }
+    // only set the category if the product has none at all
+    if (!p.category && p.categoryLocked !== 1) {
+      const derived = categoryForSubcategory(sub)
+      if (derived) changes.category = derived
     }
-    if (isTrustedImage(data?.imageUrl)) {
-      await db.products.update(p.id, { imageUrl: data.imageUrl, updatedAt: Date.now() })
+    await db.products.update(p.id, changes)
+    await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+  }
+}
+
+/**
+ * One-time: drop images on products WITHOUT a barcode. Those could only come
+ * from the old name-based image search, which returned unrelated products
+ * (a coat for "The Dead Rabbit Irish Whiskey"). Barcode products keep theirs —
+ * an exact barcode identifies one specific product, so its image is correct.
+ * Cleared products show the clean bottle placeholder until the user photographs
+ * them (Add photos screen).
+ */
+async function dropNameSearchImages() {
+  if (localStorage.getItem('dropNameSearchImagesV1')) return
+  const suspects = await db.products.filter((p) => !p.barcode && !!p.imageUrl).toArray()
+  for (const p of suspects) {
+    await db.images.delete(p.imageUrl!)
+    await db.products.update(p.id, { imageUrl: null, updatedAt: Date.now() })
+    await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+  }
+  localStorage.setItem('dropNameSearchImagesV1', '1')
+}
+
+/** One-time: rename old Spanish subcategory labels to their English versions. */
+async function renameLegacySubcategories() {
+  if (localStorage.getItem('renameSubsV1')) return
+  const all = await db.products.filter((p) => !!p.subcategory).toArray()
+  for (const p of all) {
+    const renamed = LEGACY_SUBCATEGORY_RENAMES[p.subcategory!]
+    if (renamed) {
+      await db.products.update(p.id, { subcategory: renamed, updatedAt: Date.now() })
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
   }
+  localStorage.setItem('renameSubsV1', '1')
 }
 
 /**
@@ -399,7 +457,6 @@ async function syncBackground() {
   try {
     await runStages([
       ['catálogo', upgradeCatalog],
-      ['fotos-catálogo', upgradePhotoProducts],
       ['push', pushOutbox],
       ['imágenes', cacheImages],
     ])
@@ -422,7 +479,10 @@ export async function syncNow() {
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers
     ['reclasificar', reclassifyDeterministic],
+    ['limpiar-fotos-nombre', dropNameSearchImages],
+    ['renombrar-tipos', renameLegacySubcategories],
     ['categorías', categorizeLocal],
+    ['tipos-ia', aiFillMissingTypes],
     ['push', pushOutbox],
   ])
   setState({ lastError: errors[0] ?? null })

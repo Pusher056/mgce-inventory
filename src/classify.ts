@@ -50,8 +50,8 @@ export function subcategoryFromText(...parts: (string | null | undefined)[]): st
     [/cognac|hennessy|r[eé]my|courvoisier|martell/, 'Cognac'],
     [/brandy|armagnac/, 'Brandy'],
     [/vermouth|vermut|martini rossi|dolin|carpano|noilly/, 'Vermouth'],
-    [/aperol|campari|aperitif|aperitivo|lillet|st[- ]germain|cointreau|triple sec|grand marnier/, 'Aperitivo/Licor'],
-    [/liqueur|licor|kahl[uú]a|baileys|amaretto|frangelico|chambord|schnapps|midori|drambuie/, 'Licor'],
+    [/aperol|campari|aperitif|aperitivo|lillet|amaro|pastis|pernod|ricard|suze|byrrh/, 'Aperitif'],
+    [/liqueur|licor|kahl[uú]a|baileys|amaretto|frangelico|chambord|schnapps|midori|drambuie|cura[cç]ao|falernum|chartreuse|galliano|cointreau|triple sec|grand marnier|cr[eè]me de/, 'Liqueur'],
     [/bitters|angostura/, 'Bitters'],
     // Sparkling
     [/champagne|lanson|veuve|mo[eë]t|dom p[eé]rignon|bollinger|taittinger|perrier[- ]jou[eë]t|laurent[- ]perrier|ruinart/, 'Champagne'],
@@ -83,11 +83,11 @@ export function subcategoryFromText(...parts: (string | null | undefined)[]): st
     [/\bipa\b/, 'IPA'],
     [/lager|pilsner|stella|heineken|amstel|corona|modelo|budweiser|miller/, 'Lager'],
     // Soft / water
-    [/tonic/, 'Tónica'],
+    [/tonic/, 'Tonic'],
     [/club soda|soda water/, 'Club Soda'],
     [/ginger ale|ginger beer/, 'Ginger'],
     [/cola|coke|pepsi/, 'Cola'],
-    [/sparkling water|seltzer|club soda|mineral water|agua mineral/, 'Agua con gas'],
+    [/sparkling water|seltzer|mineral water|agua mineral/, 'Sparkling'],
   ]
 
   for (const [rx, label] of RULES) {
@@ -108,7 +108,9 @@ const SUB_TO_CATEGORY: Record<string, Category> = {
   Tequila: 'spirits', Mezcal: 'spirits', Bourbon: 'spirits', Scotch: 'spirits',
   Rye: 'spirits', 'Irish Whiskey': 'spirits', Whiskey: 'spirits', Vodka: 'spirits',
   Gin: 'spirits', Rum: 'spirits', Cognac: 'spirits', Brandy: 'spirits',
-  Vermouth: 'spirits', 'Aperitivo/Licor': 'spirits', Licor: 'spirits', Bitters: 'spirits',
+  Vermouth: 'spirits', Aperitif: 'spirits', Liqueur: 'spirits', Bitters: 'spirits',
+  // legacy Spanish labels kept so old data still maps to a category
+  'Aperitivo/Licor': 'spirits', Licor: 'spirits',
   Champagne: 'sparkling', Prosecco: 'sparkling', Cava: 'sparkling',
   'Cabernet Sauvignon': 'red_wine', 'Pinot Noir': 'red_wine', Merlot: 'red_wine',
   Malbec: 'red_wine', Syrah: 'red_wine', Zinfandel: 'red_wine', Sangiovese: 'red_wine',
@@ -119,8 +121,18 @@ const SUB_TO_CATEGORY: Record<string, Category> = {
   'White Blend': 'white_wine',
   'Provence Rosé': 'rose_wine', 'Rosé': 'rose_wine',
   IPA: 'beer', Lager: 'beer', Stout: 'beer', Pilsner: 'beer',
-  'Tónica': 'soft', 'Club Soda': 'soft', Ginger: 'soft', Cola: 'soft',
-  'Agua con gas': 'water', Still: 'water', Sparkling: 'water',
+  Tonic: 'soft', 'Club Soda': 'soft', Ginger: 'soft', Cola: 'soft', Juice: 'soft',
+  Still: 'water',
+  'Tónica': 'soft', 'Agua con gas': 'water', // legacy
+}
+
+/** Old Spanish subcategory labels → current English ones (one-time migration). */
+export const LEGACY_SUBCATEGORY_RENAMES: Record<string, string> = {
+  'Aperitivo/Licor': 'Aperitif',
+  Licor: 'Liqueur',
+  'Tónica': 'Tonic',
+  'Agua con gas': 'Sparkling',
+  'Provence Rosé': 'Rosé',
 }
 
 export function categoryForSubcategory(sub: string | null | undefined): Category | null {
