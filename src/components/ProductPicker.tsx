@@ -86,7 +86,14 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
             const e = stock.get(p.id)
             const total = e ? totalBottles(e, p.unitsPerCase) : 0
             return (
-              <button key={p.id} className="product-row" onClick={() => onPick(p)}>
+              <div
+                key={p.id}
+                className="product-row"
+                role="button"
+                tabIndex={0}
+                style={{ cursor: 'pointer' }}
+                onClick={() => onPick(p)}
+              >
                 <Thumb product={p} />
                 <div className="info">
                   <div className="name">{displayName(p) || `(unidentified) ${p.barcode ?? ''}`}</div>
@@ -106,7 +113,7 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
                 ) : (
                   <div style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>OUT OF STOCK</div>
                 )}
-              </button>
+              </div>
             )
           })}
           {filtered.length === 0 && <div className="muted" style={{ textAlign: 'center', padding: 20 }}>No results</div>}

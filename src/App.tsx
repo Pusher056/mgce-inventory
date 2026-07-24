@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
 import { getSyncState, resetAiSkip, subscribeSync, syncNow } from './sync'
+import { applyUpdate, isUpdateReady, subscribeUpdate } from './pwa'
 import Home from './components/Home'
 import SessionView from './components/SessionView'
 import type { Session } from './types'
@@ -10,6 +11,7 @@ export default function App() {
   // Always open on the menu (list of conteos), per user preference
   const [sessionId, setSessionId] = useState<string | null>(null)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
+  const updateReady = useSyncExternalStore(subscribeUpdate, isUpdateReady)
   const session: Session | undefined = useLiveQuery(
     () => (sessionId ? db.sessions.get(sessionId) : undefined),
     [sessionId],
@@ -46,6 +48,12 @@ export default function App() {
                 : 'Offline'}
         </button>
       </div>
+
+      {updateReady && (
+        <button className="update-banner" onClick={() => applyUpdate()}>
+          ⬆️ New version available — tap to update
+        </button>
+      )}
 
       {session ? <SessionView session={session} /> : <Home onOpen={(s) => setSessionId(s.id)} />}
 

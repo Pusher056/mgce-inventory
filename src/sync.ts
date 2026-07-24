@@ -376,26 +376,8 @@ async function cacheImages() {
 
 let syncing = false
 
-export async function syncNow() {
-  if (syncing || !navigator.onLine) return
-  syncing = true
-  setState({ syncing: true, lastError: null })
-  // Each stage is isolated: one failing (e.g. a push conflict) must never
-  // block identification, photo upload, or image caching.
+async function runStages(stages: [string, () => Promise<void>][]): Promise<string[]> {
   const errors: string[] = []
-  const stages: [string, () => Promise<void>][] = [
-    ['push', pushOutbox],
-    ['fotos', uploadPhotos],
-    ['identificar', resolveLookups],
-    ['ia', resolveAi],
-    ['push', pushOutbox], // rows updated by the resolvers
-    ['reclasificar', reclassifyDeterministic],
-    ['catálogo', upgradeCatalog],
-    ['fotos-catálogo', upgradePhotoProducts],
-    ['categorías', categorizeLocal],
-    ['push', pushOutbox],
-    ['imágenes', cacheImages],
-  ]
   for (const [label, stage] of stages) {
     try {
       await stage()
@@ -403,9 +385,51 @@ export async function syncNow() {
       errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+  return errors
+}
+
+let backgroundRunning = false
+
+// Slow, optional work (fetching/caching product images from external APIs).
+// Runs AFTER data sync and does NOT keep the "Syncing…" indicator busy, so the
+// pill turns green as soon as the actual counts are saved to the server.
+async function syncBackground() {
+  if (backgroundRunning || !navigator.onLine) return
+  backgroundRunning = true
+  try {
+    await runStages([
+      ['catálogo', upgradeCatalog],
+      ['fotos-catálogo', upgradePhotoProducts],
+      ['push', pushOutbox],
+      ['imágenes', cacheImages],
+    ])
+    setState({ pending: await countPending() })
+  } finally {
+    backgroundRunning = false
+  }
+}
+
+export async function syncNow() {
+  if (syncing || !navigator.onLine) return
+  syncing = true
+  setState({ syncing: true, lastError: null })
+  // Fast, essential data first — this is what the pill reflects. Each stage is
+  // isolated so one failure never blocks the others.
+  const errors = await runStages([
+    ['push', pushOutbox],
+    ['fotos', uploadPhotos],
+    ['identificar', resolveLookups],
+    ['ia', resolveAi],
+    ['push', pushOutbox], // rows updated by the resolvers
+    ['reclasificar', reclassifyDeterministic],
+    ['categorías', categorizeLocal],
+    ['push', pushOutbox],
+  ])
   setState({ lastError: errors[0] ?? null })
   syncing = false
   setState({ syncing: false, pending: await countPending() })
+  // Kick off slow image work without blocking the indicator
+  void syncBackground()
 }
 
 /** Restore from the server if local storage is empty (e.g. reinstalled app). */
@@ -524,6 +548,8 @@ export function startSyncLoop() {
       void countPending().then((n) => {
         setState({ pending: n, online: navigator.onLine })
         if (n > 0) void syncNow()
+        // no data pending, but keep fetching missing product images in the background
+        else void syncBackground()
       })
     } else {
       setState({ online: navigator.onLine })
