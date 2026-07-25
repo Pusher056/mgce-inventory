@@ -26,7 +26,9 @@ export function buildRows(session: Session, entries: Entry[], products: Map<stri
     rows.push({
       category: CATEGORY_LABELS[cat],
       catIdx: CATEGORY_ORDER.indexOf(cat),
-      type: p.subcategory ?? '',
+      // Liquor is the only category shown split by type (mirrors the app);
+      // a liquor with no type is filed under "Other" so nothing sits headerless.
+      type: cat === 'spirits' ? (p.subcategory ?? 'Other') : '',
       product: displayName(p) || (p.barcode ? `(unidentified) ${p.barcode}` : '(no name)'),
       location: p.location ?? '',
       brand: p.brand ?? '',

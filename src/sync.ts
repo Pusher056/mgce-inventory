@@ -5,7 +5,7 @@ import {
   categoryFromText,
   subcategoryFromText,
   categoryForSubcategory,
-  LEGACY_SUBCATEGORY_RENAMES,
+  canonicalSubcategory,
 } from './classify'
 import type { Entry, Product, Session } from './types'
 
@@ -315,7 +315,7 @@ async function aiFillMissingTypes() {
   }
   const subs: (string | null)[] = data?.subcategories ?? []
   for (let i = 0; i < batch.length; i++) {
-    const sub = subs[i]
+    const sub = canonicalSubcategory(subs[i])
     const p = batch[i]
     if (!sub || p.subcategory) continue // never overwrite
     const changes: Partial<Product> = { subcategory: sub, updatedAt: Date.now() }
@@ -348,18 +348,35 @@ async function dropNameSearchImages() {
   localStorage.setItem('dropNameSearchImagesV1', '1')
 }
 
-/** One-time: rename old Spanish subcategory labels to their English versions. */
-async function renameLegacySubcategories() {
-  if (localStorage.getItem('renameSubsV1')) return
-  const all = await db.products.filter((p) => !!p.subcategory).toArray()
+/**
+ * Normalize every stored type label to its canonical form (old Spanish names,
+ * and spelling variants like "Scoth Whisky" → "Scotch"), and re-check types the
+ * keyword classifier can now recognize better (e.g. Laphroaig → Scotch, whose
+ * barcode title is misspelled "Islay Single Math Scoth Whisky").
+ */
+async function normalizeSubcategories() {
+  if (localStorage.getItem('normalizeSubsV2')) return
+  const all = await db.products.toArray()
   for (const p of all) {
-    const renamed = LEGACY_SUBCATEGORY_RENAMES[p.subcategory!]
-    if (renamed) {
-      await db.products.update(p.id, { subcategory: renamed, updatedAt: Date.now() })
+    const changes: Partial<Product> = {}
+    const canon = canonicalSubcategory(p.subcategory)
+    if (canon && canon !== p.subcategory) changes.subcategory = canon
+    // a better keyword match wins over a vague one the AI/DB gave earlier
+    if (p.subcategoryLocked !== 1 && p.name) {
+      const fromText = subcategoryFromText(p.name, p.alias, p.brand)
+      const current = changes.subcategory ?? p.subcategory
+      // only upgrade generic "Whiskey" to the specific style it really is
+      if (fromText && fromText !== current && (!current || current === 'Whiskey')) {
+        changes.subcategory = fromText
+      }
+    }
+    if (Object.keys(changes).length > 0) {
+      changes.updatedAt = Date.now()
+      await db.products.update(p.id, changes)
       await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     }
   }
-  localStorage.setItem('renameSubsV1', '1')
+  localStorage.setItem('normalizeSubsV2', '1')
 }
 
 /**
@@ -372,7 +389,7 @@ async function categorizeLocal() {
   for (const p of all) {
     const changes: Partial<Product> = {}
     if (!p.subcategory && p.subcategoryLocked !== 1) {
-      const sub = subcategoryFromText(p.name, p.alias, p.brand)
+      const sub = canonicalSubcategory(subcategoryFromText(p.name, p.alias, p.brand))
       if (sub) changes.subcategory = sub
     }
     if (!p.category && p.categoryLocked !== 1) {
@@ -480,7 +497,7 @@ export async function syncNow() {
     ['push', pushOutbox], // rows updated by the resolvers
     ['reclasificar', reclassifyDeterministic],
     ['limpiar-fotos-nombre', dropNameSearchImages],
-    ['renombrar-tipos', renameLegacySubcategories],
+    ['normalizar-tipos', normalizeSubcategories],
     ['categorías', categorizeLocal],
     ['tipos-ia', aiFillMissingTypes],
     ['push', pushOutbox],

@@ -360,8 +360,24 @@ export default function SessionView({ session }: { session: Session }) {
                     </div>
                   )
                 })}
-                {/* Untyped products list directly under the category, no header */}
-                {g.untyped.map((e) => renderRow(e))}
+                {/* Untyped products: bare list for flat categories, but inside a
+                    labeled "Other" group when the category shows type sections,
+                    so nothing ever sits loose without a heading. */}
+                {g.typed.length > 0 && g.untyped.length > 0
+                  ? (() => {
+                      const subKey = `${g.key}::__other`
+                      const subCollapsed = collapsed.has(subKey)
+                      return (
+                        <div>
+                          <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
+                            <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
+                            Other <span className="muted">· {g.untyped.length}</span>
+                          </button>
+                          {!subCollapsed && g.untyped.map((e) => renderRow(e))}
+                        </div>
+                      )
+                    })()
+                  : g.untyped.map((e) => renderRow(e))}
               </>
             )}
           </div>

@@ -1,17 +1,21 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { savePhoto, updateProduct } from '../db'
 import { syncNow } from '../sync'
 import { fileToJpeg } from '../image'
 import type { Entry, Product } from '../types'
-import { displayName, parseLocation } from '../types'
+import { displayName, parseLocation, totalBottles } from '../types'
 import { Thumb } from './Thumb'
+import CameraSheet from './CameraSheet'
 
 type Mode = 'photos' | 'locations'
 
 /**
- * Batch clean-up after a count: add real photos and assign shelf locations to
- * many products quickly, without re-scanning anything and without printing QR
- * labels. Products already done drop off the list, so progress is visible.
+ * Batch clean-up after a count: photograph products and assign shelf locations
+ * without re-scanning anything or printing QR labels.
+ *
+ * Locations flow (as the user designed it): pick or type the shelf you are
+ * standing at → tick every bottle on that shelf → Save assigns them all at once.
+ * Ticking is reversible before saving, so a mistake costs nothing.
  */
 export default function OrganizeSheet({
   products,
@@ -22,79 +26,108 @@ export default function OrganizeSheet({
   entries: Entry[]
   onClose: () => void
 }) {
-  const [mode, setMode] = useState<Mode>('photos')
+  const [mode, setMode] = useState<Mode>('locations')
   const [q, setQ] = useState('')
   const [location, setLocation] = useState('')
-  const [justDone, setJustDone] = useState<string[]>([])
-  const photoRef = useRef<HTMLInputElement>(null)
-  const targetRef = useRef<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [showDone, setShowDone] = useState(false)
+  const [camFor, setCamFor] = useState<Product | null>(null)
+  const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
-  // only products that are actually in this inventory
-  const inInventory = useMemo(() => {
-    const ids = new Set(entries.map((e) => e.productId))
-    return products.filter((p) => ids.has(p.id))
-  }, [products, entries])
+  const entryMap = useMemo(() => new Map(entries.map((e) => [e.productId, e])), [entries])
 
-  const pending = useMemo(() => {
+  // only products that are actually part of this inventory
+  const inInventory = useMemo(
+    () => products.filter((p) => entryMap.has(p.id)),
+    [products, entryMap],
+  )
+
+  /** Shelves already in use, so you can reuse one instead of retyping it. */
+  const existingShelves = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of inInventory) {
+      if (p.location) counts.set(p.location, (counts.get(p.location) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'en'))
+  }, [inInventory])
+
+  const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const list = inInventory.filter((p) =>
-      mode === 'photos'
-        ? !p.imageUrl && p.photoPreferred !== 1 // no catalog image and no photo taken on purpose
-        : !p.location,
-    )
+    const base = inInventory.filter((p) => {
+      const done = mode === 'photos' ? !!p.imageUrl || p.photoPreferred === 1 : !!p.location
+      return showDone ? true : !done
+    })
     const filtered = needle
-      ? list.filter(
+      ? base.filter(
           (p) =>
-            p.name.toLowerCase().includes(needle) ||
+            displayName(p).toLowerCase().includes(needle) ||
             (p.brand ?? '').toLowerCase().includes(needle) ||
-            (p.subcategory ?? '').toLowerCase().includes(needle),
+            (p.subcategory ?? '').toLowerCase().includes(needle) ||
+            (p.location ?? '').toLowerCase().includes(needle),
         )
-      : list
+      : base
     return filtered.sort((a, b) => displayName(a).localeCompare(displayName(b), 'en'))
-  }, [inInventory, mode, q])
+  }, [inInventory, mode, q, showDone])
 
-  const doneCount = inInventory.length - pending.length
+  const pendingCount = inInventory.filter((p) =>
+    mode === 'photos' ? !p.imageUrl && p.photoPreferred !== 1 : !p.location,
+  ).length
+  const doneCount = inInventory.length - pendingCount
 
-  async function takePhotoFor(productId: string) {
-    targetRef.current = productId
-    photoRef.current?.click()
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
-  async function assignLocation(p: Product) {
-    const loc = parseLocation(location) ?? location.trim().toUpperCase()
-    if (!loc) return
-    await updateProduct(p.id, { location: loc })
-    setJustDone((d) => [...d, p.id])
+  const shelf = parseLocation(location) ?? location.trim().toUpperCase()
+
+  async function saveSelection() {
+    if (!shelf || selected.size === 0) return
+    const ids = [...selected]
+    for (const id of ids) await updateProduct(id, { location: shelf })
+    setSelected(new Set())
+    setSavedMsg(`✓ ${ids.length} bottle${ids.length === 1 ? '' : 's'} placed in ${shelf}`)
+    setTimeout(() => setSavedMsg(null), 4000)
     void syncNow()
   }
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ minHeight: '80dvh' }}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ minHeight: '84dvh' }}>
         <h2>Organize inventory</h2>
-        <div className="muted small" style={{ marginBottom: 12 }}>
-          {doneCount} of {inInventory.length} done · {pending.length} left
+        <div className="muted small" style={{ marginBottom: 10 }}>
+          {doneCount} of {inInventory.length} done · {pendingCount} left
         </div>
 
         <div className="btn-row">
           <button
-            className={`big-btn${mode === 'photos' ? ' primary' : ''}`}
-            onClick={() => setMode('photos')}
-          >
-            📷 Photos
-          </button>
-          <button
             className={`big-btn${mode === 'locations' ? ' primary' : ''}`}
-            onClick={() => setMode('locations')}
+            onClick={() => {
+              setMode('locations')
+              setSelected(new Set())
+            }}
           >
             📍 Locations
+          </button>
+          <button
+            className={`big-btn${mode === 'photos' ? ' primary' : ''}`}
+            onClick={() => {
+              setMode('photos')
+              setSelected(new Set())
+            }}
+          >
+            📷 Photos
           </button>
         </div>
 
         {mode === 'locations' && (
           <div style={{ marginTop: 12 }}>
             <div className="muted small" style={{ marginBottom: 6 }}>
-              Type the shelf you're standing at, then tap every bottle on it:
+              1. Which shelf are you at?
             </div>
             <input
               value={location}
@@ -102,6 +135,29 @@ export default function OrganizeSheet({
               style={{ textTransform: 'uppercase', fontSize: 22, textAlign: 'center', fontWeight: 800 }}
               onChange={(e) => setLocation(e.target.value.toUpperCase())}
             />
+            {existingShelves.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {existingShelves.map(([code, n]) => (
+                  <button
+                    key={code}
+                    className="small"
+                    style={{
+                      background: shelf === code ? 'var(--amber)' : 'var(--bg3)',
+                      color: shelf === code ? '#451a03' : 'var(--muted)',
+                      padding: '6px 10px',
+                      borderRadius: 999,
+                      fontWeight: 700,
+                    }}
+                    onClick={() => setLocation(code)}
+                  >
+                    📍 {code} · {n}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="muted small" style={{ margin: '12px 0 0' }}>
+              2. Tick every bottle on that shelf, then Save.
+            </div>
           </div>
         )}
 
@@ -109,72 +165,123 @@ export default function OrganizeSheet({
           placeholder="Filter by name, brand or type…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ margin: '12px 0' }}
+          style={{ margin: '12px 0 8px' }}
         />
+        <button
+          className="small"
+          style={{ background: 'var(--bg3)', color: 'var(--muted)', padding: '6px 12px', borderRadius: 999 }}
+          onClick={() => setShowDone((v) => !v)}
+        >
+          {showDone ? '☑ Showing all' : '☐ Show already done'}
+        </button>
 
-        <input
-          ref={photoRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0]
-            e.target.value = ''
-            const id = targetRef.current
-            targetRef.current = null
-            if (!f || !id) return
-            const blob = await fileToJpeg(f)
-            await savePhoto(id, blob)
-            await updateProduct(id, { photoPreferred: 1 })
-            setJustDone((d) => [...d, id])
-            void syncNow()
-          }}
-        />
-
-        <div>
-          {pending.map((p) => (
-            <div key={p.id} className="product-row" style={{ padding: '8px 10px' }}>
-              <Thumb product={p} />
-              <div className="info">
-                <div className="name">{displayName(p) || '(unidentified)'}</div>
-                <div className="muted small">
-                  {p.subcategory ? `${p.subcategory} · ` : ''}
-                  {mode === 'locations' && p.location ? `📍 ${p.location}` : ''}
+        <div style={{ marginTop: 10, paddingBottom: mode === 'locations' ? 76 : 0 }}>
+          {list.map((p) => {
+            const e = entryMap.get(p.id)
+            const qty = e ? totalBottles(e, p.unitsPerCase) : 0
+            const isSel = selected.has(p.id)
+            return (
+              <div
+                key={p.id}
+                className="product-row"
+                style={{
+                  padding: '8px 10px',
+                  cursor: mode === 'locations' ? 'pointer' : 'default',
+                  outline: isSel ? '2px solid var(--accent)' : 'none',
+                }}
+                onClick={mode === 'locations' ? () => toggle(p.id) : undefined}
+              >
+                {mode === 'locations' && (
+                  <div
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 900,
+                      background: isSel ? 'var(--accent)' : 'var(--bg3)',
+                      color: isSel ? '#082f49' : 'transparent',
+                    }}
+                  >
+                    ✓
+                  </div>
+                )}
+                <Thumb product={p} />
+                <div className="info">
+                  <div className="name">{displayName(p) || '(unidentified)'}</div>
+                  <div className="muted small">
+                    {p.location ? <b style={{ color: 'var(--amber)' }}>📍 {p.location} · </b> : ''}
+                    {p.subcategory ? `${p.subcategory} · ` : ''}
+                    {qty} btl
+                  </div>
                 </div>
+                {mode === 'photos' && (
+                  <button className="row-cam" onClick={() => setCamFor(p)}>
+                    {p.imageUrl || p.photoPreferred === 1 ? '📷 Replace' : '📷 Take'}
+                  </button>
+                )}
               </div>
-              {mode === 'photos' ? (
-                <button className="row-cam" onClick={() => void takePhotoFor(p.id)}>
-                  📷 Take
-                </button>
-              ) : (
-                <button
-                  className="row-cam"
-                  style={{ background: location ? 'var(--amber)' : 'var(--bg3)', color: location ? '#451a03' : 'var(--muted)' }}
-                  disabled={!location}
-                  onClick={() => void assignLocation(p)}
-                >
-                  📍 Set
-                </button>
-              )}
-            </div>
-          ))}
-          {pending.length === 0 && (
+            )
+          })}
+          {list.length === 0 && (
             <div className="muted" style={{ textAlign: 'center', padding: 24, lineHeight: 1.6 }}>
-              {q ? 'No matches.' : mode === 'photos' ? '🎉 Every product has a photo!' : '🎉 Every product has a location!'}
+              {q
+                ? 'No matches.'
+                : mode === 'photos'
+                  ? '🎉 Every product has a photo!'
+                  : '🎉 Every product has a location!'}
             </div>
           )}
         </div>
 
-        {justDone.length > 0 && (
-          <div className="muted small" style={{ textAlign: 'center', margin: '10px 0' }}>
-            ✓ {justDone.length} updated in this session
+        {savedMsg && (
+          <div className="muted small" style={{ textAlign: 'center', margin: '8px 0', color: 'var(--green)' }}>
+            {savedMsg}
           </div>
         )}
-        <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
-          Close
-        </button>
+
+        {mode === 'locations' ? (
+          <div className="totals-bar">
+            <div className="nums">
+              {selected.size > 0 ? (
+                <>
+                  <b>{selected.size}</b> selected → {shelf || '…'}
+                </>
+              ) : (
+                'Tick the bottles on this shelf'
+              )}
+            </div>
+            <button
+              disabled={!shelf || selected.size === 0}
+              style={!shelf || selected.size === 0 ? { background: 'var(--bg3)', color: 'var(--muted)' } : undefined}
+              onClick={() => void saveSelection()}
+            >
+              Save
+            </button>
+          </div>
+        ) : (
+          <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
+            Close
+          </button>
+        )}
       </div>
+
+      {camFor && (
+        <CameraSheet
+          title={`Photograph: ${displayName(camFor) || 'product'}`}
+          onCapture={async (blob) => {
+            const jpeg = await fileToJpeg(blob)
+            await savePhoto(camFor.id, jpeg)
+            await updateProduct(camFor.id, { photoPreferred: 1 })
+            setCamFor(null)
+            void syncNow()
+          }}
+          onClose={() => setCamFor(null)}
+        />
+      )}
     </div>
   )
 }

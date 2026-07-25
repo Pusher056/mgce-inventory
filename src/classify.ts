@@ -39,11 +39,16 @@ export function subcategoryFromText(...parts: (string | null | undefined)[]): st
     // Spirits
     [/tequila|espolon|patr[oó]n|don julio|casamigos|1800\b|herradura|cuervo/, 'Tequila'],
     [/mezcal|mescal/, 'Mezcal'],
-    [/bourbon|makers mark|maker's|woodford|buffalo trace|bulleit bourbon|knob creek|four roses/, 'Bourbon'],
-    [/scotch|johnnie walker|glenlivet|glenfiddich|macallan|chivas|dewar| balvenie/, 'Scotch'],
-    [/\brye\b/, 'Rye'],
-    [/irish whisk|jameson|tullamore/, 'Irish Whiskey'],
-    [/whisk(e)?y|jack daniel|crown royal|bulleit/, 'Whiskey'],
+    [/bourbon|makers mark|maker's|woodford|buffalo trace|bulleit bourbon|knob creek|four roses|eagle rare|elijah craig|wild turkey|jim beam|basil hayden/, 'Bourbon'],
+    // Scotch: barcode databases misspell it ("Scoth", "Scotish") and often only
+    // say the region/style (Islay, Speyside, single malt), so match those too.
+    [
+      /sco?tc?h|scotish|isla?y|speyside|highland park|single malt|laphroaig|lagavulin|ardbeg|macallan|glenlivet|glenfiddich|glenmorangie|talisker|oban\b|balvenie|johnnie walker|chivas|dewar|monkey shoulder|cutty sark|famous grouse/,
+      'Scotch',
+    ],
+    [/\brye\b|whistlepig|sazerac|templeton/, 'Rye'],
+    [/irish whisk|jameson|tullamore|redbreast|bushmills|dead rabbit|green spot/, 'Irish Whiskey'],
+    [/whisk(e)?y|whisky|jack daniel|crown royal|bulleit|seagram/, 'Whiskey'],
     [/vodka|tito|grey goose|ketel|absolut|smirnoff|belvedere|ciroc/, 'Vodka'],
     [/\bgin\b|bombay|tanqueray|hendrick|beefeater/, 'Gin'],
     [/\brum\b|\bron\b|bacardi|captain morgan|malibu|diplomatico|zacapa/, 'Rum'],
@@ -133,6 +138,50 @@ export const LEGACY_SUBCATEGORY_RENAMES: Record<string, string> = {
   'Tónica': 'Tonic',
   'Agua con gas': 'Sparkling',
   'Provence Rosé': 'Rosé',
+}
+
+/**
+ * Collapse spelling variants of a type into one canonical label, so the list
+ * never shows two groups for the same thing ("Scoth Whisky" vs "Scotch").
+ * Anything unrecognized is just Title-Cased and trimmed.
+ */
+export function canonicalSubcategory(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const t = raw.trim()
+  if (!t) return null
+  const legacy = LEGACY_SUBCATEGORY_RENAMES[t]
+  if (legacy) return legacy
+  const l = t.toLowerCase()
+  const CANON: [RegExp, string][] = [
+    [/^sco?tc?h|scotish|islay|speyside|single malt/, 'Scotch'],
+    [/^irish/, 'Irish Whiskey'],
+    [/^bourbon/, 'Bourbon'],
+    [/^rye/, 'Rye'],
+    [/^whisk/, 'Whiskey'],
+    [/^tequila/, 'Tequila'],
+    [/^mezcal|^mescal/, 'Mezcal'],
+    [/^vodka/, 'Vodka'],
+    [/^gin\b/, 'Gin'],
+    [/^rum\b|^ron\b/, 'Rum'],
+    [/^cognac/, 'Cognac'],
+    [/^brandy|^armagnac/, 'Brandy'],
+    [/^vermouth|^vermut/, 'Vermouth'],
+    [/^aperitif|^aperitivo|^amaro/, 'Aperitif'],
+    [/^liqueur|^licor|^cordial/, 'Liqueur'],
+    [/^bitters/, 'Bitters'],
+    [/^champagne/, 'Champagne'],
+    [/^prosecco/, 'Prosecco'],
+    [/^cava/, 'Cava'],
+    [/^ros[eé]/, 'Rosé'],
+    [/^cabernet/, 'Cabernet Sauvignon'],
+    [/^pinot noir/, 'Pinot Noir'],
+    [/^pinot gri/, 'Pinot Grigio'],
+    [/^sauv/, 'Sauvignon Blanc'],
+    [/^chard/, 'Chardonnay'],
+    [/^riesling/, 'Riesling'],
+  ]
+  for (const [rx, label] of CANON) if (rx.test(l)) return label
+  return t.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 30)
 }
 
 export function categoryForSubcategory(sub: string | null | undefined): Category | null {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { db, setEntry, updateProduct, savePhoto } from '../db'
 import { resetAiSkip, syncNow } from '../sync'
 import { fileToJpeg } from '../image'
@@ -7,6 +7,7 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
 import { Thumb } from './Thumb'
 import UnitsSheet from './UnitsSheet'
 import PhotoModal from './PhotoModal'
+import CameraSheet from './CameraSheet'
 
 function Counter({
   label,
@@ -69,8 +70,8 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   const [askUnitsThen, setAskUnitsThen] = useState<null | 'done' | 'scan'>(null)
   const [viewPhoto, setViewPhoto] = useState(false)
   const [reidentify, setReidentify] = useState(false)
-  const photoRef = useRef<HTMLInputElement>(null) // replace displayed photo
-  const aiPhotoRef = useRef<HTMLInputElement>(null) // photo to re-identify with AI
+  // in-app camera (real flash control) — 'ai' re-identifies, 'photo' just replaces the picture
+  const [camera, setCamera] = useState<null | 'ai' | 'photo'>(null)
 
   // If the background lookup resolves the name while this sheet is open,
   // adopt it — unless the user is typing their own.
@@ -191,56 +192,6 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           </div>
         </div>
 
-        {/* Replace the DISPLAYED photo with one the user takes on purpose */}
-        <input
-          ref={photoRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0]
-            e.target.value = ''
-            if (!f) return
-            const blob = await fileToJpeg(f)
-            await savePhoto(product.id, blob)
-            await updateProduct(product.id, { photoPreferred: 1 })
-            void syncNow()
-          }}
-        />
-        {/* Re-identify: photo replaces the (wrong) name/category via AI */}
-        <input
-          ref={aiPhotoRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0]
-            e.target.value = ''
-            if (!f) return
-            const blob = await fileToJpeg(f)
-            await savePhoto(product.id, blob)
-            // clear wrong data so the AI refills it fresh (and finds a pro image)
-            await updateProduct(product.id, {
-              name: '',
-              brand: null,
-              category: null,
-              subcategory: null,
-              categoryLocked: 0,
-              subcategoryLocked: 0,
-              photoPreferred: 0,
-              imageUrl: null,
-              needsAi: 1,
-            })
-            setName('')
-            setNameDirty(false)
-            resetAiSkip()
-            void syncNow()
-            setReidentify(false)
-          }}
-        />
-
         {loaded && (
           <>
             <Counter label="CASES" value={cases} onChange={setCases} />
@@ -302,7 +253,17 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
             <div className="muted small" style={{ marginBottom: 14 }}>
               Wrong name or category? Identify it again — you won't lose the count.
             </div>
-            <button className="big-btn primary" onClick={() => aiPhotoRef.current?.click()}>
+            <button
+              className="big-btn"
+              style={{ marginBottom: 10 }}
+              onClick={() => {
+                setReidentify(false)
+                setCamera('photo')
+              }}
+            >
+              🖼 Just replace the photo (keep the name)
+            </button>
+            <button className="big-btn primary" onClick={() => setCamera('ai')}>
               📷 Take a photo & identify (AI)
             </button>
             {product.barcode && (
@@ -441,6 +402,44 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
             />
           </div>
         </div>
+      )}
+
+      {camera && (
+        <CameraSheet
+          title={
+            camera === 'ai'
+              ? 'Photograph the FRONT label to identify it'
+              : `Photograph: ${name || 'product'}`
+          }
+          onCapture={async (blob) => {
+            const jpeg = await fileToJpeg(blob)
+            await savePhoto(product.id, jpeg)
+            if (camera === 'ai') {
+              // clear the wrong data so the AI refills it from this photo
+              await updateProduct(product.id, {
+                name: '',
+                brand: null,
+                category: null,
+                subcategory: null,
+                categoryLocked: 0,
+                subcategoryLocked: 0,
+                photoPreferred: 0,
+                imageUrl: null,
+                needsAi: 1,
+              })
+              setName('')
+              setNameDirty(false)
+              resetAiSkip()
+              setReidentify(false)
+            } else {
+              // keep identity, just show this photo instead of the catalog one
+              await updateProduct(product.id, { photoPreferred: 1 })
+            }
+            setCamera(null)
+            void syncNow()
+          }}
+          onClose={() => setCamera(null)}
+        />
       )}
     </div>
   )
