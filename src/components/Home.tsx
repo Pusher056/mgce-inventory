@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createSession, deleteSession } from '../db'
 import { syncNow } from '../sync'
 import type { Session } from '../types'
 import SwipeRow from './SwipeRow'
-import QrSheet from './QrSheet'
+
+// QR label generator pulls in a QR library — only load it when opened
+const QrSheet = lazy(() => import('./QrSheet'))
 
 export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
   const sessions = useLiveQuery(() => db.sessions.orderBy('startedAt').reverse().toArray(), []) ?? []
@@ -59,7 +61,11 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
         🖨 Shelf location QR codes
       </button>
 
-      {showQr && <QrSheet onClose={() => setShowQr(false)} />}
+      {showQr && (
+        <Suspense fallback={<div className="loading-overlay">Loading…</div>}>
+          <QrSheet onClose={() => setShowQr(false)} />
+        </Suspense>
+      )}
 
       {creating && (
         <div className="sheet-backdrop" onClick={() => setCreating(false)}>

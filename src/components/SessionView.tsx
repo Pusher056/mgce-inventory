@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createProduct, deleteEntry, savePhoto, updateProduct } from '../db'
 import { resetAiSkip, syncNow } from '../sync'
@@ -6,13 +6,16 @@ import { fileToJpeg } from '../image'
 import { exportExcel, exportPdf } from '../export'
 import type { Category, Entry, Product, Session } from '../types'
 import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, parseLocation, totalBottles } from '../types'
-import Scanner from './Scanner'
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
 import ProductPicker from './ProductPicker'
 import PhotoModal from './PhotoModal'
 import SwipeRow from './SwipeRow'
-import OrganizeSheet from './OrganizeSheet'
+
+// Heavy, rarely-open screens load the moment they're needed, not at startup:
+// the scanner drags in a 1 MB barcode engine, Organize pulls in the camera.
+const Scanner = lazy(() => import('./Scanner'))
+const OrganizeSheet = lazy(() => import('./OrganizeSheet'))
 
 type Draft =
   | { kind: 'barcode'; barcode: string; frame?: Blob }
@@ -55,6 +58,7 @@ export default function SessionView({ session }: { session: Session }) {
   const rowPhotoProductRef = useRef<string | null>(null)
   // Shelf-location mode: scan a shelf QR (B-5-6) → every product scanned after gets that ubicación
   const [activeLocation, setActiveLocation] = useState<string | null>(null)
+  const [exporting, setExporting] = useState<null | 'pdf' | 'excel'>(null)
 
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
@@ -397,11 +401,13 @@ export default function SessionView({ session }: { session: Session }) {
       {/* ---------- modals ---------- */}
 
       {modal.t === 'scanner' && (
-        <Scanner
-          onScan={(code, frame) => void handleScan(code, frame)}
-          onClose={() => setModal({ t: 'none' })}
-          activeLocation={activeLocation}
-        />
+        <Suspense fallback={<div className="loading-overlay">Opening camera…</div>}>
+          <Scanner
+            onScan={(code, frame) => void handleScan(code, frame)}
+            onClose={() => setModal({ t: 'none' })}
+            activeLocation={activeLocation}
+          />
+        </Suspense>
       )}
 
       {modal.t === 'looseOrCase' && (
@@ -469,7 +475,9 @@ export default function SessionView({ session }: { session: Session }) {
       )}
 
       {modal.t === 'organize' && (
-        <OrganizeSheet products={products} entries={entries} onClose={() => setModal({ t: 'none' })} />
+        <Suspense fallback={<div className="loading-overlay">Loading…</div>}>
+          <OrganizeSheet products={products} entries={entries} onClose={() => setModal({ t: 'none' })} />
+        </Suspense>
       )}
 
       {modal.t === 'photo' && productMap.get(modal.productId) && (
@@ -483,11 +491,35 @@ export default function SessionView({ session }: { session: Session }) {
             <div className="muted small" style={{ marginBottom: 16 }}>
               {session.name} · {visibleEntries.length} products · {totals.bottles} bottles
             </div>
-            <button className="big-btn primary" onClick={() => exportPdf(session, visibleEntries, productMap)}>
-              📄 Download PDF
+            {/* the PDF/Excel engines are fetched on first use, so show progress */}
+            <button
+              className="big-btn primary"
+              disabled={!!exporting}
+              onClick={async () => {
+                setExporting('pdf')
+                try {
+                  await exportPdf(session, visibleEntries, productMap)
+                } finally {
+                  setExporting(null)
+                }
+              }}
+            >
+              {exporting === 'pdf' ? 'Generating PDF…' : '📄 Download PDF'}
             </button>
-            <button className="big-btn" style={{ marginTop: 10 }} onClick={() => exportExcel(session, visibleEntries, productMap)}>
-              📊 Download Excel
+            <button
+              className="big-btn"
+              style={{ marginTop: 10 }}
+              disabled={!!exporting}
+              onClick={async () => {
+                setExporting('excel')
+                try {
+                  await exportExcel(session, visibleEntries, productMap)
+                } finally {
+                  setExporting(null)
+                }
+              }}
+            >
+              {exporting === 'excel' ? 'Generating Excel…' : '📊 Download Excel'}
             </button>
             <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={() => setModal({ t: 'none' })}>
               Close

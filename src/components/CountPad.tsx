@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { lazy, Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { db, setEntry, updateProduct, savePhoto } from '../db'
 import { resetAiSkip, syncNow } from '../sync'
 import { fileToJpeg } from '../image'
@@ -7,7 +7,8 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
 import { Thumb } from './Thumb'
 import UnitsSheet from './UnitsSheet'
 import PhotoModal from './PhotoModal'
-import CameraSheet from './CameraSheet'
+
+const CameraSheet = lazy(() => import('./CameraSheet'))
 
 function Counter({
   label,
@@ -405,6 +406,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       )}
 
       {camera && (
+        <Suspense fallback={<div className="loading-overlay">Opening camera…</div>}>
         <CameraSheet
           title={
             camera === 'ai'
@@ -440,6 +442,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
           }}
           onClose={() => setCamera(null)}
         />
+        </Suspense>
       )}
     </div>
   )

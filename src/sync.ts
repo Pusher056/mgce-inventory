@@ -432,12 +432,19 @@ async function reclassifyDeterministic() {
   localStorage.setItem('reclassifyV1', '1')
 }
 
-/** Download remote product images so thumbnails work offline. */
+/**
+ * Download remote product images so thumbnails work offline. Capped per cycle:
+ * fetching 150 images at once made the app crawl. The rest come on later syncs,
+ * and meanwhile the thumbnail just loads from the network.
+ */
 async function cacheImages() {
   const products = await db.products.filter((p) => !!p.imageUrl).toArray()
+  let budget = 12
   for (const p of products) {
+    if (budget <= 0) break
     const url = p.imageUrl!
     if (await db.images.get(url)) continue
+    budget--
     try {
       const r = await fetch(url)
       if (r.ok) await db.images.put({ url, blob: await r.blob() })

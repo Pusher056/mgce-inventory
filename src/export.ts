@@ -1,6 +1,5 @@
-import * as XLSX from 'xlsx'
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
+// The Excel and PDF engines are ~800 KB together. They are imported on demand
+// (inside the export functions) so opening the app never pays for them.
 import type { Category, Entry, Product, Session } from './types'
 import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, totalBottles } from './types'
 
@@ -52,7 +51,8 @@ function fileStem(session: Session): string {
   return `Inventory-${name}-${date}`
 }
 
-export function exportExcel(session: Session, entries: Entry[], products: Map<string, Product>) {
+export async function exportExcel(session: Session, entries: Entry[], products: Map<string, Product>) {
+  const XLSX = await import('xlsx')
   const rows = buildRows(session, entries, products)
   const data = rows.map((r) => ({
     Category: r.category,
@@ -88,7 +88,11 @@ export function exportExcel(session: Session, entries: Entry[], products: Map<st
   XLSX.writeFile(wb, `${fileStem(session)}.xlsx`)
 }
 
-export function exportPdf(session: Session, entries: Entry[], products: Map<string, Product>) {
+export async function exportPdf(session: Session, entries: Entry[], products: Map<string, Product>) {
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ])
   const rows = buildRows(session, entries, products)
   const doc = new jsPDF()
   const d = new Date(session.startedAt)
