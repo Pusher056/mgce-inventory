@@ -70,8 +70,10 @@ export default function SessionView({ session }: { session: Session }) {
     })
   }
 
-  const entries = useLiveQuery(() => db.entries.where('sessionId').equals(session.id).toArray(), [session.id]) ?? []
+  const entriesQuery = useLiveQuery(() => db.entries.where('sessionId').equals(session.id).toArray(), [session.id])
+  const entries = entriesQuery ?? []
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
+  const loading = entriesQuery === undefined
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
 
   // Keep the screen awake while counting in the warehouse
@@ -333,7 +335,19 @@ export default function SessionView({ session }: { session: Session }) {
       />
 
       <div style={{ marginTop: 10, flex: 1 }}>
-        {visibleEntries.length === 0 && (
+        {/* skeleton rows keep the layout in place so opening feels instant */}
+        {loading &&
+          [0, 1, 2, 3, 4, 5].map((i) => (
+            <div className="skel-row" key={i}>
+              <div className="skel-box" style={{ width: 44, height: 44, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div className="skel-line" style={{ width: `${70 - i * 6}%`, marginBottom: 6 }} />
+                <div className="skel-line" style={{ width: '35%', height: 9 }} />
+              </div>
+              <div className="skel-box" style={{ width: 26, height: 16 }} />
+            </div>
+          ))}
+        {!loading && visibleEntries.length === 0 && (
           <div className="muted small" style={{ marginTop: 10 }}>
             No products counted yet. Scan the first bottle 👆
           </div>

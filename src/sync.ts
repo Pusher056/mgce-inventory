@@ -1,6 +1,7 @@
 import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
+import { makeThumb } from './image'
 import {
   categoryFromText,
   subcategoryFromText,
@@ -433,23 +434,46 @@ async function reclassifyDeterministic() {
 }
 
 /**
- * Download remote product images so thumbnails work offline. Capped per cycle:
- * fetching 150 images at once made the app crawl. The rest come on later syncs,
- * and meanwhile the thumbnail just loads from the network.
+ * Build the small picture each list row shows.
+ *
+ * Catalog images are 44-116 KB and get painted into a 52 px square, so a
+ * 200-row list was downloading megabytes to draw thumbnails. Here each product
+ * gets one ~4 KB local thumbnail instead, plus a verdict on whether the picture
+ * looks like a catalog shot (see makeThumb). Capped per cycle so it never
+ * competes with the user for the phone.
  */
-async function cacheImages() {
-  const products = await db.products.filter((p) => !!p.imageUrl).toArray()
-  let budget = 12
+async function buildThumbs() {
+  const products = await db.products.toArray()
+  let budget = 10
   for (const p of products) {
     if (budget <= 0) break
-    const url = p.imageUrl!
-    if (await db.images.get(url)) continue
+    // the user's own photo wins when they took it on purpose
+    const useOwnPhoto = p.photoPreferred === 1 || (!p.barcode && !p.imageUrl)
+    const source = useOwnPhoto ? `photo:${p.photoId ?? ''}` : `url:${p.imageUrl ?? ''}`
+    if (source === 'photo:' || source === 'url:') continue // nothing to build from
+    const existing = await db.thumbs.get(p.id)
+    if (existing?.source === source) continue // already current
     budget--
     try {
-      const r = await fetch(url)
-      if (r.ok) await db.images.put({ url, blob: await r.blob() })
+      let result
+      if (useOwnPhoto) {
+        const photo = p.photoId ? await db.photos.get(p.photoId) : undefined
+        if (!photo) continue
+        result = await makeThumb(photo.blob)
+        // a picture the user deliberately took is always theirs to see
+        result.looksProfessional = true
+      } else {
+        result = await makeThumb(p.imageUrl!)
+      }
+      await db.thumbs.put({
+        productId: p.id,
+        dataUrl: result.dataUrl,
+        pro: result.looksProfessional ? 1 : 0,
+        source,
+        createdAt: Date.now(),
+      })
     } catch {
-      // image stays remote-only; retried on next sync
+      // unreachable or undecodable image: try again on a later sync
     }
   }
 }
@@ -482,7 +506,7 @@ async function syncBackground() {
     await runStages([
       ['catálogo', upgradeCatalog],
       ['push', pushOutbox],
-      ['imágenes', cacheImages],
+      ['miniaturas', buildThumbs],
     ])
     setState({ pending: await countPending() })
   } finally {

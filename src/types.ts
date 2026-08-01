@@ -100,6 +100,21 @@ export interface CachedImage {
   blob: Blob
 }
 
+/**
+ * Small list-sized picture per product, generated on the device.
+ * Local only — never synced; any device can rebuild it from the source image.
+ */
+export interface Thumb {
+  productId: string
+  /** small JPEG as a data URL */
+  dataUrl: string
+  /** passed the clean-background test → safe to show in lists */
+  pro: 0 | 1
+  /** what it was built from, to know when it must be rebuilt */
+  source: string
+  createdAt: number
+}
+
 export interface OutboxItem {
   seq?: number
   table: 'products' | 'sessions' | 'entries'

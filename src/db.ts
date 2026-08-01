@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { supabase } from './supabase'
-import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem } from './types'
+import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem, Thumb } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
   products: EntityTable<Product, 'id'>
@@ -8,6 +8,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   entries: EntityTable<Entry, 'id'>
   photos: EntityTable<LocalPhoto, 'id'>
   images: EntityTable<CachedImage, 'url'>
+  thumbs: EntityTable<Thumb, 'productId'>
   outbox: EntityTable<OutboxItem, 'seq'>
 }
 
@@ -18,6 +19,11 @@ db.version(1).stores({
   photos: 'id, productId, uploaded',
   images: 'url',
   outbox: '++seq, table, id',
+})
+
+// v2 adds locally generated thumbnails (small pictures for lists)
+db.version(2).stores({
+  thumbs: 'productId, source',
 })
 
 export function uuid(): string {
