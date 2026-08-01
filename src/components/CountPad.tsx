@@ -6,7 +6,6 @@ import type { Product } from '../types'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../types'
 import { Thumb } from './Thumb'
 import UnitsSheet from './UnitsSheet'
-import PhotoModal from './PhotoModal'
 
 const CameraSheet = lazy(() => import('./CameraSheet'))
 
@@ -69,10 +68,9 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
   // Counting cases of a product whose bottles-per-case was never confirmed →
   // ask on save (the user prefers entering how many cases first)
   const [askUnitsThen, setAskUnitsThen] = useState<null | 'done' | 'scan'>(null)
-  const [viewPhoto, setViewPhoto] = useState(false)
   const [reidentify, setReidentify] = useState(false)
   // in-app camera (real flash control) — 'ai' re-identifies, 'photo' just replaces the picture
-  const [camera, setCamera] = useState<null | 'ai' | 'photo'>(null)
+  const [camera, setCamera] = useState(false)
 
   // If the background lookup resolves the name while this sheet is open,
   // adopt it — unless the user is typing their own.
@@ -132,7 +130,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
     >
       <div className="sheet">
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
-          <Thumb product={product} onClick={() => setViewPhoto(true)} />
+          <Thumb product={product} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {editName ? (
               <input
@@ -245,8 +243,6 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
         />
       )}
 
-      {viewPhoto && <PhotoModal product={product} onClose={() => setViewPhoto(false)} />}
-
       {reidentify && (
         <div className="sheet-backdrop" onClick={() => setReidentify(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -254,17 +250,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
             <div className="muted small" style={{ marginBottom: 14 }}>
               Wrong name or category? Identify it again — you won't lose the count.
             </div>
-            <button
-              className="big-btn"
-              style={{ marginBottom: 10 }}
-              onClick={() => {
-                setReidentify(false)
-                setCamera('photo')
-              }}
-            >
-              🖼 Just replace the photo (keep the name)
-            </button>
-            <button className="big-btn primary" onClick={() => setCamera('ai')}>
+            <button className="big-btn primary" onClick={() => setCamera(true)}>
               📷 Take a photo & identify (AI)
             </button>
             {product.barcode && (
@@ -408,39 +394,28 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
       {camera && (
         <Suspense fallback={<div className="loading-overlay">Opening camera…</div>}>
         <CameraSheet
-          title={
-            camera === 'ai'
-              ? 'Photograph the FRONT label to identify it'
-              : `Photograph: ${name || 'product'}`
-          }
+          title="Photograph the FRONT label to identify it"
           onCapture={async (blob) => {
             const jpeg = await fileToJpeg(blob)
+            // the photo is only fuel for the AI; it is deleted once the name is back
             await savePhoto(product.id, jpeg)
-            if (camera === 'ai') {
-              // clear the wrong data so the AI refills it from this photo
-              await updateProduct(product.id, {
-                name: '',
-                brand: null,
-                category: null,
-                subcategory: null,
-                categoryLocked: 0,
-                subcategoryLocked: 0,
-                photoPreferred: 0,
-                imageUrl: null,
-                needsAi: 1,
-              })
-              setName('')
-              setNameDirty(false)
-              resetAiSkip()
-              setReidentify(false)
-            } else {
-              // keep identity, just show this photo instead of the catalog one
-              await updateProduct(product.id, { photoPreferred: 1 })
-            }
-            setCamera(null)
+            await updateProduct(product.id, {
+              name: '',
+              brand: null,
+              category: null,
+              subcategory: null,
+              categoryLocked: 0,
+              subcategoryLocked: 0,
+              needsAi: 1,
+            })
+            setName('')
+            setNameDirty(false)
+            resetAiSkip()
+            setReidentify(false)
+            setCamera(false)
             void syncNow()
           }}
-          onClose={() => setCamera(null)}
+          onClose={() => setCamera(false)}
         />
         </Suspense>
       )}

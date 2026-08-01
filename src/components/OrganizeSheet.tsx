@@ -1,21 +1,17 @@
 import { useMemo, useState } from 'react'
-import { savePhoto, updateProduct } from '../db'
+import { updateProduct } from '../db'
 import { syncNow } from '../sync'
-import { fileToJpeg } from '../image'
 import type { Entry, Product } from '../types'
 import { displayName, parseLocation, totalBottles } from '../types'
 import { Thumb } from './Thumb'
-import CameraSheet from './CameraSheet'
-
-type Mode = 'photos' | 'locations'
 
 /**
- * Batch clean-up after a count: photograph products and assign shelf locations
- * without re-scanning anything or printing QR labels.
+ * Assign shelf locations in batches after a count, without re-scanning anything
+ * or printing QR labels.
  *
- * Locations flow (as the user designed it): pick or type the shelf you are
- * standing at → tick every bottle on that shelf → Save assigns them all at once.
- * Ticking is reversible before saving, so a mistake costs nothing.
+ * The flow is the user's design: pick or type the shelf you are standing at →
+ * tick every bottle on that shelf → Save assigns them all at once. Ticking is
+ * reversible before saving, so a mistake costs nothing.
  */
 export default function OrganizeSheet({
   products,
@@ -26,12 +22,10 @@ export default function OrganizeSheet({
   entries: Entry[]
   onClose: () => void
 }) {
-  const [mode, setMode] = useState<Mode>('locations')
   const [q, setQ] = useState('')
   const [location, setLocation] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showDone, setShowDone] = useState(false)
-  const [camFor, setCamFor] = useState<Product | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.productId, e])), [entries])
@@ -53,10 +47,7 @@ export default function OrganizeSheet({
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const base = inInventory.filter((p) => {
-      const done = mode === 'photos' ? !!p.imageUrl || p.photoPreferred === 1 : !!p.location
-      return showDone ? true : !done
-    })
+    const base = inInventory.filter((p) => (showDone ? true : !p.location))
     const filtered = needle
       ? base.filter(
           (p) =>
@@ -67,11 +58,9 @@ export default function OrganizeSheet({
         )
       : base
     return filtered.sort((a, b) => displayName(a).localeCompare(displayName(b), 'en'))
-  }, [inInventory, mode, q, showDone])
+  }, [inInventory, q, showDone])
 
-  const pendingCount = inInventory.filter((p) =>
-    mode === 'photos' ? !p.imageUrl && p.photoPreferred !== 1 : !p.location,
-  ).length
+  const pendingCount = inInventory.filter((p) => !p.location).length
   const doneCount = inInventory.length - pendingCount
 
   function toggle(id: string) {
@@ -103,29 +92,7 @@ export default function OrganizeSheet({
           {doneCount} of {inInventory.length} done · {pendingCount} left
         </div>
 
-        <div className="btn-row">
-          <button
-            className={`big-btn${mode === 'locations' ? ' primary' : ''}`}
-            onClick={() => {
-              setMode('locations')
-              setSelected(new Set())
-            }}
-          >
-            📍 Locations
-          </button>
-          <button
-            className={`big-btn${mode === 'photos' ? ' primary' : ''}`}
-            onClick={() => {
-              setMode('photos')
-              setSelected(new Set())
-            }}
-          >
-            📷 Photos
-          </button>
-        </div>
-
-        {mode === 'locations' && (
-          <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12 }}>
             <div className="muted small" style={{ marginBottom: 6 }}>
               1. Which shelf are you at?
             </div>
@@ -155,11 +122,10 @@ export default function OrganizeSheet({
                 ))}
               </div>
             )}
-            <div className="muted small" style={{ margin: '12px 0 0' }}>
-              2. Tick every bottle on that shelf, then Save.
-            </div>
+          <div className="muted small" style={{ margin: '12px 0 0' }}>
+            2. Tick every bottle on that shelf, then Save.
           </div>
-        )}
+        </div>
 
         <input
           placeholder="Filter by name, brand or type…"
@@ -175,7 +141,7 @@ export default function OrganizeSheet({
           {showDone ? '☑ Showing all' : '☐ Show already done'}
         </button>
 
-        <div style={{ marginTop: 10, paddingBottom: mode === 'locations' ? 76 : 0 }}>
+        <div style={{ marginTop: 10, paddingBottom: 76 }}>
           {list.map((p) => {
             const e = entryMap.get(p.id)
             const qty = e ? totalBottles(e, p.unitsPerCase) : 0
@@ -186,13 +152,12 @@ export default function OrganizeSheet({
                 className="product-row"
                 style={{
                   padding: '8px 10px',
-                  cursor: mode === 'locations' ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   outline: isSel ? '2px solid var(--accent)' : 'none',
                 }}
-                onClick={mode === 'locations' ? () => toggle(p.id) : undefined}
+                onClick={() => toggle(p.id)}
               >
-                {mode === 'locations' && (
-                  <div
+                <div
                     style={{
                       width: 26,
                       height: 26,
@@ -208,7 +173,6 @@ export default function OrganizeSheet({
                   >
                     ✓
                   </div>
-                )}
                 <Thumb product={p} />
                 <div className="info">
                   <div className="name">{displayName(p) || '(unidentified)'}</div>
@@ -218,21 +182,12 @@ export default function OrganizeSheet({
                     {qty} btl
                   </div>
                 </div>
-                {mode === 'photos' && (
-                  <button className="row-cam" onClick={() => setCamFor(p)}>
-                    {p.imageUrl || p.photoPreferred === 1 ? '📷 Replace' : '📷 Take'}
-                  </button>
-                )}
               </div>
             )
           })}
           {list.length === 0 && (
             <div className="muted" style={{ textAlign: 'center', padding: 24, lineHeight: 1.6 }}>
-              {q
-                ? 'No matches.'
-                : mode === 'photos'
-                  ? '🎉 Every product has a photo!'
-                  : '🎉 Every product has a location!'}
+              {q ? 'No matches.' : '🎉 Every product has a location!'}
             </div>
           )}
         </div>
@@ -243,45 +198,25 @@ export default function OrganizeSheet({
           </div>
         )}
 
-        {mode === 'locations' ? (
-          <div className="totals-bar">
-            <div className="nums">
-              {selected.size > 0 ? (
-                <>
-                  <b>{selected.size}</b> selected → {shelf || '…'}
-                </>
-              ) : (
-                'Tick the bottles on this shelf'
-              )}
-            </div>
-            <button
-              disabled={!shelf || selected.size === 0}
-              style={!shelf || selected.size === 0 ? { background: 'var(--bg3)', color: 'var(--muted)' } : undefined}
-              onClick={() => void saveSelection()}
-            >
-              Save
-            </button>
+        <div className="totals-bar">
+          <div className="nums">
+            {selected.size > 0 ? (
+              <>
+                <b>{selected.size}</b> selected → {shelf || '…'}
+              </>
+            ) : (
+              'Tick the bottles on this shelf'
+            )}
           </div>
-        ) : (
-          <button className="big-btn ghost" style={{ marginTop: 10 }} onClick={onClose}>
-            Close
+          <button
+            disabled={!shelf || selected.size === 0}
+            style={!shelf || selected.size === 0 ? { background: 'var(--bg3)', color: 'var(--muted)' } : undefined}
+            onClick={() => void saveSelection()}
+          >
+            Save
           </button>
-        )}
+        </div>
       </div>
-
-      {camFor && (
-        <CameraSheet
-          title={`Photograph: ${displayName(camFor) || 'product'}`}
-          onCapture={async (blob) => {
-            const jpeg = await fileToJpeg(blob)
-            await savePhoto(camFor.id, jpeg)
-            await updateProduct(camFor.id, { photoPreferred: 1 })
-            setCamFor(null)
-            void syncNow()
-          }}
-          onClose={() => setCamFor(null)}
-        />
-      )}
     </div>
   )
 }

@@ -1,6 +1,10 @@
 node_modules/
 dist/
 dev-dist/
+# Restore point lives on this PC. The catalog (inventory.json / products.csv)
+# IS committed — it is the irreplaceable part — but 42 MB of photos would
+# bloat the repo forever.
+backups/*/photos/
 *.local
 .DS_Store
 make-icons.tmp.mjs

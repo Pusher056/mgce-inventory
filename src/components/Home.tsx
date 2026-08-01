@@ -2,7 +2,6 @@ import { lazy, Suspense, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createSession, deleteSession } from '../db'
 import { syncNow } from '../sync'
-import { downloadBackup } from '../backup'
 import type { Session } from '../types'
 import SwipeRow from './SwipeRow'
 
@@ -14,7 +13,6 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
   const [creating, setCreating] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [name, setName] = useState('Beverage Storage')
-  const [backupMsg, setBackupMsg] = useState<string | null>(null)
 
   return (
     <div className="screen">
@@ -59,26 +57,9 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
         )}
       </div>
 
-      <div style={{ marginTop: 'auto' }}>
-        {backupMsg && (
-          <div className="muted small" style={{ textAlign: 'center', marginBottom: 8, color: 'var(--green)' }}>
-            {backupMsg}
-          </div>
-        )}
-        <button
-          className="big-btn ghost"
-          onClick={async () => {
-            const r = await downloadBackup()
-            setBackupMsg(`✓ Backup saved — ${r.products} products, ${r.entries} counts`)
-            setTimeout(() => setBackupMsg(null), 6000)
-          }}
-        >
-          💾 Download backup
-        </button>
-        <button className="big-btn ghost" style={{ marginTop: 8 }} onClick={() => setShowQr(true)}>
-          🖨 Shelf location QR codes
-        </button>
-      </div>
+      <button className="big-btn ghost" style={{ marginTop: 'auto' }} onClick={() => setShowQr(true)}>
+        🖨 Shelf location QR codes
+      </button>
 
       {showQr && (
         <Suspense fallback={<div className="loading-overlay">Loading…</div>}>

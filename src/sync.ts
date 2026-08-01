@@ -1,7 +1,6 @@
 import { db } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
-import { makeThumb } from './image'
 import {
   categoryFromText,
   subcategoryFromText,
@@ -147,19 +146,8 @@ async function pushOutbox() {
   }
 }
 
-async function uploadPhotos() {
-  const pending = await db.photos.where('uploaded').equals(0).toArray()
-  for (const photo of pending) {
-    const path = `${photo.productId}.jpg`
-    const { error } = await supabase.storage.from('photos').upload(path, photo.blob, {
-      upsert: true,
-      contentType: 'image/jpeg',
-    })
-    if (error) throw new Error(`photo upload: ${error.message}`)
-    await db.photos.update(photo.id, { uploaded: 1 })
-    setState({ pending: Math.max(0, state.pending - 1) })
-  }
-}
+// Photos are never uploaded any more: they exist only long enough for the AI
+// to read a label, then they are deleted (see resolveAi).
 
 // ---------- resolve pending identifications ----------
 
@@ -185,11 +173,8 @@ async function resolveLookups() {
         updatedAt: Date.now(),
       })
     } else {
-      const changes: Partial<Product> = {
-        needsLookup: 0,
-        imageUrl: p.imageUrl ?? result.imageUrl,
-        updatedAt: Date.now(),
-      }
+      // names and categories only — the app no longer keeps product images
+      const changes: Partial<Product> = { needsLookup: 0, updatedAt: Date.now() }
       // Never overwrite a name the user typed themselves
       if (!p.name) changes.name = result.name
       if (!p.brand && result.brand) changes.brand = result.brand
@@ -235,51 +220,15 @@ async function resolveAi() {
       changes.name = result.name
       if (!p.brand && result.brand) changes.brand = result.brand
       if (!p.category && result.category) changes.category = result.category
-      // professional product image found by name — beats the warehouse snapshot
-      if (!p.imageUrl && result.imageUrl) changes.imageUrl = result.imageUrl
+    }
+    // the photo existed only so the AI could read the label — drop it now
+    if (result) {
+      await db.photos.delete(photo.id)
+      changes.photoId = null
     }
     await db.products.update(p.id, changes)
     await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
     setState({ pending: Math.max(0, state.pending - 1) })
-  }
-}
-
-// Only images hosted on retailer/CDN product domains are trusted. This is the
-// safety net against the removed web-image search that returned unrelated and
-// inappropriate pictures. Mirrors the edge function's allowlist.
-const PRODUCT_IMG_HOSTS =
-  /totalwine|reservebar|wine\.com|drizly|caskers|thewhiskyexchange|masterofmalt|klwines|binnys|samsclub|walmartimages|kroger|target\.com|scene7|liquidcommerce|openfoodfacts|images-na\.ssl-images-amazon|images\.amazon|shopify|squarespace-cdn|cloudfront|bevmo|instacart|gopuff/i
-
-function isTrustedImage(url: string | null | undefined): boolean {
-  return !!url && /^https:\/\//.test(url) && PRODUCT_IMG_HOSTS.test(url)
-}
-
-// Fetch a professional image for barcode products that don't have one yet.
-// IMPORTANT: this ONLY sets the image. It NEVER changes name/category/subcategory
-// — fetching a photo must never change what the product is (past bug).
-const upgradeAttempted = new Set<string>()
-
-async function upgradeCatalog() {
-  const candidates = await db.products
-    .filter((p) => !!p.barcode && p.needsLookup === 0 && !p.imageUrl)
-    .toArray()
-  let budget = 8 // a few per cycle (UPCitemdb's free tier rate-limits)
-  for (const p of candidates) {
-    if (upgradeAttempted.has(p.id)) continue
-    if (budget-- <= 0) break
-    upgradeAttempted.add(p.id)
-    let result
-    try {
-      result = await lookupBarcode(p.barcode!)
-    } catch {
-      upgradeAttempted.delete(p.id) // network hiccup — retry next sync
-      continue
-    }
-    // image only — identity (name/category) is never touched here
-    if (result && isTrustedImage(result.imageUrl)) {
-      await db.products.update(p.id, { imageUrl: result.imageUrl, updatedAt: Date.now() })
-      await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
-    }
   }
 }
 
@@ -328,6 +277,34 @@ async function aiFillMissingTypes() {
     await db.products.update(p.id, changes)
     await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
   }
+}
+
+/**
+ * One-time: remove every photo from the app.
+ *
+ * Product photos were a constant source of wrong or ugly pictures (a coat for a
+ * whiskey, warehouse snapshots, misleading special editions) and the user chose
+ * to drop them entirely rather than keep fighting them. The catalog and all the
+ * photos are archived on the user's PC (backups/most-recent-backup) before this
+ * runs. Lists now show a clean category silhouette; identification still works,
+ * since the AI reads a photo at the moment it needs it.
+ */
+async function wipeAllPhotos() {
+  if (localStorage.getItem('wipePhotosV1')) return
+  await db.thumbs.clear()
+  await db.images.clear()
+  await db.photos.clear()
+  const withPhotos = await db.products.filter((p) => !!p.imageUrl || !!p.photoId).toArray()
+  for (const p of withPhotos) {
+    await db.products.update(p.id, {
+      imageUrl: null,
+      photoId: null,
+      photoPreferred: 0,
+      updatedAt: Date.now(),
+    })
+    await db.outbox.add({ table: 'products', id: p.id, ts: Date.now() })
+  }
+  localStorage.setItem('wipePhotosV1', '1')
 }
 
 /**
@@ -433,51 +410,6 @@ async function reclassifyDeterministic() {
   localStorage.setItem('reclassifyV1', '1')
 }
 
-/**
- * Build the small picture each list row shows.
- *
- * Catalog images are 44-116 KB and get painted into a 52 px square, so a
- * 200-row list was downloading megabytes to draw thumbnails. Here each product
- * gets one ~4 KB local thumbnail instead, plus a verdict on whether the picture
- * looks like a catalog shot (see makeThumb). Capped per cycle so it never
- * competes with the user for the phone.
- */
-async function buildThumbs() {
-  const products = await db.products.toArray()
-  let budget = 10
-  for (const p of products) {
-    if (budget <= 0) break
-    // the user's own photo wins when they took it on purpose
-    const useOwnPhoto = p.photoPreferred === 1 || (!p.barcode && !p.imageUrl)
-    const source = useOwnPhoto ? `photo:${p.photoId ?? ''}` : `url:${p.imageUrl ?? ''}`
-    if (source === 'photo:' || source === 'url:') continue // nothing to build from
-    const existing = await db.thumbs.get(p.id)
-    if (existing?.source === source) continue // already current
-    budget--
-    try {
-      let result
-      if (useOwnPhoto) {
-        const photo = p.photoId ? await db.photos.get(p.photoId) : undefined
-        if (!photo) continue
-        result = await makeThumb(photo.blob)
-        // a picture the user deliberately took is always theirs to see
-        result.looksProfessional = true
-      } else {
-        result = await makeThumb(p.imageUrl!)
-      }
-      await db.thumbs.put({
-        productId: p.id,
-        dataUrl: result.dataUrl,
-        pro: result.looksProfessional ? 1 : 0,
-        source,
-        createdAt: Date.now(),
-      })
-    } catch {
-      // unreachable or undecodable image: try again on a later sync
-    }
-  }
-}
-
 // ---------- orchestration ----------
 
 let syncing = false
@@ -503,11 +435,7 @@ async function syncBackground() {
   if (backgroundRunning || !navigator.onLine) return
   backgroundRunning = true
   try {
-    await runStages([
-      ['catálogo', upgradeCatalog],
-      ['push', pushOutbox],
-      ['miniaturas', buildThumbs],
-    ])
+    await runStages([['push', pushOutbox]])
     setState({ pending: await countPending() })
   } finally {
     backgroundRunning = false
@@ -522,7 +450,7 @@ export async function syncNow() {
   // isolated so one failure never blocks the others.
   const errors = await runStages([
     ['push', pushOutbox],
-    ['fotos', uploadPhotos],
+    ['borrar-fotos', wipeAllPhotos],
     ['identificar', resolveLookups],
     ['ia', resolveAi],
     ['push', pushOutbox], // rows updated by the resolvers

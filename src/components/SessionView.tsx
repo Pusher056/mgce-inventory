@@ -9,7 +9,6 @@ import { CATEGORY_LABELS, CATEGORY_ORDER, displayName, parseLocation, totalBottl
 import { Thumb } from './Thumb'
 import CountPad from './CountPad'
 import ProductPicker from './ProductPicker'
-import PhotoModal from './PhotoModal'
 import SwipeRow from './SwipeRow'
 
 // Heavy, rarely-open screens load the moment they're needed, not at startup:
@@ -28,7 +27,6 @@ type Modal =
   | { t: 'looseOrCase'; draft: Draft }
   | { t: 'count'; productId: string; initial?: { bottles?: number; cases?: number } }
   | { t: 'picker' }
-  | { t: 'photo'; productId: string }
   | { t: 'organize' }
   | { t: 'export' }
 
@@ -216,7 +214,7 @@ export default function SessionView({ session }: { session: Session }) {
         onAdjust={() => setModal({ t: 'count', productId: p.id })}
       >
         <div className="product-row" style={{ padding: '8px 10px' }}>
-          <Thumb product={p} onClick={() => setModal({ t: 'photo', productId: p.id })} />
+          <Thumb product={p} />
           <button
             style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
             onClick={() => setModal({ t: 'count', productId: p.id })}
@@ -492,10 +490,6 @@ export default function SessionView({ session }: { session: Session }) {
         <Suspense fallback={<div className="loading-overlay">Loading…</div>}>
           <OrganizeSheet products={products} entries={entries} onClose={() => setModal({ t: 'none' })} />
         </Suspense>
-      )}
-
-      {modal.t === 'photo' && productMap.get(modal.productId) && (
-        <PhotoModal product={productMap.get(modal.productId)!} onClose={() => setModal({ t: 'none' })} />
       )}
 
       {modal.t === 'export' && (
