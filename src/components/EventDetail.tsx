@@ -30,10 +30,10 @@ export default function EventDetail({ eventId }: { eventId: string }) {
   const set = (k: keyof EventRec) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     void updateEvent(eventId, { [k]: e.target.value } as Partial<EventRec>)
 
-  const field = (label: string, k: keyof EventRec, placeholder = '', hint?: string) => (
+  const field = (label: string, k: keyof EventRec, hint?: string) => (
     <div className="ev-field">
       <label className="field-label">{label}</label>
-      <input value={(ev[k] as string) ?? ''} onChange={set(k)} placeholder={placeholder} />
+      <input value={(ev[k] as string) ?? ''} onChange={set(k)} />
       {hint && <div className="field-hint">{hint}</div>}
     </div>
   )
@@ -55,13 +55,12 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         Ice and driver timings. These come from the MO sheet.
       </div>
       <div className="ev-grid">
-        {field('Ice needs', 'iceNeeds', '10 bags')}
-        {field('Ice delivery time', 'iceDeliveryTime', '4-5PM')}
-        {field('Requested kitchen pickup', 'kitchenPickup', '3PM')}
+        {field('Ice needs', 'iceNeeds')}
+        {field('Ice delivery time', 'iceDeliveryTime')}
+        {field('Requested kitchen pickup', 'kitchenPickup')}
         {field(
           'Est. kitchen delivery to location',
           'kitchenDelivery',
-          '4:30PM',
           'Please allow 2h between kitchen pickup and est. delivery.',
         )}
       </div>
@@ -70,11 +69,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         Event details
       </div>
       <div className="ev-grid">
-        {field('Venue', 'location', 'Storied')}
-        {field('Address', 'address', '547 W 26th St')}
+        {field('Venue', 'location')}
+        {field('Address', 'address')}
         {field('Service entrance', 'serviceEntrance')}
-        {field('Event time', 'eventTime', '6-9PM')}
-        {field('Call time', 'callTime', '3PM')}
+        {field('Event time', 'eventTime')}
+        {field('Call time', 'callTime')}
         <div className="ev-field">
           <label className="field-label">Guest count</label>
           <input
@@ -84,11 +83,10 @@ export default function EventDetail({ eventId }: { eventId: string }) {
             onChange={(e) =>
               void updateEvent(eventId, { guestCount: e.target.value === '' ? null : Number(e.target.value) })
             }
-            placeholder="250"
           />
         </div>
-        {field('Onsite contact', 'onsiteContact', 'Lisa Vogel')}
-        {field('Planner', 'planner', 'Ilana Schackman')}
+        {field('Onsite contact', 'onsiteContact')}
+        {field('Planner', 'planner')}
         <div className="ev-field">
           <label className="field-label">Planner cell</label>
           <input
@@ -96,10 +94,8 @@ export default function EventDetail({ eventId }: { eventId: string }) {
             inputMode="tel"
             value={ev.plannerCell ?? ''}
             onChange={(e) => void updateEvent(eventId, { plannerCell: formatUsPhone(e.target.value) })}
-            placeholder="973-818-2600"
           />
         </div>
-        {field('Planner initials', 'plannerInitials', 'IS')}
       </div>
 
       {/* No length limit on purpose — the planners write long special notes here,
@@ -107,7 +103,7 @@ export default function EventDetail({ eventId }: { eventId: string }) {
       <label className="field-label" style={{ marginTop: 14 }}>
         Special notes
       </label>
-      <textarea rows={5} value={ev.notes} onChange={set('notes')} placeholder="Anything the planners wrote" />
+      <textarea rows={5} value={ev.notes} onChange={set('notes')} />
     </div>
   )
 }

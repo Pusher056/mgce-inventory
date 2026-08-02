@@ -234,30 +234,35 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   text-transform: uppercase;
   color: var(--accent);
   margin: 16px 2px 8px;
-  padding-left: 6px;
 }
 .cat-header .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
 
-/* The triangle used to be a bare 10x15px glyph flush against the left edge, so
-   aiming at it missed the button more often than it hit it. It is now a proper
-   target: a wide centered box with room to spare on either side. */
+/* The triangle sits at the very start of the row, which is exactly where a
+   cursor aiming for it tends to overshoot — and past the row's left edge there
+   used to be dead page. The heading now reaches back into that margin, so
+   missing to the left still lands on the button. */
 .caret {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 26px;
+  width: 28px;
   align-self: stretch;
-  min-height: 26px;
-  margin-left: -4px;
+  min-height: 28px;
   font-size: 12px;
   border-radius: 6px;
 }
-.caret.sm { font-size: 11px; width: 24px; }
+.caret.sm { font-size: 11px; }
 .caret:hover { background: var(--bg3); }
 /* A stray double-click used to select the heading text instead of toggling it */
 .cat-header,
-.subcat-header { user-select: none; }
+.subcat-header {
+  user-select: none;
+  margin-left: -14px;
+  padding-left: 14px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
 
 .subcat-header {
   display: flex;
@@ -269,8 +274,10 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  padding: 6px 2px 6px 14px;
+  padding-right: 2px;
   margin-top: 4px;
+  /* keeps the sub-group's visual indent while the hit box still reaches left */
+  padding-left: 28px;
 }
 .subcat-header .muted { font-weight: 600; }
 
@@ -690,8 +697,10 @@ textarea {
     top: 110px;
     z-index: 6;
     background: var(--bg);
-    padding: 8px 2px;
-    margin: 10px 0 6px;
+    /* the left padding/margin pair is what makes the arrow forgiving to aim at
+       (see .caret) — keep them in step with the base rule */
+    padding: 9px 2px 9px 14px;
+    margin: 10px 0 6px -14px;
   }
 
   /* explicit row actions, since swiping with a mouse is not a thing */

@@ -52,7 +52,7 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
     if (!snapshot) return
     setUndo(snapshot)
     window.clearTimeout(undoTimer.current)
-    undoTimer.current = window.setTimeout(() => setUndo(null), 8000)
+    undoTimer.current = window.setTimeout(() => setUndo(null), 5000)
   }
 
   function renderGroup(label: string, list: EventRec[]) {
@@ -130,7 +130,6 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
             <input
               value={name}
               onChange={(ev) => setName(ev.target.value)}
-              placeholder="121125-VNO"
               autoFocus
               onKeyDown={(ev) => ev.key === 'Enter' && void submit()}
             />

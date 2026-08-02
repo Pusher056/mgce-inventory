@@ -537,6 +537,33 @@ async function retryPendingDeletes() {
 }
 
 /**
+ * Deleting on one device has to reach the others, and the only evidence of a
+ * delete is the row's absence from the server. So: anything held locally that
+ * the server no longer lists is dropped here.
+ *
+ * Two guards make that safe. A row still queued in the outbox is skipped — it
+ * was created on this device and simply hasn't been pushed yet. And the
+ * decision rests on the request having succeeded, not on the list being
+ * non-empty: an empty table is a real answer ("you deleted the last one"),
+ * while a failed request is not an answer at all and is ignored.
+ *
+ * Deliberately limited to events and pack lists. The inventory is the one thing
+ * that cannot be recreated from memory, and a phone may still hold products
+ * that never made it up — those must never be dropped on the server's say-so.
+ */
+async function dropLocallyIfGoneFromServer(
+  table: { toCollection: () => { primaryKeys: () => Promise<string[]> }; bulkDelete: (ids: string[]) => Promise<void> },
+  response: { data: { id: string }[] | null; error: unknown },
+  pendingIds: Set<string>,
+) {
+  if (response.error || !response.data) return
+  const onServer = new Set(response.data.map((r) => r.id))
+  const localIds = await table.toCollection().primaryKeys()
+  const gone = localIds.filter((id) => !onServer.has(id) && !pendingIds.has(id))
+  if (gone.length > 0) await table.bulkDelete(gone)
+}
+
+/**
  * Bring down what other devices changed.
  *
  * Until v1.3 this only ran when local storage was empty, so the app pushed but
@@ -630,6 +657,11 @@ export async function pullFromServer() {
         })),
       )
     }
+    // Runs even when the server lists nothing: deleting the last event still has
+    // to reach the other devices.
+    await dropLocallyIfGoneFromServer(db.events, evs, pendingIds)
+    await dropLocallyIfGoneFromServer(db.packLines, lines, pendingIds)
+
     if (evs.data?.length) {
       const local = new Map((await db.events.bulkGet(evs.data.map((r) => r.id))).flatMap((e) => (e ? [[e.id, e]] : [])))
       const incoming = evs.data.filter((r) => {
