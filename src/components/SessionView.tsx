@@ -416,7 +416,7 @@ export default function SessionView({ session }: { session: Session }) {
               style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
               onClick={() => toggleCollapsed(g.key)}
             >
-              <span style={{ fontSize: 11 }}>{collapsed.has(g.key) ? '▶' : '▼'}</span>
+              <span className="caret">{collapsed.has(g.key) ? '▶' : '▼'}</span>
               {g.label} <span className="muted">· {g.count}</span>
             </button>
             {!collapsed.has(g.key) && (
@@ -428,7 +428,7 @@ export default function SessionView({ session }: { session: Session }) {
                   return (
                     <div key={subKey}>
                       <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
-                        <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
+                        <span className="caret sm">{subCollapsed ? '▶' : '▼'}</span>
                         {sub} <span className="muted">· {ents.length}</span>
                       </button>
                       {!subCollapsed && ents.map((e) => renderRow(e))}
@@ -445,7 +445,7 @@ export default function SessionView({ session }: { session: Session }) {
                       return (
                         <div>
                           <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
-                            <span style={{ fontSize: 10 }}>{subCollapsed ? '▶' : '▼'}</span>
+                            <span className="caret sm">{subCollapsed ? '▶' : '▼'}</span>
                             Other <span className="muted">· {g.untyped.length}</span>
                           </button>
                           {!subCollapsed && g.untyped.map((e) => renderRow(e))}

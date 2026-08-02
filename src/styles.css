@@ -234,8 +234,27 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   text-transform: uppercase;
   color: var(--accent);
   margin: 16px 2px 8px;
+  padding-left: 6px;
 }
 .cat-header .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
+
+/* The triangle used to be a bare 10x15px glyph flush against the left edge, so
+   aiming at it missed the button more often than it hit it. It is now a proper
+   target: a wide centered box with room to spare on either side. */
+.caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  align-self: stretch;
+  min-height: 26px;
+  margin-left: -4px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.caret.sm { font-size: 11px; width: 24px; }
+.caret:hover { background: var(--bg3); }
 
 .subcat-header {
   display: flex;
