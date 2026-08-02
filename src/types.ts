@@ -122,6 +122,17 @@ export interface OutboxItem {
   ts: number
 }
 
+/**
+ * A record deleted on this device. It stays here until the server confirms the
+ * delete; while it exists, the pull refuses to bring that row back. Without it,
+ * deleting something with no signal would simply undo itself on the next sync.
+ */
+export interface Tombstone {
+  id: string
+  table: 'products' | 'sessions' | 'entries'
+  ts: number
+}
+
 export function totalBottles(e: { bottles: number; cases: number }, unitsPerCase: number): number {
   return e.cases * unitsPerCase + e.bottles
 }

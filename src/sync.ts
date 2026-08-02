@@ -1,4 +1,4 @@
-import { db } from './db'
+import { db, pushDelete } from './db'
 import { supabase } from './supabase'
 import { lookupBarcode, identifyPhoto } from './lookup'
 import {
@@ -450,6 +450,8 @@ export async function syncNow() {
   // isolated so one failure never blocks the others.
   const errors = await runStages([
     ['push', pushOutbox],
+    ['borrar', retryPendingDeletes],
+    ['bajar', pullFromServer],
     ['borrar-fotos', wipeAllPhotos],
     ['identificar', resolveLookups],
     ['ia', resolveAi],
@@ -468,20 +470,46 @@ export async function syncNow() {
   void syncBackground()
 }
 
-/** Restore from the server if local storage is empty (e.g. reinstalled app). */
-export async function initialPullIfEmpty() {
+/** Deletes made with no signal: keep retrying until the server confirms them. */
+async function retryPendingDeletes() {
+  const pending = await db.tombstones.toArray()
+  for (const t of pending) await pushDelete(t.table, t.id)
+}
+
+/**
+ * Bring down what other devices changed.
+ *
+ * Until v1.3 this only ran when local storage was empty, so the app pushed but
+ * never pulled: a count created on the laptop was invisible on the phone. Now
+ * it runs on every sync, and three rules keep it from destroying local work:
+ *
+ *  1. a row waiting in the outbox is never overwritten — that edit hasn't been
+ *     pushed yet, so the server copy is by definition older;
+ *  2. otherwise the newer `updatedAt` wins;
+ *  3. anything with a tombstone stays deleted.
+ */
+export async function pullFromServer() {
   if (!navigator.onLine) return
-  const localCount = (await db.sessions.count()) + (await db.products.count())
-  if (localCount > 0) return
   try {
-    const [prods, sess, ents] = await Promise.all([
+    const [prods, sess, ents, pendingIds, deletedIds] = await Promise.all([
       supabase.from('products').select('*'),
       supabase.from('sessions').select('*'),
       supabase.from('entries').select('*'),
+      db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
+      db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
+    /** Rows this device is still holding on to, or has deliberately deleted. */
+    const skip = (id: string) => pendingIds.has(id) || deletedIds.has(id)
+
     if (prods.data?.length) {
+      const local = new Map((await db.products.bulkGet(prods.data.map((r) => r.id))).flatMap((p) => (p ? [[p.id, p]] : [])))
+      const incoming = prods.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
       await db.products.bulkPut(
-        prods.data.map((r) => ({
+        incoming.map((r) => ({
           id: r.id,
           barcode: r.barcode,
           name: r.name ?? '',
@@ -505,8 +533,14 @@ export async function initialPullIfEmpty() {
       )
     }
     if (sess.data?.length) {
+      const local = new Map((await db.sessions.bulkGet(sess.data.map((r) => r.id))).flatMap((s) => (s ? [[s.id, s]] : [])))
+      const incoming = sess.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
       await db.sessions.bulkPut(
-        sess.data.map((r) => ({
+        incoming.map((r) => ({
           id: r.id,
           name: r.name,
           location: r.location ?? '',
@@ -517,8 +551,14 @@ export async function initialPullIfEmpty() {
       )
     }
     if (ents.data?.length) {
+      const local = new Map((await db.entries.bulkGet(ents.data.map((r) => r.id))).flatMap((e) => (e ? [[e.id, e]] : [])))
+      const incoming = ents.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
       await db.entries.bulkPut(
-        ents.data.map((r) => ({
+        incoming.map((r) => ({
           id: r.id,
           sessionId: r.session_id,
           productId: r.product_id,
@@ -578,19 +618,34 @@ export function startSyncLoop() {
   const onOffline = () => setState({ online: false })
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
+  // A device with nothing of its own to send still has to hear about what the
+  // others did, so an idle tick pulls too — just not on every single one.
+  let lastIdlePull = 0
+  const IDLE_PULL_MS = 60000
   // Poor-signal warehouses flap between online/offline; poll as a safety net
   setInterval(() => {
     if (navigator.onLine && !syncing) {
       void countPending().then((n) => {
         setState({ pending: n, online: navigator.onLine })
         if (n > 0) void syncNow()
-        // no data pending, but keep fetching missing product images in the background
-        else void syncBackground()
+        else {
+          if (Date.now() - lastIdlePull > IDLE_PULL_MS) {
+            lastIdlePull = Date.now()
+            void retryPendingDeletes().then(pullFromServer)
+          }
+          // keep fetching missing product images in the background
+          void syncBackground()
+        }
       })
     } else {
       setState({ online: navigator.onLine })
     }
   }, 20000)
   void refreshPending()
-  void initialPullIfEmpty().then(() => syncNow())
+  void syncNow()
+  // Coming back to the app is the moment you most expect to see other people's
+  // work (the laptop count showing up on the phone).
+  window.addEventListener('focus', () => {
+    if (navigator.onLine && !syncing) void syncNow()
+  })
 }

@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { supabase } from './supabase'
-import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem, Thumb } from './types'
+import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem, Thumb, Tombstone } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
   products: EntityTable<Product, 'id'>
@@ -10,6 +10,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   images: EntityTable<CachedImage, 'url'>
   thumbs: EntityTable<Thumb, 'productId'>
   outbox: EntityTable<OutboxItem, 'seq'>
+  tombstones: EntityTable<Tombstone, 'id'>
 }
 
 db.version(1).stores({
@@ -24,6 +25,12 @@ db.version(1).stores({
 // v2 adds locally generated thumbnails (small pictures for lists)
 db.version(2).stores({
   thumbs: 'productId, source',
+})
+
+// v3 adds tombstones, needed before the app could start pulling continuously
+// from the server (see pullFromServer in sync.ts). Additive: no data is touched.
+db.version(3).stores({
+  tombstones: 'id, table',
 })
 
 export function uuid(): string {
@@ -104,14 +111,13 @@ export async function deleteSession(id: string) {
   // Ghost outbox rows for deleted records are filtered out at push time,
   // but clean them anyway.
   await db.outbox.where('id').anyOf([id, ...entryIds]).delete()
-  try {
-    if (navigator.onLine) {
-      // entries cascade via FK
-      await supabase.from('sessions').delete().eq('id', id)
-    }
-  } catch {
-    // offline — the server copy stays; it only resurfaces on a fresh install
-  }
+  // The entries cascade via FK on the server, so only the session needs a
+  // tombstone — but they need local ones so the pull cannot resurrect them.
+  await db.tombstones.put({ id, table: 'sessions', ts: Date.now() })
+  await db.tombstones.bulkPut(entryIds.map((e) => ({ id: e, table: 'entries' as const, ts: Date.now() })))
+  // Once the server confirms the session is gone its entries went with it,
+  // so their tombstones have nothing left to guard against.
+  if (await pushDelete('sessions', id)) await db.tombstones.bulkDelete(entryIds)
 }
 
 /**
@@ -121,10 +127,24 @@ export async function deleteSession(id: string) {
 export async function deleteEntry(id: string) {
   await db.entries.delete(id)
   await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'entries', ts: Date.now() })
+  await pushDelete('entries', id)
+}
+
+/**
+ * Try to delete the row on the server. The tombstone is only dropped once the
+ * server confirms; if there is no signal it survives and sync.ts retries it.
+ */
+export async function pushDelete(table: Tombstone['table'], id: string): Promise<boolean> {
+  if (!navigator.onLine) return false
   try {
-    if (navigator.onLine) await supabase.from('entries').delete().eq('id', id)
+    const { error } = await supabase.from(table).delete().eq('id', id)
+    if (error) return false
+    await db.tombstones.delete(id)
+    return true
   } catch {
-    // offline — server ghost only resurfaces on a fresh install
+    // offline — the tombstone stays and sync.ts will retry
+    return false
   }
 }
 
