@@ -194,7 +194,7 @@ export default function CountPad({ sessionId, product, initial, onDone, onScanNe
         {loaded && (
           <>
             <Counter label="CASES" value={cases} onChange={setCases} />
-            <Counter label="LOOSE BOTTLES" value={bottles} onChange={setBottles} />
+            <Counter label="BOTTLES" value={bottles} onChange={setBottles} />
           </>
         )}
 

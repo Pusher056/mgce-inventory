@@ -29,8 +29,8 @@ const MODULES: ModuleDef[] = [
   {
     id: 'events',
     icon: '📋',
-    title: 'Events & packing lists',
-    blurb: 'Build MO packing lists, send what goes out, log what comes back',
+    title: 'Events & Pack List',
+    blurb: 'Build the MO Pack List, send what goes out, log what comes back',
     ready: false,
   },
   {

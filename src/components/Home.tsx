@@ -16,7 +16,13 @@ export default function Home({ onOpen }: { onOpen: (s: Session) => void }) {
 
   return (
     <div className="screen">
-      <button className="big-btn primary" style={{ marginTop: 12 }} onClick={() => setCreating(true)}>
+      {/* Starting a count is warehouse work done on the phone; on a desk it is
+          only a way to create clutter nobody asked for. */}
+      <button
+        className="big-btn primary phone-actions"
+        style={{ marginTop: 12 }}
+        onClick={() => setCreating(true)}
+      >
         ＋ New count
       </button>
 

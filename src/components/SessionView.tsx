@@ -248,7 +248,7 @@ export default function SessionView({ session }: { session: Session }) {
             <div className="row-meta muted small">
               {e.cases > 0 && `${e.cases} case${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
               {e.cases > 0 && e.bottles > 0 && ' + '}
-              {e.bottles > 0 && `${e.bottles} loose`}
+              {e.bottles > 0 && `${e.bottles} bottle${e.bottles === 1 ? '' : 's'}`}
               {e.cases === 0 && e.bottles === 0 && 'out of stock'}
             </div>
             <div className="row-type muted small">{p.subcategory ?? ''}</div>
@@ -408,8 +408,9 @@ export default function SessionView({ session }: { session: Session }) {
             No products counted yet. Scan the first bottle 👆
           </div>
         )}
+        {/* scrollMarginTop clears the sticky header + search bar so a jump lands in view */}
         {groups.map((g) => (
-          <div key={g.key} id={`cat-${g.key}`} style={{ scrollMarginTop: 76 }}>
+          <div key={g.key} id={`cat-${g.key}`} style={{ scrollMarginTop: 130 }}>
             <button
               className="cat-header"
               style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
@@ -505,7 +506,7 @@ export default function SessionView({ session }: { session: Session }) {
                   setModal({ t: 'count', productId: p.id, initial: { bottles: 1 } })
                 }}
               >
-                🍾 Loose bottle
+                🍾 Single bottle
               </button>
               <button
                 className="big-btn"

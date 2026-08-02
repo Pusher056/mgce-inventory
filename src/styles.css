@@ -582,10 +582,34 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 
   /* camera actions are phone-only; the desk gets a search field instead */
   .phone-actions { display: none; }
+
+  /* A fixed header height makes the sticky offsets below predictable. */
+  .header { min-height: 64px; }
+
+  /* The search follows you down the list: finding a bottle should never
+     require scrolling back to the top first. */
   .desk-search {
     display: block;
-    margin: 4px 0 10px;
+    position: sticky;
+    top: 64px;
+    z-index: 8;
+    margin: 0 0 10px;
     max-width: 520px;
+    /* the list must not show through the field as it scrolls underneath */
+    background: var(--bg3);
+    box-shadow: 0 -10px 0 10px var(--bg), 0 6px 12px -6px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Category headers used to slide under the sticky app header, which quietly
+     swallowed the clicks that collapse them. Pinning them below the search bar
+     keeps them clickable and always tells you which category you are in. */
+  .cat-header {
+    position: sticky;
+    top: 110px;
+    z-index: 6;
+    background: var(--bg);
+    padding: 8px 2px;
+    margin: 10px 0 6px;
   }
 
   /* explicit row actions, since swiping with a mouse is not a thing */

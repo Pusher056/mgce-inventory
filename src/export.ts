@@ -63,7 +63,7 @@ export async function exportExcel(session: Session, entries: Entry[], products: 
     Barcode: r.barcode,
     Cases: r.cases,
     'Bottles/case': r.perCase,
-    'Loose bottles': r.looseBottles,
+    Bottles: r.looseBottles,
     'Total bottles': r.totalBottles,
   }))
   data.push({
@@ -75,7 +75,7 @@ export async function exportExcel(session: Session, entries: Entry[], products: 
     Barcode: '',
     Cases: rows.reduce((s, r) => s + r.cases, 0),
     'Bottles/case': '' as unknown as number,
-    'Loose bottles': rows.reduce((s, r) => s + r.looseBottles, 0),
+    Bottles: rows.reduce((s, r) => s + r.looseBottles, 0),
     'Total bottles': rows.reduce((s, r) => s + r.totalBottles, 0),
   })
   const ws = XLSX.utils.json_to_sheet(data)
@@ -141,7 +141,7 @@ export async function exportPdf(session: Session, entries: Entry[], products: Ma
 
   autoTable(doc, {
     startY: 28,
-    head: [['Product', 'Loc.', 'Brand', 'Cases', 'Btl/case', 'Loose', 'Total btl.']],
+    head: [['Product', 'Loc.', 'Brand', 'Cases', 'Btl/case', 'Bottles', 'Total btl.']],
     body,
     foot: [[
       'TOTAL', '', '',
