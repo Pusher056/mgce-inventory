@@ -182,7 +182,6 @@ export async function createEvent(partial: Partial<EventRec>): Promise<EventRec>
     guestCount: null,
     onsiteContact: '',
     planner: '',
-    plannerCell: '',
     plannerInitials: '',
     iceNeeds: '',
     iceDeliveryTime: '',

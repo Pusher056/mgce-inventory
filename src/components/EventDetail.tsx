@@ -3,16 +3,20 @@ import { db, updateEvent } from '../db'
 import type { EventRec } from '../types'
 
 /**
- * Types the dashes for you: 9738182600 becomes 973-818-2600. Anything that is
- * not a plain 10-digit US number (an extension, a note) is left alone rather
- * than mangled.
+ * Name and number share one field, the way the template writes it
+ * ("Ilana Schackman 973 818 2600"). Only the run of digits at the end is
+ * touched, so the dashes appear as the number is typed and the name is left
+ * exactly as written.
  */
-function formatUsPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.length > 10 || /[^\d\s()+-]/.test(raw)) return raw
-  if (digits.length > 6) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
-  if (digits.length > 3) return `${digits.slice(0, 3)}-${digits.slice(3)}`
-  return digits
+function formatPlannerLine(raw: string): string {
+  return raw.replace(/[\d\s-]+$/, (tail) => {
+    const digits = tail.replace(/\D/g, '')
+    if (digits.length === 0 || digits.length > 10) return tail
+    const lead = /^\s+/.exec(tail)?.[0] ?? ''
+    if (digits.length > 6) return `${lead}${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+    if (digits.length > 3) return `${lead}${digits.slice(0, 3)}-${digits.slice(3)}`
+    return tail
+  })
 }
 
 /**
@@ -30,11 +34,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
   const set = (k: keyof EventRec) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     void updateEvent(eventId, { [k]: e.target.value } as Partial<EventRec>)
 
-  const field = (label: string, k: keyof EventRec, hint?: string) => (
+  const field = (label: string, k: keyof EventRec, opts: { hint?: string; eg?: string } = {}) => (
     <div className="ev-field">
       <label className="field-label">{label}</label>
-      <input value={(ev[k] as string) ?? ''} onChange={set(k)} />
-      {hint && <div className="field-hint">{hint}</div>}
+      <input value={(ev[k] as string) ?? ''} onChange={set(k)} placeholder={opts.eg} />
+      {opts.hint && <div className="field-hint">{opts.hint}</div>}
     </div>
   )
 
@@ -58,21 +62,19 @@ export default function EventDetail({ eventId }: { eventId: string }) {
         {field('Ice needs', 'iceNeeds')}
         {field('Ice delivery time', 'iceDeliveryTime')}
         {field('Requested kitchen pickup', 'kitchenPickup')}
-        {field(
-          'Est. kitchen delivery to location',
-          'kitchenDelivery',
-          'Please allow 2h between kitchen pickup and est. delivery.',
-        )}
+        {field('Est. kitchen delivery to location', 'kitchenDelivery', {
+          hint: 'Please allow 2h between kitchen pickup and est. delivery.',
+        })}
       </div>
 
       <div className="ev-section-title" style={{ marginTop: 26 }}>
         Event details
       </div>
       <div className="ev-grid">
-        {field('Venue', 'location')}
+        {field('Venue', 'location', { eg: 'Storied' })}
         {field('Address', 'address')}
         {field('Service entrance', 'serviceEntrance')}
-        {field('Event time', 'eventTime')}
+        {field('Event time', 'eventTime', { eg: '6-9PM' })}
         {field('Call time', 'callTime')}
         <div className="ev-field">
           <label className="field-label">Guest count</label>
@@ -86,14 +88,11 @@ export default function EventDetail({ eventId }: { eventId: string }) {
           />
         </div>
         {field('Onsite contact', 'onsiteContact')}
-        {field('Planner', 'planner')}
         <div className="ev-field">
-          <label className="field-label">Planner cell</label>
+          <label className="field-label">Planner / cell</label>
           <input
-            type="tel"
-            inputMode="tel"
-            value={ev.plannerCell ?? ''}
-            onChange={(e) => void updateEvent(eventId, { plannerCell: formatUsPhone(e.target.value) })}
+            value={ev.planner}
+            onChange={(e) => void updateEvent(eventId, { planner: formatPlannerLine(e.target.value) })}
           />
         </div>
       </div>
