@@ -255,6 +255,9 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 }
 .caret.sm { font-size: 11px; width: 24px; }
 .caret:hover { background: var(--bg3); }
+/* A stray double-click used to select the heading text instead of toggling it */
+.cat-header,
+.subcat-header { user-select: none; }
 
 .subcat-header {
   display: flex;
@@ -291,6 +294,33 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   gap: 0 14px;
 }
 .ev-field .field-label { margin-top: 8px; }
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.undo-bar {
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg3);
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+  font-size: 14px;
+}
+.undo-bar button {
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  padding: 6px 10px;
+  flex: none;
+}
 textarea {
   width: 100%;
   font: inherit;

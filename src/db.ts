@@ -182,6 +182,7 @@ export async function createEvent(partial: Partial<EventRec>): Promise<EventRec>
     guestCount: null,
     onsiteContact: '',
     planner: '',
+    plannerCell: '',
     plannerInitials: '',
     iceNeeds: '',
     iceDeliveryTime: '',
@@ -202,8 +203,17 @@ export async function updateEvent(id: string, changes: Partial<EventRec>) {
   await queueSync('events', id)
 }
 
-export async function deleteEvent(id: string) {
-  const lineIds = (await db.packLines.where('eventId').equals(id).toArray()).map((l) => l.id)
+/** Everything needed to put a deleted event back exactly as it was. */
+export interface DeletedEvent {
+  event: EventRec
+  lines: PackLine[]
+}
+
+export async function deleteEvent(id: string): Promise<DeletedEvent | null> {
+  const event = await db.events.get(id)
+  if (!event) return null
+  const lines = await db.packLines.where('eventId').equals(id).toArray()
+  const lineIds = lines.map((l) => l.id)
   await db.packLines.where('eventId').equals(id).delete()
   await db.events.delete(id)
   await db.outbox.where('id').anyOf([id, ...lineIds]).delete()
@@ -211,6 +221,19 @@ export async function deleteEvent(id: string) {
   await db.tombstones.bulkPut(lineIds.map((l) => ({ id: l, table: 'pack_lines' as const, ts: Date.now() })))
   // Lines cascade via FK once the server confirms the event is gone.
   if (await pushDelete('events', id)) await db.tombstones.bulkDelete(lineIds)
+  return { event, lines }
+}
+
+/**
+ * Put a deleted event back. Deleting is one click precisely because this exists —
+ * no confirmation dialog to click through, the way an email client works.
+ */
+export async function restoreEvent({ event, lines }: DeletedEvent) {
+  await db.tombstones.bulkDelete([event.id, ...lines.map((l) => l.id)])
+  await db.events.put(event)
+  await db.packLines.bulkPut(lines)
+  await queueSync('events', event.id)
+  for (const l of lines) await queueSync('pack_lines', l.id)
 }
 
 export async function addPackLine(partial: Partial<PackLine> & { eventId: string; section: string }): Promise<PackLine> {

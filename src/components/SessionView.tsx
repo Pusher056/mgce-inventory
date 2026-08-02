@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createProduct, deleteEntry, savePhoto, updateProduct } from '../db'
 import { resetAiSkip, syncNow } from '../sync'
@@ -60,13 +60,51 @@ export default function SessionView({ session }: { session: Session }) {
   /** Desktop search box: filters the list in place instead of opening a sheet. */
   const [filter, setFilter] = useState('')
 
-  function toggleCollapsed(key: string) {
+  /**
+   * Collapsing a 143-row category removes thousands of pixels below it, so the
+   * page used to lurch and the header you just clicked ended up somewhere else
+   * — it read as "the click did nothing". Passing the header keeps it pinned
+   * exactly where the cursor left it.
+   */
+  const keepInPlace = useRef<{ el: HTMLElement; top: number } | null>(null)
+
+  function toggleCollapsed(key: string, anchor?: HTMLElement | null) {
+    if (anchor) keepInPlace.current = { el: anchor, top: anchor.getBoundingClientRect().top }
     setCollapsed((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       localStorage.setItem('collapsedCats', JSON.stringify([...next]))
       return next
+    })
+  }
+
+  // Runs after the DOM has actually changed but before the browser paints, so
+  // the correction is invisible. requestAnimationFrame was too early: React had
+  // not committed the new list yet, so there was nothing to correct for.
+  useLayoutEffect(() => {
+    const pending = keepInPlace.current
+    if (!pending) return
+    keepInPlace.current = null
+    const after = pending.el.getBoundingClientRect().top
+    if (Math.abs(after - pending.top) > 1) window.scrollBy(0, after - pending.top)
+  }, [collapsed])
+
+  /** Rail click: open the section if it is closed, then go to it. */
+  function jumpToCategory(key: string) {
+    setCollapsed((prev) => {
+      if (!prev.has(key)) return prev
+      const next = new Set(prev)
+      next.delete(key)
+      localStorage.setItem('collapsedCats', JSON.stringify([...next]))
+      return next
+    })
+    // after the section has re-rendered, otherwise we scroll to its collapsed height
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`cat-${key}`)
+      if (!el) return
+      const far = Math.abs(el.getBoundingClientRect().top) > 1800
+      el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block: 'start' })
     })
   }
 
@@ -287,16 +325,10 @@ export default function SessionView({ session }: { session: Session }) {
             <button
               key={g.key}
               className="rail-item"
-              onClick={() => {
-                // jump to the section instead of collapsing it: the rail is for
-                // getting somewhere in a 200-row list, not for hiding things.
-                // Animating across thousands of pixels just makes you wait, so
-                // long jumps land immediately and only short ones glide.
-                const el = document.getElementById(`cat-${g.key}`)
-                if (!el) return
-                const far = Math.abs(el.getBoundingClientRect().top) > 1800
-                el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block: 'start' })
-              }}
+              // The rail is for getting somewhere in a 200-row list, not for
+              // hiding things — so it opens a closed section rather than
+              // dropping you on a header with nothing under it.
+              onClick={() => jumpToCategory(g.key)}
             >
               <span>{g.label}</span>
               <span className="muted">{g.count}</span>
@@ -414,7 +446,7 @@ export default function SessionView({ session }: { session: Session }) {
             <button
               className="cat-header"
               style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
-              onClick={() => toggleCollapsed(g.key)}
+              onClick={(e) => toggleCollapsed(g.key, e.currentTarget)}
             >
               <span className="caret">{collapsed.has(g.key) ? '▶' : '▼'}</span>
               {g.label} <span className="muted">· {g.count}</span>
@@ -427,7 +459,7 @@ export default function SessionView({ session }: { session: Session }) {
                   const subCollapsed = collapsed.has(subKey)
                   return (
                     <div key={subKey}>
-                      <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
+                      <button className="subcat-header" onClick={(e) => toggleCollapsed(subKey, e.currentTarget)}>
                         <span className="caret sm">{subCollapsed ? '▶' : '▼'}</span>
                         {sub} <span className="muted">· {ents.length}</span>
                       </button>
@@ -444,7 +476,7 @@ export default function SessionView({ session }: { session: Session }) {
                       const subCollapsed = collapsed.has(subKey)
                       return (
                         <div>
-                          <button className="subcat-header" onClick={() => toggleCollapsed(subKey)}>
+                          <button className="subcat-header" onClick={(e) => toggleCollapsed(subKey, e.currentTarget)}>
                             <span className="caret sm">{subCollapsed ? '▶' : '▼'}</span>
                             Other <span className="muted">· {g.untyped.length}</span>
                           </button>

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, createEvent, deleteEvent } from '../db'
+import { db, createEvent, deleteEvent, restoreEvent, type DeletedEvent } from '../db'
 import { syncNow } from '../sync'
 import type { EventRec } from '../types'
 import SwipeRow from './SwipeRow'
@@ -29,7 +29,10 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [day, setDay] = useState(toInputDay(Date.now()))
-  const [location, setLocation] = useState('')
+  const [undo, setUndo] = useState<DeletedEvent | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(undoTimer.current), [])
 
   const today = new Date().setHours(0, 0, 0, 0)
   const upcoming = events.filter((e) => e.date >= today)
@@ -37,12 +40,19 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
 
   async function submit() {
     if (!name.trim()) return
-    const ev = await createEvent({ name: name.trim(), date: parseDay(day), location: location.trim() })
+    const ev = await createEvent({ name: name.trim(), date: parseDay(day) })
     setCreating(false)
     setName('')
-    setLocation('')
     onOpen(ev)
     void syncNow()
+  }
+
+  async function remove(id: string) {
+    const snapshot = await deleteEvent(id)
+    if (!snapshot) return
+    setUndo(snapshot)
+    window.clearTimeout(undoTimer.current)
+    undoTimer.current = window.setTimeout(() => setUndo(null), 8000)
   }
 
   function renderGroup(label: string, list: EventRec[]) {
@@ -53,14 +63,7 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
           {label} <span className="muted">· {list.length}</span>
         </div>
         {list.map((e) => (
-          <SwipeRow
-            key={e.id}
-            onDelete={() => {
-              if (window.confirm(`Delete "${e.name}" and its pack list? This cannot be undone.`)) {
-                void deleteEvent(e.id)
-              }
-            }}
-          >
+          <SwipeRow key={e.id} onDelete={() => void remove(e.id)}>
             <button className="session-row" style={{ marginBottom: 0 }} onClick={() => onOpen(e)}>
               <div style={{ fontSize: 26 }}>📋</div>
               <div className="info">
@@ -97,12 +100,31 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
         )}
       </div>
 
+      {undo && (
+        <div className="undo-bar">
+          <span>
+            Deleted “{undo.event.name}”
+            {undo.lines.length > 0 && ` and ${undo.lines.length} pack list line${undo.lines.length === 1 ? '' : 's'}`}
+          </span>
+          <button
+            onClick={async () => {
+              window.clearTimeout(undoTimer.current)
+              await restoreEvent(undo)
+              setUndo(null)
+              void syncNow()
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
       {creating && (
         <div className="sheet-backdrop" onClick={() => setCreating(false)}>
           <div className="sheet" onClick={(ev) => ev.stopPropagation()}>
             <h2>New event</h2>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              Name and date are enough to start. Everything else can be filled in later.
+              Name and date are enough. Venue, address and the rest live inside the event.
             </div>
             <label className="field-label">Event name</label>
             <input
@@ -113,12 +135,10 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
               onKeyDown={(ev) => ev.key === 'Enter' && void submit()}
             />
             <label className="field-label">Date</label>
-            <input type="date" value={day} onChange={(ev) => setDay(ev.target.value)} />
-            <label className="field-label">Venue</label>
             <input
-              value={location}
-              onChange={(ev) => setLocation(ev.target.value)}
-              placeholder="Storied"
+              type="date"
+              value={day}
+              onChange={(ev) => setDay(ev.target.value)}
               onKeyDown={(ev) => ev.key === 'Enter' && void submit()}
             />
             <button className="big-btn green" style={{ marginTop: 14 }} disabled={!name.trim()} onClick={submit}>

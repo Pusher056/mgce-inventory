@@ -135,8 +135,10 @@ export interface EventRec {
   callTime: string
   guestCount: number | null
   onsiteContact: string
-  /** As written in the template: "Ilana Schackman 973 818 2600" */
+  /** Planner's name. The template joins name and cell in one cell; we keep them
+      apart so the phone number can be formatted, and rejoin them on export. */
   planner: string
+  plannerCell: string
   /** NS, GJ, PJ, IS, BW — auto-filled into pack list notes ("NS to order") */
   plannerInitials: string
   /** The ops block: not the planners' job, this is what the user has to act on. */
