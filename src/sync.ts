@@ -7,7 +7,7 @@ import {
   categoryForSubcategory,
   canonicalSubcategory,
 } from './classify'
-import type { Entry, Product, Session } from './types'
+import type { Entry, EventRec, PackLine, Product, Session } from './types'
 
 /**
  * Offline-first sync engine.
@@ -105,6 +105,48 @@ function entryToRow(e: Entry) {
   }
 }
 
+function eventToRow(e: EventRec) {
+  return {
+    id: e.id,
+    name: e.name,
+    date: new Date(e.date).toISOString(),
+    location: e.location,
+    address: e.address,
+    service_entrance: e.serviceEntrance,
+    event_time: e.eventTime,
+    call_time: e.callTime,
+    guest_count: e.guestCount,
+    onsite_contact: e.onsiteContact,
+    planner: e.planner,
+    planner_initials: e.plannerInitials,
+    ice_needs: e.iceNeeds,
+    ice_delivery_time: e.iceDeliveryTime,
+    kitchen_pickup: e.kitchenPickup,
+    kitchen_delivery: e.kitchenDelivery,
+    notes: e.notes,
+    created_at: new Date(e.createdAt).toISOString(),
+    updated_at: new Date(e.updatedAt).toISOString(),
+  }
+}
+function packLineToRow(l: PackLine) {
+  return {
+    id: l.id,
+    event_id: l.eventId,
+    section: l.section,
+    sort_index: l.sortIndex,
+    product_id: l.productId,
+    label: l.label,
+    size: l.size,
+    qty_requested: l.qtyRequested,
+    qty_returned: l.qtyReturned,
+    qty_opened: l.qtyOpened,
+    qty_bought: l.qtyBought,
+    note: l.note,
+    packed: l.packed === 1,
+    updated_at: new Date(l.updatedAt).toISOString(),
+  }
+}
+
 // ---------- push ----------
 
 async function pushOutbox() {
@@ -112,11 +154,17 @@ async function pushOutbox() {
   if (items.length === 0) return
 
   // Deduplicate: only the latest state of each row matters (we upsert snapshots)
-  const byTable = { products: new Set<string>(), sessions: new Set<string>(), entries: new Set<string>() }
+  const byTable = {
+    products: new Set<string>(),
+    sessions: new Set<string>(),
+    entries: new Set<string>(),
+    events: new Set<string>(),
+    pack_lines: new Set<string>(),
+  }
   for (const it of items) byTable[it.table].add(it.id)
 
-  // Products first (entries reference them via FK)
-  for (const table of ['products', 'sessions', 'entries'] as const) {
+  // Parents before children (entries and pack lines reference them via FK)
+  for (const table of ['products', 'sessions', 'entries', 'events', 'pack_lines'] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
     let rows: Record<string, unknown>[]
@@ -124,6 +172,10 @@ async function pushOutbox() {
       rows = (await db.products.bulkGet(ids)).filter((p): p is Product => !!p).map(productToRow)
     } else if (table === 'sessions') {
       rows = (await db.sessions.bulkGet(ids)).filter((s): s is Session => !!s).map(sessionToRow)
+    } else if (table === 'events') {
+      rows = (await db.events.bulkGet(ids)).filter((e): e is EventRec => !!e).map(eventToRow)
+    } else if (table === 'pack_lines') {
+      rows = (await db.packLines.bulkGet(ids)).filter((l): l is PackLine => !!l).map(packLineToRow)
     } else {
       rows = (await db.entries.bulkGet(ids)).filter((e): e is Entry => !!e).map(entryToRow)
     }
@@ -132,6 +184,13 @@ async function pushOutbox() {
       continue
     }
     let { error } = await supabase.from(table).upsert(rows)
+    if (error && table === 'pack_lines' && /foreign key/i.test(error.message)) {
+      // Same self-healing as entries: re-push the parents this device knows about.
+      const [allEvents, allProducts] = await Promise.all([db.events.toArray(), db.products.toArray()])
+      await supabase.from('products').upsert(allProducts.map(productToRow))
+      await supabase.from('events').upsert(allEvents.map(eventToRow))
+      ;({ error } = await supabase.from(table).upsert(rows))
+    }
     if (error && table === 'entries' && /foreign key/i.test(error.message)) {
       // Recovery: the server lost rows this device still references (e.g. a
       // server-side wipe). The device is the source of truth — re-push the
@@ -491,10 +550,12 @@ async function retryPendingDeletes() {
 export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
-    const [prods, sess, ents, pendingIds, deletedIds] = await Promise.all([
+    const [prods, sess, ents, evs, lines, pendingIds, deletedIds] = await Promise.all([
       supabase.from('products').select('*'),
       supabase.from('sessions').select('*'),
       supabase.from('entries').select('*'),
+      supabase.from('events').select('*'),
+      supabase.from('pack_lines').select('*'),
       db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
       db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
@@ -564,6 +625,65 @@ export async function pullFromServer() {
           productId: r.product_id,
           bottles: r.bottles,
           cases: r.cases,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
+    if (evs.data?.length) {
+      const local = new Map((await db.events.bulkGet(evs.data.map((r) => r.id))).flatMap((e) => (e ? [[e.id, e]] : [])))
+      const incoming = evs.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
+      await db.events.bulkPut(
+        incoming.map((r) => ({
+          id: r.id,
+          name: r.name ?? '',
+          date: Date.parse(r.date) || Date.now(),
+          location: r.location ?? '',
+          address: r.address ?? '',
+          serviceEntrance: r.service_entrance ?? '',
+          eventTime: r.event_time ?? '',
+          callTime: r.call_time ?? '',
+          guestCount: r.guest_count ?? null,
+          onsiteContact: r.onsite_contact ?? '',
+          planner: r.planner ?? '',
+          plannerInitials: r.planner_initials ?? '',
+          iceNeeds: r.ice_needs ?? '',
+          iceDeliveryTime: r.ice_delivery_time ?? '',
+          kitchenPickup: r.kitchen_pickup ?? '',
+          kitchenDelivery: r.kitchen_delivery ?? '',
+          notes: r.notes ?? '',
+          createdAt: Date.parse(r.created_at) || Date.now(),
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
+    if (lines.data?.length) {
+      const local = new Map(
+        (await db.packLines.bulkGet(lines.data.map((r) => r.id))).flatMap((l) => (l ? [[l.id, l]] : [])),
+      )
+      const incoming = lines.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
+      await db.packLines.bulkPut(
+        incoming.map((r) => ({
+          id: r.id,
+          eventId: r.event_id,
+          section: r.section ?? '',
+          sortIndex: r.sort_index ?? 0,
+          productId: r.product_id ?? null,
+          label: r.label ?? '',
+          size: r.size ?? '',
+          qtyRequested: Number(r.qty_requested) || 0,
+          qtyReturned: r.qty_returned === null ? null : Number(r.qty_returned),
+          qtyOpened: r.qty_opened === null ? null : Number(r.qty_opened),
+          qtyBought: r.qty_bought === null ? null : Number(r.qty_bought),
+          note: r.note ?? '',
+          packed: r.packed ? (1 as const) : (0 as const),
           updatedAt: Date.parse(r.updated_at) || Date.now(),
         })),
       )

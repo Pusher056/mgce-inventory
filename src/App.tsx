@@ -6,6 +6,8 @@ import { applyUpdate, isUpdateReady, subscribeUpdate } from './pwa'
 import Dashboard, { type ModuleId } from './components/Dashboard'
 import Home from './components/Home'
 import SessionView from './components/SessionView'
+import EventsView from './components/EventsView'
+import EventDetail from './components/EventDetail'
 import type { Session } from './types'
 
 export default function App() {
@@ -14,28 +16,44 @@ export default function App() {
   const [module, setModule] = useState<ModuleId | null>(null)
   // Always open on the menu (list of counts), per user preference
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [eventId, setEventId] = useState<string | null>(null)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
   const updateReady = useSyncExternalStore(subscribeUpdate, isUpdateReady)
   const session: Session | undefined = useLiveQuery(
     () => (sessionId ? db.sessions.get(sessionId) : undefined),
     [sessionId],
   )
+  const event = useLiveQuery(() => (eventId ? db.events.get(eventId) : undefined), [eventId])
 
   const [showAiWarn, setShowAiWarn] = useState(true)
 
   return (
     <>
       <div className="header">
-        {(sessionId || module) && (
+        {(sessionId || eventId || module) && (
           <button
             className="back-btn"
-            onClick={() => (sessionId ? setSessionId(null) : setModule(null))}
+            onClick={() => {
+              if (sessionId) setSessionId(null)
+              else if (eventId) setEventId(null)
+              else setModule(null)
+            }}
             aria-label="Back"
           >
             ‹
           </button>
         )}
-        <h1>{session ? session.name : module === 'inventory' ? 'Inventory' : 'MGCE Operations'}</h1>
+        <h1>
+          {session
+            ? session.name
+            : event
+              ? event.name
+              : module === 'inventory'
+                ? 'Inventory'
+                : module === 'events'
+                  ? 'Events & Pack List'
+                  : 'MGCE Operations'}
+        </h1>
         <button
           className="sync-pill"
           onClick={() => {
@@ -65,8 +83,12 @@ export default function App() {
 
       {session ? (
         <SessionView session={session} />
+      ) : event ? (
+        <EventDetail eventId={event.id} />
       ) : module === 'inventory' ? (
         <Home onOpen={(s) => setSessionId(s.id)} />
+      ) : module === 'events' ? (
+        <EventsView onOpen={(e) => setEventId(e.id)} />
       ) : (
         <Dashboard onOpen={setModule} />
       )}

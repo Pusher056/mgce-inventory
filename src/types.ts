@@ -115,9 +115,71 @@ export interface Thumb {
   createdAt: number
 }
 
+/**
+ * An event, as the planners describe it in the MO & Packing List.
+ *
+ * The field names follow the 2026 template's header block so importing one of
+ * their files is a direct mapping, not a translation. Times stay free text on
+ * purpose — they write "6-9PM", "3PM", "4-5PM", and forcing a clock picker
+ * would lose meaning ("Driver to pick up on the way" is a real answer).
+ */
+export interface EventRec {
+  id: string
+  name: string
+  /** Event day, midnight local. The template writes it as "Thursday, December 11". */
+  date: number
+  location: string
+  address: string
+  serviceEntrance: string
+  eventTime: string
+  callTime: string
+  guestCount: number | null
+  onsiteContact: string
+  /** As written in the template: "Ilana Schackman 973 818 2600" */
+  planner: string
+  /** NS, GJ, PJ, IS, BW — auto-filled into pack list notes ("NS to order") */
+  plannerInitials: string
+  /** The ops block: not the planners' job, this is what the user has to act on. */
+  iceNeeds: string
+  iceDeliveryTime: string
+  kitchenPickup: string
+  kitchenDelivery: string
+  notes: string
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * One line of a pack list. Two kinds share this shape:
+ *  - linked to inventory (`productId`) → commits and later moves stock
+ *  - free text (`productId: null`) → special requests, rentals, office items;
+ *    never touches the warehouse
+ */
+export interface PackLine {
+  id: string
+  eventId: string
+  /** Template section, e.g. "STORAGE BEVERAGE-LIQUOR (HOUSE)", or a custom one */
+  section: string
+  sortIndex: number
+  productId: string | null
+  /** Free-text name, or a snapshot of the product name so old lists stay readable */
+  label: string
+  size: string
+  qtyRequested: number
+  /** Filled by the captain after the event; null until then */
+  qtyReturned: number | null
+  qtyOpened: number | null
+  /** Bought on the street during the event — leftovers come back into stock */
+  qtyBought: number | null
+  note: string
+  /** The user ticked it off while packing in the warehouse */
+  packed: 0 | 1
+  updatedAt: number
+}
+
 export interface OutboxItem {
   seq?: number
-  table: 'products' | 'sessions' | 'entries'
+  table: 'products' | 'sessions' | 'entries' | 'events' | 'pack_lines'
   id: string
   ts: number
 }
@@ -129,9 +191,22 @@ export interface OutboxItem {
  */
 export interface Tombstone {
   id: string
-  table: 'products' | 'sessions' | 'entries'
+  table: 'products' | 'sessions' | 'entries' | 'events' | 'pack_lines'
   ts: number
 }
+
+/** Section names as they appear in the 2026 template, in template order. */
+export const PACK_SECTIONS = [
+  'STORAGE BEVERAGE-N/A',
+  'STORAGE BEVERAGE-BEER (HOUSE)',
+  'STORAGE BEVERAGE-WINE (HOUSE)',
+  'STORAGE BEVERAGE-LIQUOR (HOUSE)',
+  'KITCHEN BEVERAGE/GARNISH',
+  'OFFICE ITEMS/EQUIPMENT',
+  'DISPOSABLES/MISC',
+  'SPECIALTY/MISC. (EQUIP + BEVERAGE)',
+  'RENTALS',
+] as const
 
 export function totalBottles(e: { bottles: number; cases: number }, unitsPerCase: number): number {
   return e.cases * unitsPerCase + e.bottles

@@ -1,6 +1,17 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { supabase } from './supabase'
-import type { Product, Session, Entry, LocalPhoto, CachedImage, OutboxItem, Thumb, Tombstone } from './types'
+import type {
+  Product,
+  Session,
+  Entry,
+  LocalPhoto,
+  CachedImage,
+  OutboxItem,
+  Thumb,
+  Tombstone,
+  EventRec,
+  PackLine,
+} from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
   products: EntityTable<Product, 'id'>
@@ -11,6 +22,8 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   thumbs: EntityTable<Thumb, 'productId'>
   outbox: EntityTable<OutboxItem, 'seq'>
   tombstones: EntityTable<Tombstone, 'id'>
+  events: EntityTable<EventRec, 'id'>
+  packLines: EntityTable<PackLine, 'id'>
 }
 
 db.version(1).stores({
@@ -31,6 +44,12 @@ db.version(2).stores({
 // from the server (see pullFromServer in sync.ts). Additive: no data is touched.
 db.version(3).stores({
   tombstones: 'id, table',
+})
+
+// v4 adds Events & Pack List. Additive: nothing existing is touched.
+db.version(4).stores({
+  events: 'id, date, updatedAt',
+  packLines: 'id, eventId, productId, [eventId+section]',
 })
 
 export function uuid(): string {
@@ -146,6 +165,90 @@ export async function pushDelete(table: Tombstone['table'], id: string): Promise
     // offline — the tombstone stays and sync.ts will retry
     return false
   }
+}
+
+/* ---------- Events & Pack List ---------- */
+
+export async function createEvent(partial: Partial<EventRec>): Promise<EventRec> {
+  const ev: EventRec = {
+    id: uuid(),
+    name: '',
+    date: Date.now(),
+    location: '',
+    address: '',
+    serviceEntrance: '',
+    eventTime: '',
+    callTime: '',
+    guestCount: null,
+    onsiteContact: '',
+    planner: '',
+    plannerInitials: '',
+    iceNeeds: '',
+    iceDeliveryTime: '',
+    kitchenPickup: '',
+    kitchenDelivery: '',
+    notes: '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...partial,
+  }
+  await db.events.add(ev)
+  await queueSync('events', ev.id)
+  return ev
+}
+
+export async function updateEvent(id: string, changes: Partial<EventRec>) {
+  await db.events.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('events', id)
+}
+
+export async function deleteEvent(id: string) {
+  const lineIds = (await db.packLines.where('eventId').equals(id).toArray()).map((l) => l.id)
+  await db.packLines.where('eventId').equals(id).delete()
+  await db.events.delete(id)
+  await db.outbox.where('id').anyOf([id, ...lineIds]).delete()
+  await db.tombstones.put({ id, table: 'events', ts: Date.now() })
+  await db.tombstones.bulkPut(lineIds.map((l) => ({ id: l, table: 'pack_lines' as const, ts: Date.now() })))
+  // Lines cascade via FK once the server confirms the event is gone.
+  if (await pushDelete('events', id)) await db.tombstones.bulkDelete(lineIds)
+}
+
+export async function addPackLine(partial: Partial<PackLine> & { eventId: string; section: string }): Promise<PackLine> {
+  const last = await db.packLines
+    .where('[eventId+section]')
+    .equals([partial.eventId, partial.section])
+    .reverse()
+    .sortBy('sortIndex')
+  const line: PackLine = {
+    id: uuid(),
+    sortIndex: (last[0]?.sortIndex ?? -1) + 1,
+    productId: null,
+    label: '',
+    size: '',
+    qtyRequested: 1,
+    qtyReturned: null,
+    qtyOpened: null,
+    qtyBought: null,
+    note: '',
+    packed: 0,
+    updatedAt: Date.now(),
+    ...partial,
+  }
+  await db.packLines.add(line)
+  await queueSync('pack_lines', line.id)
+  return line
+}
+
+export async function updatePackLine(id: string, changes: Partial<PackLine>) {
+  await db.packLines.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('pack_lines', id)
+}
+
+export async function deletePackLine(id: string) {
+  await db.packLines.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'pack_lines', ts: Date.now() })
+  await pushDelete('pack_lines', id)
 }
 
 export async function savePhoto(productId: string, blob: Blob): Promise<string> {

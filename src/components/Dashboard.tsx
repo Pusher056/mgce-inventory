@@ -31,7 +31,7 @@ const MODULES: ModuleDef[] = [
     icon: '📋',
     title: 'Events & Pack List',
     blurb: 'Build the MO Pack List, send what goes out, log what comes back',
-    ready: false,
+    ready: true,
   },
   {
     id: 'reports',
@@ -45,6 +45,7 @@ const MODULES: ModuleDef[] = [
 export default function Dashboard({ onOpen }: { onOpen: (m: ModuleId) => void }) {
   const products = useLiveQuery(() => db.products.count(), [])
   const sessions = useLiveQuery(() => db.sessions.count(), [])
+  const events = useLiveQuery(() => db.events.count(), [])
 
   return (
     <div className="screen">
@@ -66,6 +67,11 @@ export default function Dashboard({ onOpen }: { onOpen: (m: ModuleId) => void })
               {m.id === 'inventory' && products !== undefined && (
                 <div className="dash-stat">
                   {products} products · {sessions ?? 0} count{sessions === 1 ? '' : 's'}
+                </div>
+              )}
+              {m.id === 'events' && events !== undefined && events > 0 && (
+                <div className="dash-stat">
+                  {events} event{events === 1 ? '' : 's'}
                 </div>
               )}
             </div>
