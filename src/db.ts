@@ -188,6 +188,7 @@ export async function createEvent(partial: Partial<EventRec>): Promise<EventRec>
     kitchenPickup: '',
     kitchenDelivery: '',
     notes: '',
+    packSections: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...partial,

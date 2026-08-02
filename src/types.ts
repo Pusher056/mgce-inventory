@@ -145,6 +145,12 @@ export interface EventRec {
   kitchenPickup: string
   kitchenDelivery: string
   notes: string
+  /**
+   * Sections chosen for this event's pack list, in the order they were added.
+   * Kept on the event rather than inferred from the lines, so a section you
+   * opened but have not filled yet is still there when you come back.
+   */
+  packSections: string[]
   createdAt: number
   updatedAt: number
 }

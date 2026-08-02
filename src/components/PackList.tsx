@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, addPackLine, updatePackLine, deletePackLine } from '../db'
+import { db, addPackLine, updatePackLine, deletePackLine, updateEvent } from '../db'
 import { syncNow } from '../sync'
-import { PACK_SECTIONS, displayName, type PackLine, type Product } from '../types'
-import ProductSearch from './ProductSearch'
+import { PACK_SECTIONS, type PackLine } from '../types'
+import ProductSearch, { type Picked } from './ProductSearch'
 
 /** "Natalie Swett" → "NS", so notes come out as "NS to order". */
 export function initialsOf(planner: string): string {
@@ -55,38 +55,44 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
   const initials = initialsOf(ev?.planner ?? '')
 
-  // A section with no lines yet is not worth storing, but it has to stay on
-  // screen — adding one and watching it vanish because you had not put anything
-  // in it yet would be baffling.
-  const [empties, setEmpties] = useState<string[]>([])
-
-  /** Sections that have lines, in template order, then any custom ones. */
+  /** Sections live on the event, so an empty one survives leaving the screen. */
   const sections = useMemo(() => {
-    const used = [...new Set([...lines.map((l) => l.section), ...empties])]
-    const known = PACK_SECTIONS.filter((s) => used.includes(s))
-    const custom = used.filter((s) => !PACK_SECTIONS.includes(s as (typeof PACK_SECTIONS)[number])).sort()
-    return [...known, ...custom]
-  }, [lines, empties])
+    const stored = ev?.packSections ?? []
+    // any section that somehow has lines but is not listed still gets shown
+    const orphans = [...new Set(lines.map((l) => l.section))].filter((s) => !stored.includes(s))
+    return [...stored, ...orphans]
+  }, [ev?.packSections, lines])
 
   const unusedSections = PACK_SECTIONS.filter((s) => !sections.includes(s))
 
-  function addSection(name: string) {
+  async function addSection(name: string) {
     const clean = name.trim()
     if (!clean) return
     setAddingSection(false)
     setCustomSection('')
-    setEmpties((prev) => (prev.includes(clean) ? prev : [...prev, clean]))
+    if (!sections.includes(clean)) await updateEvent(eventId, { packSections: [...sections, clean] })
     // straight into the picker: adding a section is only ever a step towards
     // putting something in it
     setPicking(clean)
+    void syncNow()
   }
 
-  async function pick(section: string, p: Product) {
+  async function removeSection(section: string) {
+    const rows = lines.filter((l) => l.section === section)
+    for (const l of rows) await deletePackLine(l.id)
+    await updateEvent(eventId, { packSections: sections.filter((s) => s !== section) })
+    void syncNow()
+  }
+
+  async function pick(section: string, p: Picked) {
     await addPackLine({
       eventId,
       section,
-      productId: p.id,
-      label: displayName(p) || p.name,
+      productId: p.product?.id ?? null,
+      label: p.label,
+      qtyRequested: p.qty,
+      // catalog and special-request lines are things somebody has to go get
+      note: p.product || !initials ? '' : `${initials} to order`,
     })
     void syncNow()
   }
@@ -105,15 +111,13 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     void syncNow()
   }
 
-  const totalLines = lines.length
-
   return (
     <div className="screen">
       <button className="link-btn" onClick={onBack}>
         ‹ Back to event
       </button>
 
-      {totalLines === 0 && (
+      {sections.length === 0 && (
         <div className="muted" style={{ textAlign: 'center', margin: '30px 0 20px', lineHeight: 1.6 }}>
           Empty pack list.
           <br />
@@ -125,7 +129,23 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         const rows = lines.filter((l) => l.section === section).sort((a, b) => a.sortIndex - b.sortIndex)
         return (
           <div key={section} className="pack-section">
-            <div className="ev-section-title">{section}</div>
+            <div className="pack-section-head">
+              <div className="ev-section-title" style={{ margin: 0 }}>
+                {section}
+              </div>
+              <span className="muted small">{rows.length}</span>
+              <button
+                className="row-action danger"
+                title={`Remove ${section}`}
+                onClick={() => {
+                  if (rows.length === 0 || window.confirm(`Remove "${section}" and its ${rows.length} lines?`)) {
+                    void removeSection(section)
+                  }
+                }}
+              >
+                🗑
+              </button>
+            </div>
             {rows.map((l) => {
               const p = l.productId ? productMap.get(l.productId) : undefined
               return (
@@ -173,7 +193,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         ＋ Add section
       </button>
 
-      {picking && <ProductSearch onClose={() => setPicking(null)} onPick={(p) => void pick(picking, p)} />}
+      {picking && <ProductSearch onClose={() => setPicking(null)} onPick={(p) => void pick(picking!, p)} />}
 
       {special && (
         <div className="sheet-backdrop" onClick={() => setSpecial(null)}>
@@ -207,7 +227,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
             <h2>Add section</h2>
             <div className="pick-list">
               {unusedSections.map((s) => (
-                <button key={s} className="pick-row" onClick={() => addSection(s)}>
+                <button key={s} className="pick-row" onClick={() => void addSection(s)}>
                   <div className="info">
                     <div className="name">{s}</div>
                   </div>
@@ -219,13 +239,13 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
             <input
               value={customSection}
               onChange={(e) => setCustomSection(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addSection(customSection)}
+              onKeyDown={(e) => e.key === 'Enter' && void addSection(customSection)}
             />
             <button
               className="big-btn green"
               style={{ marginTop: 12 }}
               disabled={!customSection.trim()}
-              onClick={() => addSection(customSection)}
+              onClick={() => void addSection(customSection)}
             >
               Add section
             </button>

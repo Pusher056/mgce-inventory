@@ -124,6 +124,7 @@ function eventToRow(e: EventRec) {
     kitchen_pickup: e.kitchenPickup,
     kitchen_delivery: e.kitchenDelivery,
     notes: e.notes,
+    pack_sections: e.packSections ?? [],
     created_at: new Date(e.createdAt).toISOString(),
     updated_at: new Date(e.updatedAt).toISOString(),
   }
@@ -687,6 +688,7 @@ export async function pullFromServer() {
           kitchenPickup: r.kitchen_pickup ?? '',
           kitchenDelivery: r.kitchen_delivery ?? '',
           notes: r.notes ?? '',
+          packSections: r.pack_sections ?? [],
           createdAt: Date.parse(r.created_at) || Date.now(),
           updatedAt: Date.parse(r.updated_at) || Date.now(),
         })),

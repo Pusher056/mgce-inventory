@@ -343,7 +343,37 @@ textarea {
   padding: 6px 0;
   font-size: 14px;
 }
-.pack-section { margin-bottom: 22px; }
+/* Each section is a card: three sections in a row used to read as one long
+   list, with no way to tell where Office ended and Specialty began. */
+.pack-section {
+  margin-bottom: 16px;
+  border: 1px solid var(--bg3);
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+}
+.pack-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--bg3);
+}
+.pack-section-head .ev-section-title { flex: 1; min-width: 0; }
+.stock-ok { color: var(--muted); }
+.stock-out { color: #ef7a7a; font-weight: 700; }
+.qty.sm button { width: 32px; height: 32px; font-size: 16px; }
+.qty.sm input { width: 40px; font-size: 14px; padding: 6px 2px; }
+.pick-row .pick-add {
+  background: var(--bg3);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: 9px;
+  padding: 9px 12px;
+  width: auto;
+  flex: none;
+}
 .pack-row {
   display: flex;
   align-items: flex-start;
