@@ -57,6 +57,8 @@ export default function SessionView({ session }: { session: Session }) {
   // Shelf-location mode: scan a shelf QR (B-5-6) → every product scanned after gets that ubicación
   const [activeLocation, setActiveLocation] = useState<string | null>(null)
   const [exporting, setExporting] = useState<null | 'pdf' | 'excel'>(null)
+  /** Desktop search box: filters the list in place instead of opening a sheet. */
+  const [filter, setFilter] = useState('')
 
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
@@ -87,8 +89,25 @@ export default function SessionView({ session }: { session: Session }) {
     }
   }, [])
 
-  // All entries are the inventory — including 0/0, which means "out of stock"
-  const visibleEntries = entries
+  // All entries are the inventory — including 0/0, which means "out of stock".
+  // The desktop search box narrows the same list rather than opening a sheet.
+  const visibleEntries = useMemo(() => {
+    const needle = filter.trim().toLowerCase()
+    if (!needle) return entries
+    return entries.filter((e) => {
+      const p = productMap.get(e.productId)
+      if (!p) return false
+      return (
+        displayName(p).toLowerCase().includes(needle) ||
+        (p.brand ?? '').toLowerCase().includes(needle) ||
+        (p.alias ?? '').toLowerCase().includes(needle) ||
+        (p.subcategory ?? '').toLowerCase().includes(needle) ||
+        (p.location ?? '').toLowerCase().includes(needle) ||
+        (p.barcode ?? '').includes(needle)
+      )
+    })
+  }, [entries, productMap, filter])
+
   const totals = visibleEntries.reduce(
     (acc, e) => {
       const p = productMap.get(e.productId)
@@ -267,8 +286,17 @@ export default function SessionView({ session }: { session: Session }) {
           {groups.map((g) => (
             <button
               key={g.key}
-              className={`rail-item${collapsed.has(g.key) ? ' off' : ''}`}
-              onClick={() => toggleCollapsed(g.key)}
+              className="rail-item"
+              onClick={() => {
+                // jump to the section instead of collapsing it: the rail is for
+                // getting somewhere in a 200-row list, not for hiding things.
+                // Animating across thousands of pixels just makes you wait, so
+                // long jumps land immediately and only short ones glide.
+                const el = document.getElementById(`cat-${g.key}`)
+                if (!el) return
+                const far = Math.abs(el.getBoundingClientRect().top) > 1800
+                el.scrollIntoView({ behavior: far ? 'auto' : 'smooth', block: 'start' })
+              }}
             >
               <span>{g.label}</span>
               <span className="muted">{g.count}</span>
@@ -280,28 +308,40 @@ export default function SessionView({ session }: { session: Session }) {
         </aside>
 
         <div className="main-col">
-      <div className="btn-row" style={{ marginTop: 8 }}>
-        <button className="big-btn primary" style={{ flex: 2 }} onClick={() => setModal({ t: 'scanner' })}>
-          📷 Scan
-        </button>
+      {/* Capture actions need a camera, so they belong to the phone. On a
+          laptop they are hidden and replaced by a real search field: the desk
+          is where you look things up, the warehouse is where you count. */}
+      <div className="phone-actions">
+        <div className="btn-row" style={{ marginTop: 8 }}>
+          <button className="big-btn primary" style={{ flex: 2 }} onClick={() => setModal({ t: 'scanner' })}>
+            📷 Scan barcode
+          </button>
+        </div>
+        <div className="btn-row" style={{ marginTop: 10 }}>
+          <button className="big-btn" onClick={() => fileRef.current?.click()}>
+            🤖 Identify bottle
+          </button>
+          <button className="big-btn" onClick={() => setModal({ t: 'picker' })}>
+            🔍 Search
+          </button>
+        </div>
+        {visibleEntries.length > 0 && (
+          <button
+            className="big-btn ghost"
+            style={{ marginTop: 10, minHeight: 46, fontSize: 15 }}
+            onClick={() => setModal({ t: 'organize' })}
+          >
+            📍 Assign locations
+          </button>
+        )}
       </div>
-      <div className="btn-row" style={{ marginTop: 10 }}>
-        <button className="big-btn" onClick={() => fileRef.current?.click()}>
-          🖼 Photo
-        </button>
-        <button className="big-btn" onClick={() => setModal({ t: 'picker' })}>
-          🔍 Search
-        </button>
-      </div>
-      {visibleEntries.length > 0 && (
-        <button
-          className="big-btn ghost"
-          style={{ marginTop: 10, minHeight: 46, fontSize: 15 }}
-          onClick={() => setModal({ t: 'organize' })}
-        >
-          📍 Assign locations
-        </button>
-      )}
+
+      <input
+        className="desk-search"
+        placeholder="Search this inventory — name, brand, type or location…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
       {activeLocation && (
         <button
           className="small"
@@ -369,7 +409,7 @@ export default function SessionView({ session }: { session: Session }) {
           </div>
         )}
         {groups.map((g) => (
-          <div key={g.key}>
+          <div key={g.key} id={`cat-${g.key}`} style={{ scrollMarginTop: 76 }}>
             <button
               className="cat-header"
               style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}

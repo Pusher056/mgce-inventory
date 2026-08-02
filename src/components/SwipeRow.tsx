@@ -1,9 +1,12 @@
 import { useRef, useState, type ReactNode } from 'react'
 
 /**
- * Swipe the row to the right (like deleting an email in Outlook/Gmail)
- * to reveal Eliminar (and optionally Ajustar). Uses pointer events so it
- * also works with a mouse. Vertical scrolling is preserved via touch-action: pan-y.
+ * Row actions, offered the way each device expects them.
+ *
+ * On a phone: swipe right to reveal Delete / Adjust, like deleting an email.
+ * On a laptop: plain buttons at the end of the row. Dragging with a mouse
+ * fought with native text selection and the row sprang back, leaving the
+ * delete button unreachable — swiping is a touch idiom, not a pointer one.
  */
 export default function SwipeRow({
   onDelete,
@@ -19,6 +22,8 @@ export default function SwipeRow({
   const drag = useRef<{ startX: number; startY: number; base: number; active: boolean; moved: boolean } | null>(null)
 
   function onPointerDown(e: React.PointerEvent) {
+    // a mouse drag would otherwise start selecting the row's text and abort the gesture
+    if (e.pointerType === 'mouse') e.preventDefault()
     drag.current = { startX: e.clientX, startY: e.clientY, base: dx, active: false, moved: false }
   }
 
@@ -93,6 +98,18 @@ export default function SwipeRow({
         onClickCapture={onClickCapture}
       >
         {children}
+      </div>
+
+      {/* laptop: no gesture needed, the actions are simply there */}
+      <div className="row-actions">
+        {onAdjust && (
+          <button className="row-action" onClick={onAdjust} title="Adjust">
+            ✎
+          </button>
+        )}
+        <button className="row-action danger" onClick={onDelete} title="Delete">
+          🗑
+        </button>
       </div>
     </div>
   )
