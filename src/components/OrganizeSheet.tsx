@@ -87,7 +87,7 @@ export default function OrganizeSheet({
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ minHeight: '84dvh' }}>
-        <h2>Organize inventory</h2>
+        <h2>Assign locations</h2>
         <div className="muted small" style={{ marginBottom: 10 }}>
           {doneCount} of {inInventory.length} done · {pendingCount} left
         </div>

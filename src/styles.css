@@ -126,6 +126,16 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .session-row .info { flex: 1; }
 .session-row .name { font-weight: 700; font-size: 16px; }
 
+/* On phones the workspace wrapper and the category rail do not exist as far as
+   layout is concerned — `display: contents` makes the wrapper transparent, so
+   the phone renders exactly what it did before the desktop layout was added. */
+.workspace { display: contents; }
+.cat-rail { display: none; }
+.row-main { all: unset; flex: 1; min-width: 0; cursor: pointer; }
+.row-type { display: none; }
+.row-loc { color: var(--amber); font-weight: 700; }
+.row-loc:empty { display: none; }
+
 /* ---------- product list ---------- */
 .product-row {
   width: 100%;
@@ -433,4 +443,119 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .qr-label { text-align: center; break-inside: avoid; }
   .qr-label img { width: 5cm; height: 5cm; }
   .qr-label div { font: 800 24pt Arial, sans-serif; color: #000; }
+}
+
+/* ==========================================================================
+   Wide screens (laptop / desktop)
+
+   Everything below only applies from 900px up. Phones never see any of it, so
+   the layout the warehouse relies on cannot be affected by changes here.
+   The same app simply rearranges itself when there is room: a category rail
+   beside the list, and the row meta lined up as real columns.
+   ========================================================================== */
+@media (min-width: 900px) {
+  #root { max-width: 1180px; }
+
+  .header { padding: 14px 24px; }
+  .header h1 { font-size: 20px; }
+
+  .screen { padding: 0 24px 24px; }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* category rail */
+  .cat-rail {
+    display: block;
+    position: sticky;
+    top: 76px;
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 12px 10px;
+  }
+  .rail-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 8px 8px;
+  }
+  .rail-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 8px;
+    border-radius: 8px;
+  }
+  .rail-item:hover { background: var(--bg3); }
+  .rail-item.off { color: var(--muted); }
+  .rail-item.off span:first-child { text-decoration: line-through; }
+  .rail-total {
+    border-top: 1px solid var(--bg3);
+    margin-top: 8px;
+    padding: 10px 8px 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .rail-total b { color: var(--text); font-size: 15px; }
+
+  .main-col { display: flex; flex-direction: column; min-width: 0; }
+
+  /* actions become a compact toolbar instead of stacked full-width buttons */
+  .main-col > .btn-row { max-width: 560px; }
+  .main-col > .btn-row .big-btn { min-height: 44px; font-size: 15px; }
+  .main-col > .big-btn.ghost { max-width: 260px; }
+
+  /* rows line up as columns: product | type | location | qty */
+  .product-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 130px 92px 62px;
+    align-items: center;
+    gap: 14px;
+  }
+  .row-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 130px 92px;
+    align-items: center;
+    gap: 14px;
+    /* span the three middle columns of the row grid */
+    grid-column: 2 / 5;
+  }
+  .row-main .name { grid-column: 1; }
+  .row-meta { grid-column: 1; grid-row: 2; }
+  .row-type { display: block; grid-column: 2; grid-row: 1 / 3; }
+  .row-loc { grid-column: 3; grid-row: 1 / 3; }
+  .row-loc:empty { display: block; }
+  .qty { grid-column: 5; text-align: right; }
+
+  /* the totals bar sits at the end of the column, not stuck to the viewport */
+  .totals-bar {
+    position: static;
+    margin: 16px 0 0;
+    border-radius: var(--radius);
+  }
+
+  /* sheets read better as centred dialogs on a big screen */
+  .sheet-backdrop { align-items: center; }
+  .sheet {
+    max-width: 620px;
+    border-radius: 16px;
+    padding: 22px;
+  }
+
+  /* home: counts as a grid of cards */
+  .session-row { padding: 18px; }
 }

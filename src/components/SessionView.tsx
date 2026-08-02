@@ -215,10 +215,9 @@ export default function SessionView({ session }: { session: Session }) {
       >
         <div className="product-row" style={{ padding: '8px 10px' }}>
           <Thumb product={p} />
-          <button
-            style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}
-            onClick={() => setModal({ t: 'count', productId: p.id })}
-          >
+          {/* the meta pieces are separate elements so a wide screen can line
+              them up as real columns without changing the phone layout */}
+          <button className="row-main" onClick={() => setModal({ t: 'count', productId: p.id })}>
             <div className="name">
               {displayName(p) ||
                 (p.needsLookup === 1 || p.needsAi === 1
@@ -227,17 +226,14 @@ export default function SessionView({ session }: { session: Session }) {
                     : '(photo — name pending)'
                   : '(unidentified — tap to name it)')}
             </div>
-            <div className="muted small">
+            <div className="row-meta muted small">
               {e.cases > 0 && `${e.cases} case${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
               {e.cases > 0 && e.bottles > 0 && ' + '}
               {e.bottles > 0 && `${e.bottles} loose`}
               {e.cases === 0 && e.bottles === 0 && 'out of stock'}
             </div>
-            {p.location && (
-              <div className="small" style={{ color: 'var(--amber)', fontWeight: 700 }}>
-                📍 {p.location}
-              </div>
-            )}
+            <div className="row-type muted small">{p.subcategory ?? ''}</div>
+            <div className="row-loc small">{p.location ? `📍 ${p.location}` : ''}</div>
           </button>
           {!p.name && p.needsLookup === 0 && p.needsAi === 0 && (
             <button
@@ -262,6 +258,28 @@ export default function SessionView({ session }: { session: Session }) {
 
   return (
     <div className="screen">
+      {/* On a phone .workspace is display:contents — the wrapper vanishes and
+          the layout is exactly what it has always been. On a wide screen it
+          becomes a grid with the category rail beside the list. */}
+      <div className="workspace">
+        <aside className="cat-rail">
+          <div className="rail-title">Categories</div>
+          {groups.map((g) => (
+            <button
+              key={g.key}
+              className={`rail-item${collapsed.has(g.key) ? ' off' : ''}`}
+              onClick={() => toggleCollapsed(g.key)}
+            >
+              <span>{g.label}</span>
+              <span className="muted">{g.count}</span>
+            </button>
+          ))}
+          <div className="rail-total">
+            <b>{totals.bottles}</b> bottles · {visibleEntries.length} products
+          </div>
+        </aside>
+
+        <div className="main-col">
       <div className="btn-row" style={{ marginTop: 8 }}>
         <button className="big-btn primary" style={{ flex: 2 }} onClick={() => setModal({ t: 'scanner' })}>
           📷 Scan
@@ -281,7 +299,7 @@ export default function SessionView({ session }: { session: Session }) {
           style={{ marginTop: 10, minHeight: 46, fontSize: 15 }}
           onClick={() => setModal({ t: 'organize' })}
         >
-          🗂 Organize (photos & locations)
+          📍 Assign locations
         </button>
       )}
       {activeLocation && (
@@ -409,6 +427,8 @@ export default function SessionView({ session }: { session: Session }) {
           <button onClick={() => setModal({ t: 'export' })}>Export</button>
         </div>
       )}
+        </div>
+      </div>
 
       {/* ---------- modals ---------- */}
 
