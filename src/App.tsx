@@ -3,12 +3,16 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
 import { getSyncState, resetAiSkip, subscribeSync, syncNow } from './sync'
 import { applyUpdate, isUpdateReady, subscribeUpdate } from './pwa'
+import Dashboard, { type ModuleId } from './components/Dashboard'
 import Home from './components/Home'
 import SessionView from './components/SessionView'
 import type { Session } from './types'
 
 export default function App() {
-  // Always open on the menu (list of conteos), per user preference
+  // null = dashboard. Modules are separate spaces so new ones (events, reports)
+  // can be added without disturbing the inventory flow that runs the warehouse.
+  const [module, setModule] = useState<ModuleId | null>(null)
+  // Always open on the menu (list of counts), per user preference
   const [sessionId, setSessionId] = useState<string | null>(null)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
   const updateReady = useSyncExternalStore(subscribeUpdate, isUpdateReady)
@@ -22,12 +26,16 @@ export default function App() {
   return (
     <>
       <div className="header">
-        {sessionId && (
-          <button className="back-btn" onClick={() => setSessionId(null)} aria-label="Back">
+        {(sessionId || module) && (
+          <button
+            className="back-btn"
+            onClick={() => (sessionId ? setSessionId(null) : setModule(null))}
+            aria-label="Back"
+          >
             ‹
           </button>
         )}
-        <h1>{session ? session.name : 'MGCE Inventory'}</h1>
+        <h1>{session ? session.name : module === 'inventory' ? 'Inventory' : 'MGCE Operations'}</h1>
         <button
           className="sync-pill"
           onClick={() => {
@@ -55,7 +63,13 @@ export default function App() {
         </button>
       )}
 
-      {session ? <SessionView session={session} /> : <Home onOpen={(s) => setSessionId(s.id)} />}
+      {session ? (
+        <SessionView session={session} />
+      ) : module === 'inventory' ? (
+        <Home onOpen={(s) => setSessionId(s.id)} />
+      ) : (
+        <Dashboard onOpen={setModule} />
+      )}
 
       {sync.aiKeyMissing && showAiWarn && (
         <div className="toast" onClick={() => setShowAiWarn(false)}>
