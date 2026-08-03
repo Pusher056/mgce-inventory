@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, updateEvent } from '../db'
 import type { EventRec } from '../types'
-import PackList from './PackList'
 
 /**
  * Name and number share one field, the way the template writes it
@@ -27,13 +25,13 @@ function formatPlannerLine(raw: string): string {
  * (ice, driver pickup, delivery). Everything saves as you type — no Save button
  * to forget, and no half-typed value lost when the phone locks.
  */
-export default function EventDetail({ eventId }: { eventId: string }) {
+export default function EventDetail({ eventId, onOpenPackList }: { eventId: string; onOpenPackList: () => void }) {
   const ev = useLiveQuery(() => db.events.get(eventId), [eventId])
   const lineCount = useLiveQuery(() => db.packLines.where('eventId').equals(eventId).count(), [eventId]) ?? 0
-  const [showPackList, setShowPackList] = useState(false)
 
   if (!ev) return <div className="screen" />
-  if (showPackList) return <PackList eventId={eventId} onBack={() => setShowPackList(false)} />
+  // a pack list exists as soon as it has a section, even an empty one
+  const started = lineCount > 0 || (ev.packSections?.length ?? 0) > 0
 
   const set = (k: keyof EventRec) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     void updateEvent(eventId, { [k]: e.target.value } as Partial<EventRec>)
@@ -49,8 +47,12 @@ export default function EventDetail({ eventId }: { eventId: string }) {
   return (
     <div className="screen">
       {/* The pack list is what this screen is for; the rest is reference. */}
-      <button className="big-btn primary" style={{ marginTop: 12 }} onClick={() => setShowPackList(true)}>
-        {lineCount === 0 ? '＋ Build pack list' : `Open pack list · ${lineCount} lines`}
+      <button className="big-btn primary" style={{ marginTop: 12 }} onClick={onOpenPackList}>
+        {!started
+          ? '＋ Build pack list'
+          : lineCount === 0
+            ? 'Go to the pack list'
+            : `Go to the pack list · ${lineCount} line${lineCount === 1 ? '' : 's'}`}
       </button>
 
       <div className="ev-section-title" style={{ marginTop: 26 }}>

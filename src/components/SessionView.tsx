@@ -287,7 +287,9 @@ export default function SessionView({ session }: { session: Session }) {
               {e.cases > 0 && `${e.cases} case${e.cases === 1 ? '' : 's'} × ${p.unitsPerCase}`}
               {e.cases > 0 && e.bottles > 0 && ' + '}
               {e.bottles > 0 && `${e.bottles} bottle${e.bottles === 1 ? '' : 's'}`}
-              {e.cases === 0 && e.bottles === 0 && 'out of stock'}
+              {/* Office and Dry Storage are lists of what we own, not counts —
+                  calling a stack of trays "out of stock" would just be wrong. */}
+              {e.cases === 0 && e.bottles === 0 && (p.storage ?? 'beverage') === 'beverage' && 'out of stock'}
             </div>
             <div className="row-type muted small">{p.subcategory ?? ''}</div>
             <div className="row-loc small">{p.location ? `📍 ${p.location}` : ''}</div>

@@ -78,6 +78,7 @@ export async function createSession(name: string, location: string): Promise<Ses
 export async function createProduct(partial: Partial<Product>): Promise<Product> {
   const p: Product = {
     id: uuid(),
+    storage: 'beverage',
     barcode: null,
     name: '',
     alias: null,

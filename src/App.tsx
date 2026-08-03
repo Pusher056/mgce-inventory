@@ -8,6 +8,7 @@ import Home from './components/Home'
 import SessionView from './components/SessionView'
 import EventsView from './components/EventsView'
 import EventDetail from './components/EventDetail'
+import PackList from './components/PackList'
 import type { Session } from './types'
 
 export default function App() {
@@ -17,6 +18,9 @@ export default function App() {
   // Always open on the menu (list of counts), per user preference
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [eventId, setEventId] = useState<string | null>(null)
+  // the pack list is a screen inside the event, so the header's back arrow has
+  // to land on the event — not jump all the way out to the list of events
+  const [packListOpen, setPackListOpen] = useState(false)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
   const updateReady = useSyncExternalStore(subscribeUpdate, isUpdateReady)
   const session: Session | undefined = useLiveQuery(
@@ -35,6 +39,7 @@ export default function App() {
             className="back-btn"
             onClick={() => {
               if (sessionId) setSessionId(null)
+              else if (packListOpen) setPackListOpen(false)
               else if (eventId) setEventId(null)
               else setModule(null)
             }}
@@ -83,12 +88,19 @@ export default function App() {
 
       {session ? (
         <SessionView session={session} />
+      ) : event && packListOpen ? (
+        <PackList eventId={event.id} onBack={() => setPackListOpen(false)} />
       ) : event ? (
-        <EventDetail eventId={event.id} />
+        <EventDetail eventId={event.id} onOpenPackList={() => setPackListOpen(true)} />
       ) : module === 'inventory' ? (
         <Home onOpen={(s) => setSessionId(s.id)} />
       ) : module === 'events' ? (
-        <EventsView onOpen={(e) => setEventId(e.id)} />
+        <EventsView
+          onOpen={(e) => {
+            setPackListOpen(false)
+            setEventId(e.id)
+          }}
+        />
       ) : (
         <Dashboard onOpen={setModule} />
       )}

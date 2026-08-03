@@ -463,6 +463,14 @@ textarea {
 .pick-add { color: var(--accent); font-size: 20px; flex: none; }
 .sheet.tall { max-height: 86vh; overflow-y: auto; }
 .added-line { padding: 7px 2px; color: var(--green, var(--muted)); }
+.added-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
 
 /* ---------- modal / sheet ---------- */
 .sheet-backdrop {

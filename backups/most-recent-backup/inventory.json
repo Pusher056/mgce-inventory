@@ -1,9 +1,9 @@
 {
   "app": "mgce-inventory",
-  "savedAt": "2026-08-02T16:44:39.561Z",
+  "savedAt": "2026-08-03T00:11:28.726Z",
   "counts": {
     "products": 249,
-    "sessions": 1,
+    "sessions": 3,
     "entries": 209
   },
   "products": [
@@ -25,7 +25,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cooking Wine",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b204df31-4cab-482f-9bb1-51134f72f507",
@@ -45,7 +46,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": null,
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "11d2fcf3-bda4-4d12-830b-58078609e5ec",
@@ -65,7 +67,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "13bba623-878c-47b3-8569-5b16493e4e01",
@@ -85,7 +88,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cola",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1661811d-b509-48d9-9d5b-6bb4e4587f97",
@@ -105,7 +109,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "26822811-98c0-4200-ba54-1740029e76a1",
@@ -125,7 +130,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cabernet Sauvignon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e3ce7e96-198c-413b-b7d5-0a34e30d4472",
@@ -145,7 +151,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2aa501d2-549c-452f-af26-9f1c36f2b17c",
@@ -165,7 +172,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2cec7cb3-70aa-45ab-9cd3-ef098a7c4b15",
@@ -185,7 +193,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "30a085ba-370d-4d88-bfca-f5f71c0832bf",
@@ -205,7 +214,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ee65984e-b130-435f-9ada-ab2106f0068f",
@@ -225,7 +235,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": null,
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d8652417-3273-4c80-b25a-afe10b6798c8",
@@ -245,7 +256,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": null,
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "34677bf7-19c0-4112-b92b-3087081891f6",
@@ -265,7 +277,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7b8ddea1-f43e-4e9a-8860-4dfb0e2b232f",
@@ -285,7 +298,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8cc6b03b-792c-4486-b2ea-bfd2973fbc15",
@@ -305,7 +319,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8e0f50e2-3906-4050-b2b3-3034146a0a29",
@@ -325,7 +340,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "aa8deb2c-0d7f-46a7-9f73-58e74254b906",
@@ -345,7 +361,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Juice",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ac87dd87-6d74-4806-aaa5-c39445155602",
@@ -365,7 +382,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d0b3fab5-0a8a-4b1a-bace-c69f3371ce78",
@@ -385,7 +403,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d0e9bf2f-0cc5-415d-9826-bdb95cba5959",
@@ -405,7 +424,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d3b44142-3b9a-4cdf-b025-975903f3257c",
@@ -425,7 +445,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d866cfa8-e1b5-4875-8c8a-c42892a10d92",
@@ -445,7 +466,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e5f789d4-1151-4956-bdb1-dba7ca032544",
@@ -465,7 +487,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e9cf5a75-acf7-4acb-94d0-d9733ab80941",
@@ -485,7 +508,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Juice",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "989e22e0-3426-494c-9974-77730b71303d",
@@ -505,7 +529,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "00603670-9af6-4fb9-b6f0-afe1719a38c3",
@@ -525,7 +550,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1451c877-9a6c-46a6-9f37-a415b09995e6",
@@ -545,7 +571,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "31ab29dd-3357-4c2d-ab7b-2971759c7772",
@@ -565,7 +592,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "White Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "3600a07e-6234-46e3-961c-9314eb03a834",
@@ -585,7 +613,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ea1f4980-9877-4af7-a498-e2ac46dbb001",
@@ -605,7 +634,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "38ddcf56-d7d0-4e2e-b533-63a4f99b0a14",
@@ -625,7 +655,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "458e9cc6-45f2-4b27-bbe7-a68902de36ff",
@@ -645,7 +676,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4632d94a-0bd0-4454-b107-8d55ba3d074c",
@@ -665,7 +697,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4bed4149-66f4-4863-ac14-22862cfc8706",
@@ -685,7 +718,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4ce02340-3329-4aec-9806-c5fa816cfa3f",
@@ -705,7 +739,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5cdb6f9e-f8f6-4397-9f28-cd49bac1ba64",
@@ -725,7 +760,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cabernet Sauvignon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5edff4d9-4ce5-48a3-a2df-13dd024b67b7",
@@ -745,7 +781,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "609a2c0f-2ec0-4431-a15f-ab87ec02e499",
@@ -765,7 +802,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rye",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "66e7f285-f82e-4515-ad2e-529d018a2a77",
@@ -785,7 +823,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tempranillo",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "829d168e-5c0d-4d09-bae3-ff42272f74ac",
@@ -805,7 +844,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "White Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a7a01ebe-2549-40ef-b8ee-ed30b5da9bd5",
@@ -825,7 +865,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ac161449-4732-4478-bab4-9717732a1002",
@@ -845,7 +886,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e8437abd-423a-4729-a118-113e83f35cc6",
@@ -865,7 +907,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ebdf9bbf-d7d3-4e9d-9bda-a69341764390",
@@ -885,7 +928,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Prosecco",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ecafea70-d53a-4c6e-9c3a-69d3cfe13e4e",
@@ -905,7 +949,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f9b5c803-3f77-4179-a70b-8e09d63f1f0d",
@@ -925,7 +970,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "feb1af65-bc9d-48d1-be6b-97df5f68faf4",
@@ -945,7 +991,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "fec4ffa7-93ae-46a4-ad29-bd4beca51761",
@@ -965,7 +1012,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "104a8c31-c695-4709-8672-29905555f1db",
@@ -985,7 +1033,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Grigio",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "19247a5d-a4f2-46d8-84b2-578ded75d765",
@@ -1005,7 +1054,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1b5222bc-0056-4d19-bff4-c481040475ee",
@@ -1025,7 +1075,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1d1fd805-8573-4301-bfdd-8b8900c5ee50",
@@ -1045,7 +1096,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1e2b7c78-cb23-4dde-a846-77e260fdf165",
@@ -1065,7 +1117,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2034f28f-6368-47c3-8475-5c2244a9bea1",
@@ -1085,7 +1138,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "25a75028-319d-45af-9dcb-50ed6bbf1e6e",
@@ -1105,7 +1159,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "27eff880-3ca6-4a4c-9eae-970b19d3d2cc",
@@ -1125,7 +1180,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "29ff282f-2ad9-4d21-b343-bec69edecfa9",
@@ -1145,7 +1201,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2ae370d5-1b12-4fed-96a6-a598419e7eeb",
@@ -1165,7 +1222,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Chardonnay",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2c14677c-1983-47c1-ba34-464ad4e5fdb6",
@@ -1185,7 +1243,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2c5bc41d-12ab-4559-844e-292754fa4415",
@@ -1205,7 +1264,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "3065cfc7-0ffc-4ec7-be64-138bda63c8ab",
@@ -1225,7 +1285,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "31c6c97c-c846-41f7-b36d-cf7eb257e1de",
@@ -1245,7 +1306,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "32ac3691-d746-4e62-afae-5ca469f1dbed",
@@ -1265,7 +1327,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "55d8b9f9-5b19-438b-b55c-6a4d9f4c5040",
@@ -1285,7 +1348,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rye",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "561613ce-bc15-40b8-96c0-caa4e67c2c91",
@@ -1305,7 +1369,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "57d7c11f-a781-4978-b5a7-2b237972c5fa",
@@ -1325,7 +1390,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e1087b5c-bc44-494d-90db-6e445d27576b",
@@ -1345,7 +1411,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "01c88dad-df85-40b3-951c-0b6726dc118b",
@@ -1365,7 +1432,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rye",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "396f76cb-e68e-4aed-806a-47c6ce3c8780",
@@ -1385,7 +1453,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "3a0abb48-49b0-4c9d-84fd-06b971339fb0",
@@ -1405,7 +1474,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "3bcdc76e-7d05-4cb0-aad4-484654f88c2d",
@@ -1425,7 +1495,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4183dce5-ca4b-4d07-87f3-819f14c7cc22",
@@ -1445,7 +1516,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4701a24e-50eb-4c41-bfb4-4496486c6f25",
@@ -1465,7 +1537,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4739c19e-ac5f-4b55-83e4-5ab826af2665",
@@ -1485,7 +1558,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "47842379-5418-485b-a910-8d35e58d12a8",
@@ -1505,7 +1579,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4930fda0-194e-4458-a562-c2c349596ff9",
@@ -1525,7 +1600,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4a4f5937-56d9-4d11-b083-297fc94c6e9f",
@@ -1545,7 +1621,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Chardonnay",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4b5cbe58-e9bc-4a70-915b-05117cc3f77e",
@@ -1565,7 +1642,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4dc844e8-0bb4-4333-98d8-ecdcf21447d5",
@@ -1585,7 +1663,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4eaa7b06-747a-4c85-a006-0d02017c18f7",
@@ -1605,7 +1684,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cabernet Sauvignon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "50150873-fe9c-4faa-be56-994d9358951d",
@@ -1625,7 +1705,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "55245944-6d2e-4c6d-b97b-f51547473848",
@@ -1645,7 +1726,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5a1b8468-227f-4972-bd3d-d2d568a4d2e8",
@@ -1665,7 +1747,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5d730f8d-eec5-4f3c-b048-bcff43c5f584",
@@ -1685,7 +1768,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6033581d-c466-47c2-9f62-08d2f23c03c5",
@@ -1705,7 +1789,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "60eaf13e-806f-438f-854f-e9794484c2d1",
@@ -1725,7 +1810,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b40c0f7b-fe24-455a-bcfc-bdad2cb08342",
@@ -1745,7 +1831,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2fce761f-9e14-4f76-9dd5-a83f3e366e6e",
@@ -1765,7 +1852,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "57f18b30-5dbd-41a3-871a-61f5b199566a",
@@ -1785,7 +1873,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "60fd48d2-94e7-46a6-a6b8-11bdb1b70cb4",
@@ -1805,7 +1894,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "61f50b73-ddd7-4368-a8f6-1ec11656b8de",
@@ -1825,7 +1915,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "61f81946-c752-4b6b-aa4b-05409a257228",
@@ -1845,7 +1936,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "64d8959e-3940-4d94-ad43-38c704d07b02",
@@ -1865,7 +1957,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "657058e7-f5af-46c1-bcf5-ed2dd05b751f",
@@ -1885,7 +1978,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "69cb536f-fcf9-4efb-9467-bbea7ad9eb97",
@@ -1905,7 +1999,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6afdaf3e-b67e-4fec-b766-ed032e438cdb",
@@ -1925,7 +2020,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6bc4c62e-bfed-4fbd-a02f-83e4cf154a1c",
@@ -1945,7 +2041,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rye",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6c377336-9971-4c18-aa8f-b5ac8f53cf6a",
@@ -1965,7 +2062,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6eb930b9-e10b-43f1-8166-ed4ade257189",
@@ -1985,7 +2083,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Noir",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7228789c-257a-4c54-aeb8-d272f0bfa571",
@@ -2005,7 +2104,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "76f9302d-2255-4e44-bd17-52abac51c8ff",
@@ -2025,7 +2125,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "79511b38-f8c5-4f83-8b81-410b551cc526",
@@ -2045,7 +2146,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7966b9d4-5317-4f2e-85d3-b0907c6b8196",
@@ -2065,7 +2167,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Noir",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "79fc7a57-9e67-4f75-8f39-07855c35dfe1",
@@ -2085,7 +2188,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "92d352da-a4f0-4c8a-a0f8-c150e903678f",
@@ -2105,7 +2209,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "989d8091-e7a2-47f4-95d7-9cd19aa2410c",
@@ -2125,7 +2230,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9484e604-1a53-4140-ac2d-03a7ff82dc54",
@@ -2145,7 +2251,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0b177617-ab2f-46eb-945a-81b169b9ee55",
@@ -2165,7 +2272,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4f24a601-4bc3-4b8a-8e6d-bda292c70808",
@@ -2185,7 +2293,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5de3130b-71cc-497e-8380-fe8da3d53d48",
@@ -2205,7 +2314,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "67364612-cefa-43c0-a8c0-ec96740f8492",
@@ -2225,7 +2335,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "69353ff3-0aaf-4ee5-921b-857cb3637fac",
@@ -2245,7 +2356,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "69fa1e84-b42d-4001-b992-44423705abb5",
@@ -2265,7 +2377,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7ce75232-531c-42a9-8522-ba549a499443",
@@ -2285,7 +2398,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7d9a882f-e188-4035-9a65-4b9a26a3f48e",
@@ -2305,7 +2419,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7e5339d8-f1da-4ac6-ad55-da6d2a4d5ec2",
@@ -2325,7 +2440,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Grigio",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7f672dc2-ac46-443e-9ffb-242136a1d876",
@@ -2345,7 +2461,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "82dbd0d1-9f16-4a00-92cf-b6a2b61db596",
@@ -2365,7 +2482,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8a21d23e-af7f-44df-bcf8-1ce6db683042",
@@ -2385,7 +2503,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8c0c719e-de64-4388-bf28-067426f6a0f8",
@@ -2405,7 +2524,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "92f5d538-e182-4c86-943e-5c32f080c415",
@@ -2425,7 +2545,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Noir",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "95f13ae1-2a1b-421b-8cfa-222ec632c007",
@@ -2445,7 +2566,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "97103706-fbc6-4d9d-aa8a-eb1c41566f74",
@@ -2465,7 +2587,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "97c69da7-b2db-4c15-85fb-6e24ff1d370a",
@@ -2485,7 +2608,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "992cc9ab-80e0-4e84-a329-587e3e87f0c8",
@@ -2505,7 +2629,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bf24e179-8f3e-45c2-bbf4-16d65913aa44",
@@ -2525,7 +2650,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "05297a89-1982-4f77-88d5-e1c87ec05640",
@@ -2545,7 +2671,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9e40f3fe-c81b-453d-977f-40c575afb655",
@@ -2565,7 +2692,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0f3d348c-b9ec-4cc4-9175-e8d6b93dabd8",
@@ -2585,7 +2713,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Disposable Cups",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "103ff8d1-32a5-4fc3-beaf-79444421b775",
@@ -2605,7 +2734,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "18d7e72c-e86a-44db-a1c8-181864066145",
@@ -2625,7 +2755,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "2344cdfa-2b2d-4bf3-8752-8ed84001acb8",
@@ -2645,7 +2776,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "297ff356-dea6-4d5f-a615-dd4b8d3f9686",
@@ -2665,7 +2797,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "349fa935-5c7e-4b69-89a9-60523f0d0f89",
@@ -2685,7 +2818,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "45db28d0-2210-4440-bf38-5be855732c4a",
@@ -2705,7 +2839,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "47e0e375-d70c-4baf-86ec-1b532c1b7d3b",
@@ -2725,7 +2860,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "69f05ad7-7dd6-411f-a7e0-216f86a8680f",
@@ -2745,7 +2881,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "6d8e0d9b-9c3f-4aea-968c-4e400a595ca9",
@@ -2765,7 +2902,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Mezcal",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "71912a07-9d8c-4cdc-abf5-304d57702ef5",
@@ -2785,7 +2923,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sangiovese",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "76ee2d05-a093-4437-93a0-1101bede4496",
@@ -2805,7 +2944,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7b9a4598-7785-45c7-85e9-e12c95ef37c3",
@@ -2825,7 +2965,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8ea270b4-972e-4e31-af0e-b1fc0aadd2d0",
@@ -2845,7 +2986,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9cb080c9-3605-4a84-8982-51fbba2f85d9",
@@ -2865,7 +3007,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9e3357eb-ee81-40d5-904f-9bd0e60c5c68",
@@ -2885,7 +3028,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a12cb013-9aa6-45e9-ac0c-6ac583ec7604",
@@ -2905,7 +3049,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Prosecco",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a19b639d-dc93-4245-9e2e-1b37c26ca2e5",
@@ -2925,7 +3070,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "03e24449-ed9f-4ae7-a311-f1e6c91908e2",
@@ -2945,7 +3091,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "18947a75-1db3-40a3-9fb6-70f136d0bacb",
@@ -2965,7 +3112,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "White Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "36e4d39d-7cde-429f-9374-f23c2856d59b",
@@ -2985,7 +3133,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a3131c7e-5214-46cb-95dc-5e5883af24ee",
@@ -3005,7 +3154,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a5c34b1d-18d8-4465-903f-792c9441b075",
@@ -3025,7 +3175,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a8fbf32d-d54c-45f5-b733-b2aeaab3006d",
@@ -3045,7 +3196,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a983497b-a39b-4967-ba9c-f5997aa712a2",
@@ -3065,7 +3217,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "aa3e1048-9724-4ab8-a826-9da58fe392c1",
@@ -3085,7 +3238,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "aa515072-fb30-4d7b-8547-482337d81977",
@@ -3105,7 +3259,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ac484776-c9b4-43da-a112-787abc175a85",
@@ -3125,7 +3280,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Prosecco",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b0b8c1ad-2041-4aa8-8b66-812a5036dec5",
@@ -3145,7 +3301,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b10131ec-ae21-479f-bc54-2d3cc72dcdde",
@@ -3165,7 +3322,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b3205f3e-89cf-42b9-b121-ae31e40b43f1",
@@ -3185,7 +3343,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b3493d38-59eb-4dcc-9a2e-f9e185dca88c",
@@ -3205,7 +3364,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b407977c-22e8-41c2-a87b-4e67694630f5",
@@ -3225,7 +3385,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b59b0941-9249-429f-8b56-76643c1577bb",
@@ -3245,7 +3406,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b60c15da-9e2e-4fb9-9656-686569232872",
@@ -3265,7 +3427,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b86d5e91-759f-4418-a55a-79c5b76d9006",
@@ -3285,7 +3448,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b879b068-be4b-498f-94c4-47fdf4423941",
@@ -3305,7 +3469,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Gin",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b9a5dc31-ebd2-4538-b593-359e872a9d67",
@@ -3325,7 +3490,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e32a8e24-0dbf-403b-a46a-de174cd7bfe3",
@@ -3345,7 +3511,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "025fd0fd-6729-4612-b730-8b067b4ba4f9",
@@ -3365,7 +3532,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Unknown",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "07a7a74f-e541-4449-9cee-7ca6e6b0d434",
@@ -3385,7 +3553,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "417d24cf-2bd6-473a-9cb2-0e98f7c3f4ef",
@@ -3405,7 +3574,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "4357fe50-218a-4474-b5cb-f16abd381a4a",
@@ -3425,7 +3595,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "7871ae47-24b6-470d-a0de-f3dee04ac755",
@@ -3445,7 +3616,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "96e8a525-6468-49e0-b6ca-543868489458",
@@ -3465,7 +3637,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "White Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b1946323-7711-4deb-ada5-05b3dea8de5c",
@@ -3485,7 +3658,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Riesling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b3620e82-067f-4618-a977-b5856817f341",
@@ -3505,7 +3679,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b49971f5-f408-4153-83e3-5f72824ed95d",
@@ -3525,7 +3700,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b54b6bb9-5cb3-4ebf-83c6-c0ae9910c4f8",
@@ -3545,7 +3721,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b8174a43-b0b0-4eb8-b435-59b0b0527ddf",
@@ -3565,7 +3742,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "White Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bb6824e0-68fa-4ad1-8744-bfb437917237",
@@ -3585,7 +3763,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Noir",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bd507cd1-fe9d-4116-a176-e98a32410349",
@@ -3605,7 +3784,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "c43be7fe-6b26-4671-ad5f-5868ea1cc07e",
@@ -3625,7 +3805,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "c822caba-38a7-4369-9e7d-de177510c9a7",
@@ -3645,7 +3826,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "cb0ecff8-c887-47c5-b73f-3b0913a83fa0",
@@ -3665,7 +3847,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ce7fa590-7782-447b-afe1-93defd02c723",
@@ -3685,7 +3868,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "cf7f844d-e112-4a81-b404-8c92d69306e4",
@@ -3705,7 +3889,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Brandy",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d10f8795-3c8e-46c3-a51f-289b6afbbe49",
@@ -3725,7 +3910,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d8e34f81-af6a-4c03-9fdf-5e8e219a33f6",
@@ -3745,7 +3931,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d9da11c1-3d93-435b-9475-da8c6b910438",
@@ -3765,7 +3952,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "dd3fdcde-7426-4787-acbe-8b8461a90a00",
@@ -3785,7 +3973,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "dd9856c6-1f97-4b47-8771-751182dbd0bc",
@@ -3805,7 +3994,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "03c92229-fd90-4e4e-b0f4-776fa1336501",
@@ -3825,7 +4015,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "04b041c1-e638-452a-99d9-5ee55067f811",
@@ -3845,7 +4036,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cabernet Sauvignon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0990caf9-d92f-4f84-9905-5cc207f6a145",
@@ -3865,7 +4057,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0b90fed8-2eb0-4f2f-95b3-4de5932d592a",
@@ -3885,7 +4078,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0cd6c12e-015e-4d5d-9290-7ec3bb022e1f",
@@ -3905,7 +4099,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0e396170-ee93-49ff-9b57-05f0dc1d75c2",
@@ -3925,7 +4120,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "0fc484b6-73d4-4e48-bdca-49889a8148c7",
@@ -3945,7 +4141,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "1467d120-2101-4905-b5dd-e7b268c1b685",
@@ -3965,7 +4162,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Prosecco",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "16528a82-b341-44c1-99b4-97cafa98d152",
@@ -3985,7 +4183,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "5fc79228-a516-407d-a5a8-439b10af82dd",
@@ -4005,7 +4204,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "68da4c79-9a87-4fda-ae00-2a21ae68bece",
@@ -4025,7 +4225,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a26d6da5-e3a4-49a5-a9b2-be7cac582845",
@@ -4045,7 +4246,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bacdf499-2c99-4959-9189-f8926a4b5729",
@@ -4065,7 +4267,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bc35d6b5-d27c-4ed0-a470-0162bef6995d",
@@ -4085,7 +4288,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "bf9a1ec9-0655-4ec8-8dbe-1f07baa421da",
@@ -4105,7 +4309,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "c6392c30-4f40-43f8-9465-4ee28bce9943",
@@ -4125,7 +4330,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Red Blend",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "cc15f6ad-6c78-4bfc-a6bc-0c120bdbd7b7",
@@ -4145,7 +4351,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "cf649719-2117-4916-a29e-edc03d04f979",
@@ -4165,7 +4372,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e2beb6d1-9395-4cbe-a99e-f65a060edd05",
@@ -4185,7 +4393,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e3eb4c1d-79d6-43ff-83fa-1ba3172e9298",
@@ -4205,7 +4414,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "23ac616a-9c24-4d21-9500-f73919ff066b",
@@ -4225,7 +4435,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "58dd1d63-f4a1-4e4a-af92-85e98bc2e80e",
@@ -4245,7 +4456,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "77f9b249-b5d7-40ad-a4e9-3baeb5483238",
@@ -4265,7 +4477,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "83e284b8-d094-4e8c-9497-70a91183c465",
@@ -4285,7 +4498,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Grigio",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "8f02332b-7b9f-4b11-9a7a-cae8c709dcb7",
@@ -4305,7 +4519,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Pinot Grigio",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "94a581a7-594f-4797-b2f1-56dec95828cb",
@@ -4325,7 +4540,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Chardonnay",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "fe0717f2-51d6-4f47-a79d-506e02ea63f3",
@@ -4345,7 +4561,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Marinade",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "95cc23a8-48d3-4c99-b78d-f766aae1145a",
@@ -4365,7 +4582,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Mezcal",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9ae816da-1ce9-46d5-aec9-b2ab9c193b5b",
@@ -4385,7 +4603,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9dd3c885-7612-4d6e-873f-786d36ec0f84",
@@ -4405,7 +4624,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tempranillo",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "9fadb7b2-c902-4931-8713-2100202b074d",
@@ -4425,7 +4645,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a24c7090-877f-4744-9a9d-006183ebdd8a",
@@ -4445,7 +4666,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sparkling",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "a2d96a1d-c748-4f5e-8bb5-c89e8653bf0a",
@@ -4465,7 +4687,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ab1d808d-4fa6-4382-a0d7-ef6200b1b0c3",
@@ -4485,7 +4708,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Sauvignon Blanc",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "b04d0911-cb2b-4b6c-bfac-24bb8a6cc83c",
@@ -4505,7 +4729,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vermouth",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d53dca0e-1205-4d4f-b284-8ce413d18bea",
@@ -4525,7 +4750,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cabernet Sauvignon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "d9a8fa7b-48b6-4830-a8e7-a0c535fe3d9d",
@@ -4545,7 +4771,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Bourbon",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "daf626ba-ff06-4d7c-b2d9-984b1f02af09",
@@ -4565,7 +4792,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tempranillo",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "de3fabae-0444-46c4-ae4b-9ef48ced9e3c",
@@ -4585,7 +4813,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Juice",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e529b1af-adb3-4ee8-ac37-b25e474a2f90",
@@ -4605,7 +4834,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e7ad8adb-0a84-4e27-a6ca-4cf19435f8bf",
@@ -4625,7 +4855,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e8595221-7698-41b3-bf0a-c9b082fae4df",
@@ -4645,7 +4876,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Vodka",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "fa431672-d7cd-4ba8-9767-6ba62a204e47",
@@ -4665,7 +4897,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "fa9784c9-1653-4663-a35c-7214f108c3ae",
@@ -4685,7 +4918,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "df53cf7e-a00e-4d02-9fbe-e7ccda3024ee",
@@ -4705,7 +4939,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Aperitif",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "df484e61-5dd8-43e6-8f78-5177b6721d9a",
@@ -4725,7 +4960,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Cognac",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ee0cf727-ce49-479e-84df-2d08a3c246f2",
@@ -4745,7 +4981,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Scotch",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e4061bcd-ce2f-4a3e-8d1e-df107a76c9d8",
@@ -4765,7 +5002,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rosé",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "dfdb916f-1f59-4b4b-b1b7-ee38df80fec9",
@@ -4785,7 +5023,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tempranillo",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e26bf330-8ab3-4e6a-bd95-4d194b299809",
@@ -4805,7 +5044,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Irish Whiskey",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e472eeb5-3dd5-4435-b09e-6186bb3928f4",
@@ -4825,7 +5065,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Tequila",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "e519b279-4eaf-4438-a024-c24b72a7f366",
@@ -4845,7 +5086,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ed507ce2-967c-45dc-ad1f-93b2f7b63f5e",
@@ -4865,7 +5107,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Champagne",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "ee1bc6de-2637-4cc6-8eff-df35d4cb1fe0",
@@ -4885,7 +5128,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f31ac7f9-ad42-448b-baad-155922586f56",
@@ -4905,7 +5149,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Prosecco",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f5f306c2-1670-49f3-94dc-aca03a5dfe28",
@@ -4925,7 +5170,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rye",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f5f46abf-7d46-4945-be77-4ea9c5176f80",
@@ -4945,7 +5191,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Mezcal",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f64a0f59-8190-40fc-9d3a-2a7ff8c323ad",
@@ -4965,7 +5212,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Rum",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     },
     {
       "id": "f713db01-d4a2-4802-b93c-886e7a69f037",
@@ -4985,7 +5233,8 @@
       "photo_preferred": false,
       "location": null,
       "subcategory": "Liqueur",
-      "subcategory_locked": false
+      "subcategory_locked": false,
+      "storage": "beverage"
     }
   ],
   "sessions": [
@@ -4996,6 +5245,22 @@
       "started_at": "2026-07-21T15:08:04.854+00:00",
       "completed_at": null,
       "updated_at": "2026-07-21T15:08:04.854+00:00"
+    },
+    {
+      "id": "a30775d3-26d6-4220-84a5-8dbaeefc8834",
+      "name": "Office Items",
+      "location": "Office Items",
+      "started_at": "2026-08-03T00:05:29.095+00:00",
+      "completed_at": null,
+      "updated_at": "2026-08-03T00:05:29.095+00:00"
+    },
+    {
+      "id": "84f2d292-3110-4af6-84ff-e1ab5ef9cff4",
+      "name": "Dry Storage",
+      "location": "Dry Storage",
+      "started_at": "2026-08-03T00:05:44.173+00:00",
+      "completed_at": null,
+      "updated_at": "2026-08-03T00:05:44.173+00:00"
     }
   ],
   "entries": [

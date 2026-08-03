@@ -193,7 +193,9 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         ＋ Add section
       </button>
 
-      {picking && <ProductSearch onClose={() => setPicking(null)} onPick={(p) => void pick(picking!, p)} />}
+      {picking && (
+        <ProductSearch section={picking} onClose={() => setPicking(null)} onPick={(p) => void pick(picking!, p)} />
+      )}
 
       {special && (
         <div className="sheet-backdrop" onClick={() => setSpecial(null)}>

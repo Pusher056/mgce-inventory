@@ -33,8 +33,16 @@ export const CATEGORY_ORDER: Category[] = [
   'other',
 ]
 
+/**
+ * Which storage area a product belongs to. Only beverages get identified by
+ * barcode, categorised or looked at by the AI — without this a wood tray ends
+ * up filed under Red Wine.
+ */
+export type Storage = 'beverage' | 'office' | 'dry'
+
 export interface Product {
   id: string
+  storage: Storage
   barcode: string | null
   name: string
   /** Nombre con el que el equipo conoce el producto (p. ej. "Whispering Angel") — buscable */

@@ -66,6 +66,7 @@ export async function refreshPending() {
 function productToRow(p: Product) {
   return {
     id: p.id,
+    storage: p.storage ?? 'beverage',
     barcode: p.barcode,
     name: p.name,
     alias: p.alias ?? null,
@@ -209,10 +210,19 @@ async function pushOutbox() {
 // Photos are never uploaded any more: they exist only long enough for the AI
 // to read a label, then they are deleted (see resolveAi).
 
+/**
+ * Only beverages go through identification and classification. A wood tray has
+ * no barcode, no grape and no category — running it through any of that would
+ * invent one.
+ */
+function isBeverage(p: Product): boolean {
+  return (p.storage ?? 'beverage') === 'beverage'
+}
+
 // ---------- resolve pending identifications ----------
 
 async function resolveLookups() {
-  const pending = await db.products.where('needsLookup').equals(1).toArray()
+  const pending = (await db.products.where('needsLookup').equals(1).toArray()).filter(isBeverage)
   for (const p of pending) {
     if (!p.barcode) {
       await db.products.update(p.id, { needsLookup: 0 })
@@ -256,7 +266,7 @@ export function resetAiSkip() {
 
 async function resolveAi() {
   if (skipAiThisSession) return
-  const pending = await db.products.where('needsAi').equals(1).toArray()
+  const pending = (await db.products.where('needsAi').equals(1).toArray()).filter(isBeverage)
   for (const p of pending) {
     const photo = p.photoId ? await db.photos.get(p.photoId) : undefined
     if (!photo) {
@@ -394,7 +404,7 @@ async function dropNameSearchImages() {
  */
 async function normalizeSubcategories() {
   if (localStorage.getItem('normalizeSubsV2')) return
-  const all = await db.products.toArray()
+  const all = (await db.products.toArray()).filter(isBeverage)
   for (const p of all) {
     const changes: Partial<Product> = {}
     const canon = canonicalSubcategory(p.subcategory)
@@ -423,7 +433,7 @@ async function normalizeSubcategories() {
  * products around on later syncs.
  */
 async function categorizeLocal() {
-  const all = await db.products.filter((p) => !!p.name && (!p.category || !p.subcategory)).toArray()
+  const all = await db.products.filter((p) => isBeverage(p) && !!p.name && (!p.category || !p.subcategory)).toArray()
   for (const p of all) {
     const changes: Partial<Product> = {}
     if (!p.subcategory && p.subcategoryLocked !== 1) {
@@ -452,7 +462,7 @@ async function categorizeLocal() {
  */
 async function reclassifyDeterministic() {
   if (localStorage.getItem('reclassifyV1')) return
-  const all = await db.products.filter((p) => !!p.name).toArray()
+  const all = await db.products.filter((p) => isBeverage(p) && !!p.name).toArray()
   for (const p of all) {
     const changes: Partial<Product> = {}
     if (p.subcategoryLocked !== 1) {
@@ -600,6 +610,7 @@ export async function pullFromServer() {
       await db.products.bulkPut(
         incoming.map((r) => ({
           id: r.id,
+          storage: (r.storage ?? 'beverage') as Product['storage'],
           barcode: r.barcode,
           name: r.name ?? '',
           alias: r.alias ?? null,
