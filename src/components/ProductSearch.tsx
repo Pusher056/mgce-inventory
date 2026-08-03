@@ -48,7 +48,11 @@ export default function ProductSearch({
   const [qty, setQty] = useState<Record<string, number>>({})
   const [added, setAdded] = useState<string[]>([])
 
-  /** Counted stock per product, across every list. */
+  /**
+   * Counted stock per product. Belonging to a list is what makes a product part
+   * of the inventory: the products table also holds leftovers from scans that
+   * were never saved, and those must not be offered as if we had them.
+   */
   const stockOf = useMemo(() => {
     const perCase = new Map(products.map((p) => [p.id, p.unitsPerCase]))
     const total = new Map<string, number>()
@@ -60,11 +64,12 @@ export default function ProductSearch({
   }, [products, entries])
 
   const area = AREA_BY_SECTION[section]
+  const inInventory = useMemo(() => new Set(entries.map((e) => e.productId)), [entries])
 
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const inArea = (p: Product) => {
-      if (!area) return true
+      if (!area) return false
       if ((p.storage ?? 'beverage') !== area.storage) return false
       return !area.categories || area.categories.includes(p.category ?? 'other')
     }
@@ -73,13 +78,15 @@ export default function ProductSearch({
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle))
 
+    // Only what is really on a shelf: named, and belonging to one of the lists.
+    const real = products.filter((p) => (displayName(p) || p.name).trim() !== '' && inInventory.has(p.id))
     // With nothing typed you browse the section's own shelf; typing searches
     // everything, because a special request may live in another area.
-    const pool = needle ? products.filter(matches) : products.filter(inArea)
+    const pool = needle ? real.filter(matches) : real.filter(inArea)
     return [...pool]
       .sort((a, b) => (displayName(a) || a.name).localeCompare(displayName(b) || b.name, 'en'))
       .slice(0, 300)
-  }, [products, q, area])
+  }, [products, q, area, inInventory])
 
   const qtyFor = (id: string) => qty[id] ?? 1
   const bump = (id: string, d: number) => setQty((m) => ({ ...m, [id]: Math.max(1, qtyFor(id) + d) }))
@@ -120,6 +127,8 @@ export default function ProductSearch({
             <div key={p.id} className="pick-row">
               <div className="info">
                 <div className="name">{displayName(p) || p.name || '(no name)'}</div>
+                {/* Office and Dry Storage are lists of what we own, not counts —
+                    a number there would be invented. */}
                 <div className="muted small">
                   {counted(p) ? (
                     <>
@@ -130,7 +139,7 @@ export default function ProductSearch({
                         ` · ${[p.subcategory, p.location].filter(Boolean).join(' · ')}`}
                     </>
                   ) : (
-                    p.location || (p.storage === 'office' ? 'Office' : 'Dry Storage')
+                    p.location || ''
                   )}
                 </div>
               </div>
@@ -160,7 +169,9 @@ export default function ProductSearch({
             <div className="muted small" style={{ padding: '14px 2px' }}>
               {q.trim()
                 ? `Nothing matches “${q.trim()}”. Close this and use Special request instead.`
-                : 'This shelf is empty. Search above, or use Special request.'}
+                : !area
+                  ? 'This section has no shelf of its own — search above, or use Special request.'
+                  : 'Nothing on this shelf yet. Search above, or use Special request.'}
             </div>
           )}
         </div>

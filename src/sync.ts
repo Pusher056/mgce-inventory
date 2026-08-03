@@ -605,7 +605,11 @@ export async function pullFromServer() {
       const incoming = prods.data.filter((r) => {
         if (skip(r.id)) return false
         const mine = local.get(r.id)
-        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+        if (!mine) return true
+        // A field added after this row was last written will never arrive on
+        // timestamps alone — the row is not "newer", it is just incomplete here.
+        if (mine.storage === undefined) return true
+        return (Date.parse(r.updated_at) || 0) > mine.updatedAt
       })
       await db.products.bulkPut(
         incoming.map((r) => ({
