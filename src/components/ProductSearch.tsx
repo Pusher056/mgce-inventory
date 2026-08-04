@@ -31,7 +31,6 @@ const AREA_BY_SECTION: Record<string, Area> = {
   'OFFICE ITEMS/EQUIPMENT': { storage: 'office' },
   'DISPOSABLES/MISC': { storage: 'dry' },
   'KITCHEN BEVERAGE/GARNISH': { storage: 'kitchen' },
-  KITCHEN: { storage: 'kitchen' },
 }
 
 export default function ProductSearch({
