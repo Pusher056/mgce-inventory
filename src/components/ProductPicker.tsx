@@ -105,7 +105,8 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
                     {p.unitsPerCase}/case
                   </div>
                 </div>
-                {total > 0 ? (
+                {/* uncounted areas (Office, Dry Storage) show no figure */}
+                {(p.storage ?? 'beverage') !== 'beverage' ? null : total > 0 ? (
                   <div style={{ textAlign: 'right' }}>
                     <div className="qty" style={{ color: 'var(--green)' }}>{total}</div>
                     <div className="muted" style={{ fontSize: 11 }}>in stock</div>

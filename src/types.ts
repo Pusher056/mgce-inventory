@@ -38,7 +38,7 @@ export const CATEGORY_ORDER: Category[] = [
  * barcode, categorised or looked at by the AI — without this a wood tray ends
  * up filed under Red Wine.
  */
-export type Storage = 'beverage' | 'office' | 'dry'
+export type Storage = 'beverage' | 'office' | 'dry' | 'kitchen'
 
 export interface Product {
   id: string
@@ -216,6 +216,7 @@ export const PACK_SECTIONS = [
   'STORAGE BEVERAGE-WINE (HOUSE)',
   'STORAGE BEVERAGE-LIQUOR (HOUSE)',
   'KITCHEN BEVERAGE/GARNISH',
+  'KITCHEN',
   'OFFICE ITEMS/EQUIPMENT',
   'DISPOSABLES/MISC',
   'SPECIALTY/MISC. (EQUIP + BEVERAGE)',

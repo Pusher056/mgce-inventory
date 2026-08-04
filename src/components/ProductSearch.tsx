@@ -30,7 +30,8 @@ const AREA_BY_SECTION: Record<string, Area> = {
   'STORAGE BEVERAGE-LIQUOR (HOUSE)': { storage: 'beverage', categories: ['spirits'] },
   'OFFICE ITEMS/EQUIPMENT': { storage: 'office' },
   'DISPOSABLES/MISC': { storage: 'dry' },
-  'KITCHEN BEVERAGE/GARNISH': { storage: 'dry' },
+  'KITCHEN BEVERAGE/GARNISH': { storage: 'kitchen' },
+  KITCHEN: { storage: 'kitchen' },
 }
 
 export default function ProductSearch({

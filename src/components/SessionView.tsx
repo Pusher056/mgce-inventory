@@ -338,7 +338,9 @@ export default function SessionView({ session }: { session: Session }) {
               📷 identify
             </button>
           )}
-          {totalBottles(e, p.unitsPerCase) > 0 ? (
+          {/* Office and Dry Storage list what we own; they are never counted, so
+              they show no figure at all rather than a red zero. */}
+          {(p.storage ?? 'beverage') !== 'beverage' ? null : totalBottles(e, p.unitsPerCase) > 0 ? (
             <div className="qty">{totalBottles(e, p.unitsPerCase)}</div>
           ) : (
             <div style={{ color: 'var(--red)', fontSize: 11, fontWeight: 800 }}>OUT OF STOCK</div>
