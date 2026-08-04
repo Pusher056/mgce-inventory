@@ -88,6 +88,27 @@ export default function ProductSearch({
       .slice(0, 300)
   }, [products, q, area, inInventory])
 
+  /**
+   * Browsing a shelf of 109 trays as one flat list is no better than the Excel
+   * it replaces, so it is broken up by the same sections their sheets use
+   * (Passing Trays, Bar Needs…). Searching stays flat — you already know what
+   * you are looking for.
+   */
+  const grouped = useMemo(() => {
+    if (q.trim()) return [{ heading: '', rows: results }]
+    const bySection = new Map<string, Product[]>()
+    for (const p of results) {
+      const key = p.subcategory?.trim() || ''
+      const arr = bySection.get(key) ?? []
+      arr.push(p)
+      bySection.set(key, arr)
+    }
+    if (bySection.size <= 1) return [{ heading: '', rows: results }]
+    return [...bySection.entries()]
+      .sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0], 'en')))
+      .map(([heading, rows]) => ({ heading: heading || 'Other', rows }))
+  }, [results, q])
+
   const qtyFor = (id: string) => qty[id] ?? 1
   const bump = (id: string, d: number) => setQty((m) => ({ ...m, [id]: Math.max(1, qtyFor(id) + d) }))
 
@@ -123,7 +144,10 @@ export default function ProductSearch({
           </div>
         )}
         <div className="pick-list">
-          {results.map((p) => (
+          {grouped.map((g) => (
+            <div key={g.heading || '_'}>
+              {g.heading && <div className="pick-heading">{g.heading}</div>}
+              {g.rows.map((p) => (
             <div key={p.id} className="pick-row">
               <div className="info">
                 <div className="name">{displayName(p) || p.name || '(no name)'}</div>
@@ -163,6 +187,8 @@ export default function ProductSearch({
               <button className="pick-add" onClick={() => take(p)} aria-label={`Add ${p.name}`}>
                 Add
               </button>
+            </div>
+              ))}
             </div>
           ))}
           {results.length === 0 && (

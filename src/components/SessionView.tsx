@@ -156,10 +156,43 @@ export default function SessionView({ session }: { session: Session }) {
     { cases: 0, bottles: 0 },
   )
 
+  // Office and Dry Storage have no drink categories; what divides them is the
+  // section they sit in on the company's own sheets (Passing Trays, Bar Needs,
+  // Disposables…), so that becomes the heading instead of one huge "Other".
+  const isStorageList = useMemo(
+    () => visibleEntries.some((e) => (productMap.get(e.productId)?.storage ?? 'beverage') !== 'beverage'),
+    [visibleEntries, productMap],
+  )
+
   // Group counted products by category. ONLY Liquor sub-groups by type
   // (Tequila, Vodka…); every other category is a flat list. Products without a
   // type just list under Liquor directly — no "No type" bucket.
   const groups = useMemo(() => {
+    if (isStorageList) {
+      const bySection = new Map<string, Entry[]>()
+      for (const e of visibleEntries) {
+        const p = productMap.get(e.productId)
+        if (!p) continue
+        const section = p.subcategory?.trim() || 'Other'
+        const list = bySection.get(section) ?? []
+        list.push(e)
+        bySection.set(section, list)
+      }
+      return [...bySection.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], 'en'))
+        .map(([section, ents]) => ({
+          key: section,
+          label: section,
+          count: ents.length,
+          typed: [] as { sub: string; ents: Entry[] }[],
+          untyped: [...ents].sort((a, b) => {
+            const an = productMap.get(a.productId)
+            const bn = productMap.get(b.productId)
+            return (an?.name ?? '').localeCompare(bn?.name ?? '', 'en')
+          }),
+        }))
+    }
+
     const byCat = new Map<Category | 'pending', Entry[]>()
     for (const e of visibleEntries) {
       const p = productMap.get(e.productId)
@@ -447,7 +480,9 @@ export default function SessionView({ session }: { session: Session }) {
           <div key={g.key} id={`cat-${g.key}`} style={{ scrollMarginTop: 130 }}>
             <button
               className="cat-header"
-              style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
+              // no inline background: it would beat the stylesheet, and a sticky
+              // heading needs an opaque one or the rows scroll through its text
+              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
               onClick={(e) => toggleCollapsed(g.key, e.currentTarget)}
             >
               <span className="caret">{collapsed.has(g.key) ? '▶' : '▼'}</span>
