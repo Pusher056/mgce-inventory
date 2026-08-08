@@ -158,12 +158,23 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
                     <div className="muted small">
                       {p?.location ? `${p.location}` : !l.productId ? 'not in the warehouse' : '—'}
                     </div>
-                    <input
-                      className="pack-note"
-                      value={l.note}
-                      placeholder="Note"
-                      onChange={(e) => void updatePackLine(l.id, { note: e.target.value })}
-                    />
+                    {/* Their SIZE/COLOR column carries real instructions —
+                        "Red", "Yellow", '16"L x 12"W' — so a line has to be able
+                        to say it, or the export cannot be faithful. */}
+                    <div className="pack-fields">
+                      <input
+                        className="pack-note size"
+                        value={l.size}
+                        placeholder="Size / colour"
+                        onChange={(e) => void updatePackLine(l.id, { size: e.target.value })}
+                      />
+                      <input
+                        className="pack-note"
+                        value={l.note}
+                        placeholder="Note"
+                        onChange={(e) => void updatePackLine(l.id, { note: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <Qty line={l} />
                   <button className="row-action danger" onClick={() => void deletePackLine(l.id)} title="Remove">

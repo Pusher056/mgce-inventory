@@ -401,13 +401,21 @@ textarea {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.pack-note {
+.pack-fields {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
   margin-top: 6px;
+}
+.pack-note {
   font-size: 13px;
   padding: 6px 9px;
   border-radius: 8px;
-  max-width: 320px;
+  flex: 1;
+  min-width: 130px;
+  max-width: 260px;
 }
+.pack-note.size { flex: 0 1 130px; min-width: 100px; }
 .qty {
   display: flex;
   align-items: center;
