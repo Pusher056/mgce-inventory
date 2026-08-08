@@ -58,9 +58,6 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
       <div className="ev-section-title" style={{ marginTop: 26 }}>
         Operations
       </div>
-      <div className="muted small" style={{ marginBottom: 10 }}>
-        Ice and driver timings. These come from the MO sheet.
-      </div>
       <div className="ev-grid">
         {field('Ice needs', 'iceNeeds')}
         {field('Ice delivery time', 'iceDeliveryTime')}

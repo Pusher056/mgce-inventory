@@ -540,6 +540,9 @@ export async function syncNow() {
   void syncBackground()
 }
 
+/** Ceiling for a full-table pull; also the signal that a page was truncated. */
+const PULL_LIMIT = 5000
+
 /** Deletes made with no signal: keep retrying until the server confirms them. */
 async function retryPendingDeletes() {
   const pending = await db.tombstones.toArray()
@@ -557,9 +560,11 @@ async function retryPendingDeletes() {
  * non-empty: an empty table is a real answer ("you deleted the last one"),
  * while a failed request is not an answer at all and is ignored.
  *
- * Deliberately limited to events and pack lists. The inventory is the one thing
- * that cannot be recreated from memory, and a phone may still hold products
- * that never made it up — those must never be dropped on the server's say-so.
+ * Applied to events, pack lists and the entries that decide which list a
+ * product belongs to — remove something from a list on one device and it has to
+ * go on the others. The `products` table itself is left alone: a phone may hold
+ * products that never made it up, and those must never be dropped on the
+ * server's say-so.
  */
 async function dropLocallyIfGoneFromServer(
   table: { toCollection: () => { primaryKeys: () => Promise<string[]> }; bulkDelete: (ids: string[]) => Promise<void> },
@@ -567,6 +572,9 @@ async function dropLocallyIfGoneFromServer(
   pendingIds: Set<string>,
 ) {
   if (response.error || !response.data) return
+  // A full page means the list was probably cut short, and a cut-short list is
+  // not evidence that anything was deleted.
+  if (response.data.length >= PULL_LIMIT) return
   const onServer = new Set(response.data.map((r) => r.id))
   const localIds = await table.toCollection().primaryKeys()
   const gone = localIds.filter((id) => !onServer.has(id) && !pendingIds.has(id))
@@ -589,11 +597,14 @@ export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
     const [prods, sess, ents, evs, lines, pendingIds, deletedIds] = await Promise.all([
-      supabase.from('products').select('*'),
-      supabase.from('sessions').select('*'),
-      supabase.from('entries').select('*'),
-      supabase.from('events').select('*'),
-      supabase.from('pack_lines').select('*'),
+      // Explicit limits: the server's default page size would silently truncate
+      // one day, and a truncated list read as "the rest was deleted" would take
+      // real counts with it.
+      supabase.from('products').select('*').limit(PULL_LIMIT),
+      supabase.from('sessions').select('*').limit(PULL_LIMIT),
+      supabase.from('entries').select('*').limit(PULL_LIMIT),
+      supabase.from('events').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_lines').select('*').limit(PULL_LIMIT),
       db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
       db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
@@ -676,6 +687,7 @@ export async function pullFromServer() {
     // to reach the other devices.
     await dropLocallyIfGoneFromServer(db.events, evs, pendingIds)
     await dropLocallyIfGoneFromServer(db.packLines, lines, pendingIds)
+    await dropLocallyIfGoneFromServer(db.entries, ents, pendingIds)
 
     if (evs.data?.length) {
       const local = new Map((await db.events.bulkGet(evs.data.map((r) => r.id))).flatMap((e) => (e ? [[e.id, e]] : [])))
