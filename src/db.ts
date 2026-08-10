@@ -11,6 +11,11 @@ import type {
   Tombstone,
   EventRec,
   PackLine,
+  VnoItem,
+  VnoReport,
+  VnoLine,
+  LocalReceipt,
+  VnoArea,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -24,6 +29,10 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   tombstones: EntityTable<Tombstone, 'id'>
   events: EntityTable<EventRec, 'id'>
   packLines: EntityTable<PackLine, 'id'>
+  vnoItems: EntityTable<VnoItem, 'id'>
+  vnoReports: EntityTable<VnoReport, 'id'>
+  vnoLines: EntityTable<VnoLine, 'id'>
+  receipts: EntityTable<LocalReceipt, 'id'>
 }
 
 db.version(1).stores({
@@ -50,6 +59,14 @@ db.version(3).stores({
 db.version(4).stores({
   events: 'id, date, updatedAt',
   packLines: 'id, eventId, productId, [eventId+section]',
+})
+
+// v5 adds the VNO Coffee daily report. Additive.
+db.version(5).stores({
+  vnoItems: 'id, area, sortIndex',
+  vnoReports: 'id, date, updatedAt',
+  vnoLines: 'id, reportId, [reportId+area]',
+  receipts: 'id, reportId, uploaded',
 })
 
 export function uuid(): string {
@@ -273,6 +290,103 @@ export async function deletePackLine(id: string) {
   await db.outbox.where('id').equals(id).delete()
   await db.tombstones.put({ id, table: 'pack_lines', ts: Date.now() })
   await pushDelete('pack_lines', id)
+}
+
+/* ---------- VNO Coffee daily report ---------- */
+
+/** Midnight local, so a report belongs to the day it was worked. */
+export function startOfDay(ms: number): number {
+  const d = new Date(ms)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/**
+ * One report per day. Opening today's twice must not create two of them, so
+ * this returns the existing one when there is one.
+ */
+export async function openVnoReport(date: number, barista = ''): Promise<VnoReport> {
+  const day = startOfDay(date)
+  const existing = await db.vnoReports.where('date').equals(day).first()
+  if (existing) return existing
+  const r: VnoReport = {
+    id: uuid(),
+    date: day,
+    barista,
+    guestCount: null,
+    notes: '',
+    receiptPath: null,
+    submittedAt: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  await db.vnoReports.add(r)
+  await queueSync('vno_reports', r.id)
+  return r
+}
+
+export async function updateVnoReport(id: string, changes: Partial<VnoReport>) {
+  await db.vnoReports.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('vno_reports', id)
+}
+
+/**
+ * Quantities are stored as lines rather than as a number on the usual-items
+ * list, because a report has to keep saying what was asked for on that day even
+ * if the usual list changes later.
+ */
+export async function setVnoQty(reportId: string, label: string, area: VnoArea, qty: number, sortIndex = 0) {
+  const existing = await db.vnoLines
+    .where('reportId')
+    .equals(reportId)
+    .filter((l) => l.label === label)
+    .first()
+  if (existing) {
+    await db.vnoLines.update(existing.id, { qty, updatedAt: Date.now() })
+    await queueSync('vno_lines', existing.id)
+    return existing.id
+  }
+  const line: VnoLine = { id: uuid(), reportId, label, area, qty, note: '', sortIndex, updatedAt: Date.now() }
+  await db.vnoLines.add(line)
+  await queueSync('vno_lines', line.id)
+  return line.id
+}
+
+export async function addVnoLine(reportId: string, label: string, note = ''): Promise<VnoLine> {
+  const line: VnoLine = {
+    id: uuid(),
+    reportId,
+    label,
+    area: 'other',
+    qty: 1,
+    note,
+    sortIndex: 900,
+    updatedAt: Date.now(),
+  }
+  await db.vnoLines.add(line)
+  await queueSync('vno_lines', line.id)
+  return line
+}
+
+export async function updateVnoLine(id: string, changes: Partial<VnoLine>) {
+  await db.vnoLines.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('vno_lines', id)
+}
+
+export async function deleteVnoLine(id: string) {
+  await db.vnoLines.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'vno_lines', ts: Date.now() })
+  await pushDelete('vno_lines', id)
+}
+
+/** The receipt is kept locally first; sync.ts uploads it when there is signal. */
+export async function saveReceipt(reportId: string, blob: Blob): Promise<string> {
+  const old = await db.receipts.where('reportId').equals(reportId).toArray()
+  await db.receipts.bulkDelete(old.map((r) => r.id))
+  const id = uuid()
+  await db.receipts.add({ id, reportId, blob, uploaded: 0, createdAt: Date.now() })
+  return id
 }
 
 export async function savePhoto(productId: string, blob: Blob): Promise<string> {

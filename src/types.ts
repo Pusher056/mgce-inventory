@@ -191,9 +191,18 @@ export interface PackLine {
   updatedAt: number
 }
 
+export type SyncTable =
+  | 'products'
+  | 'sessions'
+  | 'entries'
+  | 'events'
+  | 'pack_lines'
+  | 'vno_reports'
+  | 'vno_lines'
+
 export interface OutboxItem {
   seq?: number
-  table: 'products' | 'sessions' | 'entries' | 'events' | 'pack_lines'
+  table: SyncTable
   id: string
   ts: number
 }
@@ -205,8 +214,64 @@ export interface OutboxItem {
  */
 export interface Tombstone {
   id: string
-  table: 'products' | 'sessions' | 'entries' | 'events' | 'pack_lines'
+  table: SyncTable
   ts: number
+}
+
+/**
+ * VNO Coffee runs Monday to Thursday and the work is split: dry goods come from
+ * the warehouse, everything else from the kitchen. The barista on duty files
+ * one of these at the end of her shift.
+ */
+export type VnoArea = 'dry' | 'kitchen' | 'other'
+
+export const VNO_AREA_LABELS: Record<VnoArea, string> = {
+  dry: 'From the warehouse',
+  kitchen: 'From the kitchen',
+  other: 'Anything else',
+}
+
+export interface VnoItem {
+  id: string
+  name: string
+  area: VnoArea
+  sortIndex: number
+  updatedAt: number
+}
+
+export interface VnoReport {
+  id: string
+  /** The day being reported, midnight local. */
+  date: number
+  barista: string
+  guestCount: number | null
+  notes: string
+  /** Path in the receipts bucket, once the photo has reached the server. */
+  receiptPath: string | null
+  /** null while she is still filling it in. */
+  submittedAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface VnoLine {
+  id: string
+  reportId: string
+  label: string
+  area: VnoArea
+  qty: number
+  note: string
+  sortIndex: number
+  updatedAt: number
+}
+
+/** A receipt photo waiting to be uploaded (kept local until it lands). */
+export interface LocalReceipt {
+  id: string
+  reportId: string
+  blob: Blob
+  uploaded: 0 | 1
+  createdAt: number
 }
 
 /** Section names as they appear in the 2026 template, in template order. */

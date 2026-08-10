@@ -7,7 +7,7 @@ import {
   categoryForSubcategory,
   canonicalSubcategory,
 } from './classify'
-import type { Entry, EventRec, PackLine, Product, Session } from './types'
+import type { Entry, EventRec, PackLine, Product, Session, VnoItem, VnoLine, VnoReport } from './types'
 
 /**
  * Offline-first sync engine.
@@ -149,6 +149,34 @@ function packLineToRow(l: PackLine) {
   }
 }
 
+function vnoReportToRow(r: VnoReport) {
+  const d = new Date(r.date)
+  return {
+    id: r.id,
+    // a plain day, not an instant: a shift belongs to a date, not a timezone
+    date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    barista: r.barista,
+    guest_count: r.guestCount,
+    notes: r.notes,
+    receipt_path: r.receiptPath,
+    submitted_at: r.submittedAt ? new Date(r.submittedAt).toISOString() : null,
+    created_at: new Date(r.createdAt).toISOString(),
+    updated_at: new Date(r.updatedAt).toISOString(),
+  }
+}
+function vnoLineToRow(l: VnoLine) {
+  return {
+    id: l.id,
+    report_id: l.reportId,
+    label: l.label,
+    area: l.area,
+    qty: l.qty,
+    note: l.note,
+    sort_index: l.sortIndex,
+    updated_at: new Date(l.updatedAt).toISOString(),
+  }
+}
+
 // ---------- push ----------
 
 async function pushOutbox() {
@@ -162,11 +190,21 @@ async function pushOutbox() {
     entries: new Set<string>(),
     events: new Set<string>(),
     pack_lines: new Set<string>(),
+    vno_reports: new Set<string>(),
+    vno_lines: new Set<string>(),
   }
   for (const it of items) byTable[it.table].add(it.id)
 
   // Parents before children (entries and pack lines reference them via FK)
-  for (const table of ['products', 'sessions', 'entries', 'events', 'pack_lines'] as const) {
+  for (const table of [
+    'products',
+    'sessions',
+    'entries',
+    'events',
+    'pack_lines',
+    'vno_reports',
+    'vno_lines',
+  ] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
     let rows: Record<string, unknown>[]
@@ -178,6 +216,10 @@ async function pushOutbox() {
       rows = (await db.events.bulkGet(ids)).filter((e): e is EventRec => !!e).map(eventToRow)
     } else if (table === 'pack_lines') {
       rows = (await db.packLines.bulkGet(ids)).filter((l): l is PackLine => !!l).map(packLineToRow)
+    } else if (table === 'vno_reports') {
+      rows = (await db.vnoReports.bulkGet(ids)).filter((r): r is VnoReport => !!r).map(vnoReportToRow)
+    } else if (table === 'vno_lines') {
+      rows = (await db.vnoLines.bulkGet(ids)).filter((l): l is VnoLine => !!l).map(vnoLineToRow)
     } else {
       rows = (await db.entries.bulkGet(ids)).filter((e): e is Entry => !!e).map(entryToRow)
     }
@@ -520,6 +562,7 @@ export async function syncNow() {
   // isolated so one failure never blocks the others.
   const errors = await runStages([
     ['push', pushOutbox],
+    ['recibos', uploadReceipts],
     ['borrar', retryPendingDeletes],
     ['bajar', pullFromServer],
     ['borrar-fotos', wipeAllPhotos],
@@ -538,6 +581,27 @@ export async function syncNow() {
   setState({ syncing: false, pending: await countPending() })
   // Kick off slow image work without blocking the indicator
   void syncBackground()
+}
+
+/**
+ * Receipts wait on the phone until there is signal, then go up once. Unlike the
+ * old product photos these are kept: they are the barista's reimbursement.
+ */
+async function uploadReceipts() {
+  const pending = await db.receipts.where('uploaded').equals(0).toArray()
+  for (const r of pending) {
+    const path = `${r.reportId}.jpg`
+    const { error } = await supabase.storage
+      .from('receipts')
+      .upload(path, r.blob, { contentType: r.blob.type || 'image/jpeg', upsert: true })
+    if (error) continue // no signal or server busy — try again next sync
+    await db.receipts.update(r.id, { uploaded: 1 })
+    const report = await db.vnoReports.get(r.reportId)
+    if (report && report.receiptPath !== path) {
+      await db.vnoReports.update(r.reportId, { receiptPath: path, updatedAt: Date.now() })
+      await db.outbox.add({ table: 'vno_reports', id: r.reportId, ts: Date.now() })
+    }
+  }
 }
 
 /** Ceiling for a full-table pull; also the signal that a page was truncated. */
@@ -596,7 +660,7 @@ async function dropLocallyIfGoneFromServer(
 export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
-    const [prods, sess, ents, evs, lines, pendingIds, deletedIds] = await Promise.all([
+    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, pendingIds, deletedIds] = await Promise.all([
       // Explicit limits: the server's default page size would silently truncate
       // one day, and a truncated list read as "the rest was deleted" would take
       // real counts with it.
@@ -605,6 +669,9 @@ export async function pullFromServer() {
       supabase.from('entries').select('*').limit(PULL_LIMIT),
       supabase.from('events').select('*').limit(PULL_LIMIT),
       supabase.from('pack_lines').select('*').limit(PULL_LIMIT),
+      supabase.from('vno_items').select('*').limit(PULL_LIMIT),
+      supabase.from('vno_reports').select('*').limit(PULL_LIMIT),
+      supabase.from('vno_lines').select('*').limit(PULL_LIMIT),
       db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
       db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
@@ -688,6 +755,70 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.events, evs, pendingIds)
     await dropLocallyIfGoneFromServer(db.packLines, lines, pendingIds)
     await dropLocallyIfGoneFromServer(db.entries, ents, pendingIds)
+    await dropLocallyIfGoneFromServer(db.vnoReports, vnoR, pendingIds)
+    await dropLocallyIfGoneFromServer(db.vnoLines, vnoL, pendingIds)
+    await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds)
+
+    // The usual list is edited on the server side only, so the server always wins.
+    if (vnoI.data) {
+      await db.vnoItems.bulkPut(
+        vnoI.data.map((r) => ({
+          id: r.id,
+          name: r.name ?? '',
+          area: (r.area ?? 'dry') as VnoItem['area'],
+          sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
+    if (vnoR.data?.length) {
+      const local = new Map(
+        (await db.vnoReports.bulkGet(vnoR.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])),
+      )
+      const incoming = vnoR.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
+      await db.vnoReports.bulkPut(
+        incoming.map((r) => {
+          const [y, m, d] = String(r.date).split('-').map(Number)
+          return {
+            id: r.id,
+            date: new Date(y, (m ?? 1) - 1, d ?? 1).getTime(),
+            barista: r.barista ?? '',
+            guestCount: r.guest_count ?? null,
+            notes: r.notes ?? '',
+            receiptPath: r.receipt_path ?? null,
+            submittedAt: r.submitted_at ? Date.parse(r.submitted_at) : null,
+            createdAt: Date.parse(r.created_at) || Date.now(),
+            updatedAt: Date.parse(r.updated_at) || Date.now(),
+          }
+        }),
+      )
+    }
+    if (vnoL.data?.length) {
+      const local = new Map(
+        (await db.vnoLines.bulkGet(vnoL.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])),
+      )
+      const incoming = vnoL.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
+      await db.vnoLines.bulkPut(
+        incoming.map((r) => ({
+          id: r.id,
+          reportId: r.report_id,
+          label: r.label ?? '',
+          area: (r.area ?? 'dry') as VnoLine['area'],
+          qty: Number(r.qty) || 0,
+          note: r.note ?? '',
+          sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
 
     if (evs.data?.length) {
       const local = new Map((await db.events.bulkGet(evs.data.map((r) => r.id))).flatMap((e) => (e ? [[e.id, e]] : [])))
