@@ -156,6 +156,8 @@ function vnoReportToRow(r: VnoReport) {
     // a plain day, not an instant: a shift belongs to a date, not a timezone
     date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
     barista: r.barista,
+    hours_from: r.hoursFrom ?? '',
+    hours_to: r.hoursTo ?? '',
     guest_count: r.guestCount,
     notes: r.notes,
     receipt_path: r.receiptPath,
@@ -787,6 +789,8 @@ export async function pullFromServer() {
             id: r.id,
             date: new Date(y, (m ?? 1) - 1, d ?? 1).getTime(),
             barista: r.barista ?? '',
+            hoursFrom: r.hours_from ?? '',
+            hoursTo: r.hours_to ?? '',
             guestCount: r.guest_count ?? null,
             notes: r.notes ?? '',
             receiptPath: r.receipt_path ?? null,

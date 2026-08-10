@@ -53,6 +53,7 @@ export default function VnoView() {
               <div className="name">{dayLabel(r.date)}</div>
               <div className="muted small">
                 {r.barista || 'No name'}
+                {r.hoursFrom && ` · ${r.hoursFrom}${r.hoursTo ? `–${r.hoursTo}` : ''}`}
                 {r.guestCount !== null && ` · ${r.guestCount} guests`}
                 {` · ${lineCounts.get(r.id) ?? 0} item${(lineCounts.get(r.id) ?? 0) === 1 ? '' : 's'}`}
                 {!r.submittedAt && ' · draft'}

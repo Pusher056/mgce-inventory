@@ -244,6 +244,9 @@ export interface VnoReport {
   /** The day being reported, midnight local. */
   date: number
   barista: string
+  /** Free text, like every other time in their paperwork: "7:30AM". */
+  hoursFrom: string
+  hoursTo: string
   guestCount: number | null
   notes: string
   /** Path in the receipts bucket, once the photo has reached the server. */

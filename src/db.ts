@@ -313,6 +313,8 @@ export async function openVnoReport(date: number, barista = ''): Promise<VnoRepo
     id: uuid(),
     date: day,
     barista,
+    hoursFrom: '',
+    hoursTo: '',
     guestCount: null,
     notes: '',
     receiptPath: null,

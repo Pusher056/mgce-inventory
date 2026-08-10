@@ -91,6 +91,22 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
             }
           />
         </div>
+        <div className="ev-field">
+          <label className="field-label">Started at</label>
+          <input
+            value={report.hoursFrom ?? ''}
+            placeholder="7:30AM"
+            onChange={(e) => void updateVnoReport(reportId, { hoursFrom: e.target.value })}
+          />
+        </div>
+        <div className="ev-field">
+          <label className="field-label">Finished at</label>
+          <input
+            value={report.hoursTo ?? ''}
+            placeholder="3:30PM"
+            onChange={(e) => void updateVnoReport(reportId, { hoursTo: e.target.value })}
+          />
+        </div>
       </div>
 
       {areas.map((area) => (
