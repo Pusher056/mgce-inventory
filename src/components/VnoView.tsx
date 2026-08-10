@@ -4,6 +4,11 @@ import { db, openVnoReport, startOfDay } from '../db'
 import { syncNow } from '../sync'
 import VnoReportForm from './VnoReportForm'
 
+function toInputDay(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function dayLabel(ms: number): string {
   const today = startOfDay(Date.now())
   if (ms === today) return 'Today'
@@ -25,25 +30,47 @@ export default function VnoView() {
     return map
   }, []) ?? new Map<string, number>()
   const [openId, setOpenId] = useState<string | null>(null)
+  const [pickDay, setPickDay] = useState(false)
 
   if (openId) return <VnoReportForm reportId={openId} onBack={() => setOpenId(null)} />
 
   const today = startOfDay(Date.now())
   const todayReport = reports.find((r) => r.date === today)
 
+  async function open(dayMs: number) {
+    const r = await openVnoReport(dayMs)
+    setPickDay(false)
+    setOpenId(r.id)
+    void syncNow()
+  }
+
   return (
     <div className="screen">
-      <button
-        className="big-btn primary"
-        style={{ marginTop: 12 }}
-        onClick={async () => {
-          const r = await openVnoReport(Date.now())
-          setOpenId(r.id)
-          void syncNow()
-        }}
-      >
+      <button className="big-btn primary" style={{ marginTop: 12 }} onClick={() => void open(Date.now())}>
         {todayReport ? "Open today's report" : "＋ Start today's report"}
       </button>
+
+      {/* Some shifts get written up the next morning, and then "today" is the
+          wrong day. Picking one is rare, so it stays out of the way. */}
+      {pickDay ? (
+        <div className="ev-field" style={{ marginTop: 10 }}>
+          <label className="field-label">Which day?</label>
+          <input
+            type="date"
+            autoFocus
+            max={toInputDay(Date.now())}
+            onChange={(e) => {
+              if (!e.target.value) return
+              const [y, m, d] = e.target.value.split('-').map(Number)
+              void open(new Date(y, (m ?? 1) - 1, d ?? 1).getTime())
+            }}
+          />
+        </div>
+      ) : (
+        <button className="link-btn" style={{ marginTop: 8 }} onClick={() => setPickDay(true)}>
+          Reporting a different day?
+        </button>
+      )}
 
       <div style={{ marginTop: 20 }}>
         {reports.map((r) => (
