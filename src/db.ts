@@ -354,6 +354,45 @@ export async function setVnoQty(reportId: string, label: string, area: VnoArea, 
   return line.id
 }
 
+/** Everything needed to put a deleted report back. */
+export interface DeletedVnoReport {
+  report: VnoReport
+  lines: VnoLine[]
+}
+
+export async function deleteVnoReport(id: string): Promise<DeletedVnoReport | null> {
+  const report = await db.vnoReports.get(id)
+  if (!report) return null
+  const lines = await db.vnoLines.where('reportId').equals(id).toArray()
+  const lineIds = lines.map((l) => l.id)
+  await db.vnoLines.where('reportId').equals(id).delete()
+  await db.vnoReports.delete(id)
+  await db.receipts.where('reportId').equals(id).delete()
+  await db.outbox.where('id').anyOf([id, ...lineIds]).delete()
+  await db.tombstones.put({ id, table: 'vno_reports', ts: Date.now() })
+  await db.tombstones.bulkPut(lineIds.map((l) => ({ id: l, table: 'vno_lines' as const, ts: Date.now() })))
+  // lines cascade on the server once the report is gone
+  if (await pushDelete('vno_reports', id)) await db.tombstones.bulkDelete(lineIds)
+  return { report, lines }
+}
+
+export async function restoreVnoReport({ report, lines }: DeletedVnoReport) {
+  await db.tombstones.bulkDelete([report.id, ...lines.map((l) => l.id)])
+  await db.vnoReports.put(report)
+  await db.vnoLines.bulkPut(lines)
+  await queueSync('vno_reports', report.id)
+  for (const l of lines) await queueSync('vno_lines', l.id)
+}
+
+/** Moving a report to another day must not collide with that day's report. */
+export async function reportOnDay(day: number, exceptId: string): Promise<VnoReport | undefined> {
+  return db.vnoReports
+    .where('date')
+    .equals(startOfDay(day))
+    .filter((r) => r.id !== exceptId)
+    .first()
+}
+
 export async function addVnoLine(reportId: string, label: string, note = ''): Promise<VnoLine> {
   const line: VnoLine = {
     id: uuid(),

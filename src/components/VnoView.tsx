@@ -1,13 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, openVnoReport, startOfDay } from '../db'
+import { db, openVnoReport, startOfDay, deleteVnoReport, restoreVnoReport, type DeletedVnoReport } from '../db'
 import { syncNow } from '../sync'
+import SwipeRow from './SwipeRow'
 import VnoReportForm from './VnoReportForm'
-
-function toInputDay(ms: number): string {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 function dayLabel(ms: number): string {
   const today = startOfDay(Date.now())
@@ -30,7 +26,18 @@ export default function VnoView() {
     return map
   }, []) ?? new Map<string, number>()
   const [openId, setOpenId] = useState<string | null>(null)
-  const [pickDay, setPickDay] = useState(false)
+  const [undo, setUndo] = useState<DeletedVnoReport | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(undoTimer.current), [])
+
+  async function remove(id: string) {
+    const snapshot = await deleteVnoReport(id)
+    if (!snapshot) return
+    setUndo(snapshot)
+    window.clearTimeout(undoTimer.current)
+    undoTimer.current = window.setTimeout(() => setUndo(null), 5000)
+  }
 
   if (openId) return <VnoReportForm reportId={openId} onBack={() => setOpenId(null)} />
 
@@ -39,7 +46,6 @@ export default function VnoView() {
 
   async function open(dayMs: number) {
     const r = await openVnoReport(dayMs)
-    setPickDay(false)
     setOpenId(r.id)
     void syncNow()
   }
@@ -50,44 +56,25 @@ export default function VnoView() {
         {todayReport ? "Open today's report" : "＋ Start today's report"}
       </button>
 
-      {/* Some shifts get written up the next morning, and then "today" is the
-          wrong day. Picking one is rare, so it stays out of the way. */}
-      {pickDay ? (
-        <div className="ev-field" style={{ marginTop: 10 }}>
-          <label className="field-label">Which day?</label>
-          <input
-            type="date"
-            autoFocus
-            max={toInputDay(Date.now())}
-            onChange={(e) => {
-              if (!e.target.value) return
-              const [y, m, d] = e.target.value.split('-').map(Number)
-              void open(new Date(y, (m ?? 1) - 1, d ?? 1).getTime())
-            }}
-          />
-        </div>
-      ) : (
-        <button className="link-btn" style={{ marginTop: 8 }} onClick={() => setPickDay(true)}>
-          Reporting a different day?
-        </button>
-      )}
 
       <div style={{ marginTop: 20 }}>
         {reports.map((r) => (
-          <button key={r.id} className="session-row" onClick={() => setOpenId(r.id)}>
-            <div style={{ fontSize: 26 }}>☕</div>
-            <div className="info">
-              <div className="name">{dayLabel(r.date)}</div>
-              <div className="muted small">
-                {r.barista || 'No name'}
-                {r.hoursFrom && ` · ${r.hoursFrom}${r.hoursTo ? `–${r.hoursTo}` : ''}`}
-                {r.guestCount !== null && ` · ${r.guestCount} guests`}
-                {` · ${lineCounts.get(r.id) ?? 0} item${(lineCounts.get(r.id) ?? 0) === 1 ? '' : 's'}`}
-                {!r.submittedAt && ' · draft'}
+          <SwipeRow key={r.id} onDelete={() => void remove(r.id)}>
+            <button className="session-row" style={{ marginBottom: 0 }} onClick={() => setOpenId(r.id)}>
+              <div style={{ fontSize: 26 }}>☕</div>
+              <div className="info">
+                <div className="name">{dayLabel(r.date)}</div>
+                <div className="muted small">
+                  {r.barista || 'No name'}
+                  {r.hoursFrom && ` · ${r.hoursFrom}${r.hoursTo ? `–${r.hoursTo}` : ''}`}
+                  {r.guestCount !== null && ` · ${r.guestCount} guests`}
+                  {` · ${lineCounts.get(r.id) ?? 0} item${(lineCounts.get(r.id) ?? 0) === 1 ? '' : 's'}`}
+                  {!r.submittedAt && ' · draft'}
+                </div>
               </div>
-            </div>
-            <div style={{ color: 'var(--muted)' }}>›</div>
-          </button>
+              <div style={{ color: 'var(--muted)' }}>›</div>
+            </button>
+          </SwipeRow>
         ))}
         {reports.length === 0 && (
           <div className="muted" style={{ textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
@@ -97,6 +84,22 @@ export default function VnoView() {
           </div>
         )}
       </div>
+
+      {undo && (
+        <div className="undo-bar">
+          <span>Deleted {dayLabel(undo.report.date).toLowerCase()}&rsquo;s report</span>
+          <button
+            onClick={async () => {
+              window.clearTimeout(undoTimer.current)
+              await restoreVnoReport(undo)
+              setUndo(null)
+              void syncNow()
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   )
 }

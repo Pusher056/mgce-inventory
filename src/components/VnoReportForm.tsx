@@ -8,6 +8,7 @@ import {
   updateVnoLine,
   deleteVnoLine,
   saveReceipt,
+  reportOnDay,
 } from '../db'
 import { syncNow } from '../sync'
 import { VNO_AREA_LABELS, type VnoArea, type VnoLine } from '../types'
@@ -19,6 +20,11 @@ import { VNO_AREA_LABELS, type VnoArea, type VnoLine } from '../types'
  * touches what she actually needs. Anything unusual goes in "Anything else",
  * and the receipt is a photo because that is what she has in her hand.
  */
+function toInputDay(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function VnoReportForm({ reportId, onBack }: { reportId: string; onBack: () => void }) {
   const report = useLiveQuery(() => db.vnoReports.get(reportId), [reportId])
   const items = useLiveQuery(() => db.vnoItems.orderBy('sortIndex').toArray(), []) ?? []
@@ -26,6 +32,8 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
   const receipt = useLiveQuery(() => db.receipts.where('reportId').equals(reportId).first(), [reportId])
   const fileInput = useRef<HTMLInputElement>(null)
   const [extra, setExtra] = useState('')
+  const [changingDay, setChangingDay] = useState(false)
+  const [dayError, setDayError] = useState<string | null>(null)
 
   const qtyByLabel = useMemo(() => new Map(lines.map((l) => [l.label, l])), [lines])
   const custom = lines.filter((l) => l.area === 'other').sort((a, b) => a.updatedAt - b.updatedAt)
@@ -70,7 +78,42 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
       </button>
 
       <h2 style={{ margin: '4px 0 2px' }}>{dayLabel}</h2>
-      <div className="muted small" style={{ marginBottom: 14 }}>
+      {/* Right under the date, because a shift written up the next morning has
+          to be moved before anything else makes sense. */}
+      {changingDay ? (
+        <div style={{ margin: '6px 0 4px' }}>
+          <input
+            type="date"
+            autoFocus
+            value={toInputDay(report.date)}
+            max={toInputDay(Date.now())}
+            onChange={async (e) => {
+              if (!e.target.value) return
+              const [y, m, d] = e.target.value.split('-').map(Number)
+              const day = new Date(y, (m ?? 1) - 1, d ?? 1).getTime()
+              const clash = await reportOnDay(day, reportId)
+              if (clash) {
+                setDayError('There is already a report for that day.')
+                return
+              }
+              setDayError(null)
+              setChangingDay(false)
+              await updateVnoReport(reportId, { date: day })
+              void syncNow()
+            }}
+          />
+          {dayError && (
+            <div className="field-hint" style={{ color: 'var(--red)' }}>
+              {dayError}
+            </div>
+          )}
+        </div>
+      ) : (
+        <button className="link-btn" onClick={() => setChangingDay(true)}>
+          Reporting a different day?
+        </button>
+      )}
+      <div className="muted small" style={{ margin: '6px 0 14px' }}>
         {report.submittedAt ? 'Sent' : 'Not sent yet — nothing is lost if you close this.'}
       </div>
 
