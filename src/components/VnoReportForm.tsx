@@ -40,31 +40,24 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
     month: 'long',
   })
 
+  /**
+   * Tap to say "I need this" — no number. She names what is missing; how much
+   * to send is the kitchen's call for their half and Ops' call for theirs, so
+   * asking her for a quantity would only invite a wrong one.
+   */
   function row(label: string, area: VnoArea, sortIndex: number) {
-    const line = qtyByLabel.get(label)
-    const qty = line?.qty ?? 0
-    const step = (d: number) => void setVnoQty(reportId, label, area, Math.max(0, qty + d), sortIndex)
+    const needed = (qtyByLabel.get(label)?.qty ?? 0) > 0
     return (
-      <div key={label} className={`vno-row${qty > 0 ? ' on' : ''}`}>
+      <button
+        key={label}
+        className={`vno-row${needed ? ' on' : ''}`}
+        onClick={() => void setVnoQty(reportId, label, area, needed ? 0 : 1, sortIndex)}
+      >
+        <span className="vno-check" aria-hidden="true">
+          {needed ? '✓' : ''}
+        </span>
         <span className="vno-name">{label}</span>
-        <div className="qty sm">
-          <button onClick={() => step(-1)} aria-label="Less">
-            −
-          </button>
-          <input
-            inputMode="numeric"
-            value={qty}
-            onChange={(e) => {
-              const n = Number(e.target.value.replace(/\D/g, ''))
-              void setVnoQty(reportId, label, area, Number.isFinite(n) ? n : 0, sortIndex)
-            }}
-            onFocus={(e) => e.target.select()}
-          />
-          <button onClick={() => step(1)} aria-label="More">
-            ＋
-          </button>
-        </div>
-      </div>
+      </button>
     )
   }
 
@@ -125,23 +118,6 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
                 placeholder="Note"
                 onChange={(e) => void updateVnoLine(l.id, { note: e.target.value })}
               />
-            </div>
-            <div className="qty sm">
-              <button onClick={() => void updateVnoLine(l.id, { qty: Math.max(1, l.qty - 1) })} aria-label="Less">
-                −
-              </button>
-              <input
-                inputMode="numeric"
-                value={l.qty}
-                onChange={(e) => {
-                  const n = Number(e.target.value.replace(/\D/g, ''))
-                  void updateVnoLine(l.id, { qty: Number.isFinite(n) && n > 0 ? n : 1 })
-                }}
-                onFocus={(e) => e.target.select()}
-              />
-              <button onClick={() => void updateVnoLine(l.id, { qty: l.qty + 1 })} aria-label="More">
-                ＋
-              </button>
             </div>
             <button className="row-action danger" onClick={() => void deleteVnoLine(l.id)} title="Remove">
               🗑

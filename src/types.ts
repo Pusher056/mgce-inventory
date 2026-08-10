@@ -226,8 +226,8 @@ export interface Tombstone {
 export type VnoArea = 'dry' | 'kitchen' | 'other'
 
 export const VNO_AREA_LABELS: Record<VnoArea, string> = {
-  dry: 'From the warehouse',
-  kitchen: 'From the kitchen',
+  dry: 'Warehouse',
+  kitchen: 'Kitchen',
   other: 'Anything else',
 }
 
