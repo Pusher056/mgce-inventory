@@ -109,8 +109,8 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
           )}
         </div>
       ) : (
-        <button className="link-btn" onClick={() => setChangingDay(true)}>
-          Reporting a different day?
+        <button className="chip-btn accent" onClick={() => setChangingDay(true)}>
+          📅 Reporting a different day?
         </button>
       )}
       <div className="muted small" style={{ margin: '6px 0 14px' }}>

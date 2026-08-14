@@ -14,7 +14,16 @@ export function isUpdateReady(): boolean {
   return updateReady
 }
 export function applyUpdate() {
-  doUpdate?.()
+  if (!doUpdate) return
+  // Hide the banner straight away: leaving it up while the reload is arranged
+  // makes it look like the tap did nothing.
+  updateReady = false
+  listeners.forEach((l) => l())
+  doUpdate()
+  // Safety net. The reload normally rides on "controllerchange"; if the new
+  // worker fails to take over (another tab still holding the old one, say),
+  // reload anyway rather than leave the banner bouncing back.
+  window.setTimeout(() => window.location.reload(), 2500)
 }
 
 /**

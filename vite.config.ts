@@ -28,6 +28,10 @@ export default defineConfig({
         // The zxing barcode engine (.wasm) must be precached so scanning works offline
         globPatterns: ['**/*.{js,css,html,png,svg,wasm,woff2}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // Without this the new worker activates but never takes over the open
+        // page, so "controllerchange" never fires, the reload never happens, and
+        // the update banner keeps coming back a few seconds after every tap.
+        clientsClaim: true,
       },
     }),
   ],

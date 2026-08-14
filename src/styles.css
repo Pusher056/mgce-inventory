@@ -402,16 +402,22 @@ textarea {
   text-transform: uppercase;
 }
 /* ---------- VNO Coffee ---------- */
+/* Same lesson as the collapsible headings: aiming at the checkbox and drifting
+   left used to land on dead page. The row reaches into the card's padding so a
+   near miss still counts. */
 .vno-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
-  padding: 11px 2px;
+  width: calc(100% + 28px);
+  margin-left: -14px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--bg3);
   background: none;
   text-align: left;
+  user-select: none;
 }
+.vno-row:hover { background: var(--bg3); }
 .vno-row:last-child { border-bottom: none; }
 .vno-name { flex: 1; min-width: 0; font-size: 15px; color: var(--muted); }
 .vno-row.on .vno-name { color: var(--text); font-weight: 600; }
@@ -486,6 +492,12 @@ textarea {
   font-size: 13px;
   font-weight: 600;
   width: auto;
+}
+/* For the one action nobody should have to hunt for */
+.chip-btn.accent {
+  background: none;
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 .pick-list {
   max-height: 46vh;
