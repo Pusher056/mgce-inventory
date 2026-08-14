@@ -55,17 +55,22 @@ export default function VnoReportForm({ reportId, onBack }: { reportId: string; 
    */
   function row(label: string, area: VnoArea, sortIndex: number) {
     const needed = (qtyByLabel.get(label)?.qty ?? 0) > 0
+    // A real checkbox inside a label: the browser makes the whole label toggle
+    // it, which is far more reliable than trying to line up a button's hit area
+    // with what looks clickable.
     return (
-      <button
-        key={label}
-        className={`vno-row${needed ? ' on' : ''}`}
-        onClick={() => void setVnoQty(reportId, label, area, needed ? 0 : 1, sortIndex)}
-      >
+      <label key={label} className={`vno-row${needed ? ' on' : ''}`}>
+        <input
+          type="checkbox"
+          className="vno-cb"
+          checked={needed}
+          onChange={(e) => void setVnoQty(reportId, label, area, e.target.checked ? 1 : 0, sortIndex)}
+        />
         <span className="vno-check" aria-hidden="true">
           {needed ? '✓' : ''}
         </span>
         <span className="vno-name">{label}</span>
-      </button>
+      </label>
     )
   }
 

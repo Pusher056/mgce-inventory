@@ -416,8 +416,22 @@ textarea {
   background: none;
   text-align: left;
   user-select: none;
+  cursor: pointer;
+  position: relative;
 }
 .vno-row:hover { background: var(--bg3); }
+.vno-row:active { background: var(--bg2); }
+/* The real control. Kept focusable for the keyboard, but the label is what you
+   actually click — anywhere on it. */
+.vno-cb {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.vno-cb:focus-visible + .vno-check { box-shadow: 0 0 0 3px var(--accent); }
 .vno-row:last-child { border-bottom: none; }
 .vno-name { flex: 1; min-width: 0; font-size: 15px; color: var(--muted); }
 .vno-row.on .vno-name { color: var(--text); font-weight: 600; }
@@ -465,21 +479,14 @@ textarea {
   margin-bottom: 2px;
 }
 
-.pack-fields {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
 .pack-note {
+  margin-top: 6px;
   font-size: 13px;
   padding: 6px 9px;
   border-radius: 8px;
-  flex: 1;
-  min-width: 130px;
-  max-width: 260px;
+  width: 100%;
+  max-width: 420px;
 }
-.pack-note.size { flex: 0 1 130px; min-width: 100px; }
 .qty {
   display: flex;
   align-items: center;
