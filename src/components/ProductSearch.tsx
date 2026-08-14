@@ -21,13 +21,8 @@ interface Area {
   categories?: Category[]
 }
 const AREA_BY_SECTION: Record<string, Area> = {
-  'STORAGE BEVERAGE-N/A': { storage: 'beverage', categories: ['soft', 'water'] },
-  'STORAGE BEVERAGE-BEER (HOUSE)': { storage: 'beverage', categories: ['beer'] },
-  'STORAGE BEVERAGE-WINE (HOUSE)': {
-    storage: 'beverage',
-    categories: ['red_wine', 'white_wine', 'rose_wine', 'sparkling'],
-  },
-  'STORAGE BEVERAGE-LIQUOR (HOUSE)': { storage: 'beverage', categories: ['spirits'] },
+  // no categories: the whole beverage shelf, grouped by type once you are in it
+  'STORAGE BEVERAGE': { storage: 'beverage' },
   'OFFICE ITEMS/EQUIPMENT': { storage: 'office' },
   'DISPOSABLES/MISC': { storage: 'dry' },
   'KITCHEN BEVERAGE/GARNISH': { storage: 'kitchen' },

@@ -77,6 +77,7 @@ function productToRow(p: Product) {
     subcategory_locked: p.subcategoryLocked === 1,
     photo_preferred: p.photoPreferred === 1,
     location: p.location ?? null,
+    contents: p.contents ?? '',
     units_per_case: p.unitsPerCase,
     units_confirmed: p.unitsConfirmed === 1,
     image_url: p.imageUrl,
@@ -609,6 +610,13 @@ async function uploadReceipts() {
 /** Ceiling for a full-table pull; also the signal that a page was truncated. */
 const PULL_LIMIT = 5000
 
+/**
+ * Product columns added after the first release. A device that synced before
+ * one of these existed holds a row that is complete by timestamp but missing
+ * the field, so the pull has to notice and refresh it. Add every new column.
+ */
+const LATER_PRODUCT_FIELDS = ['storage', 'contents'] as const satisfies readonly (keyof Product)[]
+
 /** Deletes made with no signal: keep retrying until the server confirms them. */
 async function retryPendingDeletes() {
   const pending = await db.tombstones.toArray()
@@ -688,7 +696,8 @@ export async function pullFromServer() {
         if (!mine) return true
         // A field added after this row was last written will never arrive on
         // timestamps alone — the row is not "newer", it is just incomplete here.
-        if (mine.storage === undefined) return true
+        // Every column added later goes in this list.
+        if (LATER_PRODUCT_FIELDS.some((f) => mine[f] === undefined)) return true
         return (Date.parse(r.updated_at) || 0) > mine.updatedAt
       })
       await db.products.bulkPut(
@@ -705,6 +714,7 @@ export async function pullFromServer() {
           subcategoryLocked: r.subcategory_locked ? 1 : (0 as 0 | 1),
           photoPreferred: r.photo_preferred ? 1 : (0 as 0 | 1),
           location: r.location ?? null,
+          contents: r.contents ?? '',
           unitsPerCase: r.units_per_case ?? 12,
           unitsConfirmed: r.units_confirmed ? 1 : (0 as 0 | 1),
           imageUrl: r.image_url,

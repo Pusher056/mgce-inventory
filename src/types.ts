@@ -61,6 +61,11 @@ export interface Product {
   photoPreferred: 0 | 1
   /** Ubicación física estilo Target: LETRA-shelfstand-shelf, p. ej. "B-5-6" */
   location: string | null
+  /**
+   * What a kit contains, comma separated. Shown on the pack list line so a
+   * planner asking for a bar kit can see it already includes a corkscrew.
+   */
+  contents?: string
   unitsPerCase: number
   /** El usuario ya confirmó las botellas/caja; si no, se pregunta al contar cajas por primera vez */
   unitsConfirmed: 0 | 1
@@ -279,10 +284,11 @@ export interface LocalReceipt {
 
 /** Section names as they appear in the 2026 template, in template order. */
 export const PACK_SECTIONS = [
-  'STORAGE BEVERAGE-N/A',
-  'STORAGE BEVERAGE-BEER (HOUSE)',
-  'STORAGE BEVERAGE-WINE (HOUSE)',
-  'STORAGE BEVERAGE-LIQUOR (HOUSE)',
+  // Their template splits the beverage shelf four ways (N/A, beer, wine,
+  // liquor). Picking between four near-identical section names every time was
+  // just friction — one section holds the whole beverage storage, and the
+  // picker still groups what is inside it by type.
+  'STORAGE BEVERAGE',
   'KITCHEN BEVERAGE/GARNISH',
   'OFFICE ITEMS/EQUIPMENT',
   'DISPOSABLES/MISC',

@@ -158,6 +158,14 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
                     <div className="muted small">
                       {p?.location ? `${p.location}` : !l.productId ? 'not in the warehouse' : '—'}
                     </div>
+                    {/* A kit hides what is inside it. Spelling it out here stops
+                        anyone adding a corkscrew that is already in the box. */}
+                    {p?.contents && (
+                      <div className="pack-contents">
+                        <span className="pack-contents-title">Packed in a {p.name.toLowerCase()}</span>
+                        {p.contents}
+                      </div>
+                    )}
                     {/* Their SIZE/COLOR column carries real instructions —
                         "Red", "Yellow", '16"L x 12"W' — so a line has to be able
                         to say it, or the export cannot be faithful. */}

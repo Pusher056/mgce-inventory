@@ -426,7 +426,8 @@ textarea {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  border: 2px solid var(--bg3);
+  /* not --bg3: that is the hover colour, and the box vanished into it */
+  border: 2px solid var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -435,11 +436,33 @@ textarea {
   color: var(--bg);
 }
 .vno-row.on .vno-check { background: var(--green); border-color: var(--green); }
+.vno-row:hover .vno-check { border-color: var(--accent); }
 .receipt-thumb {
   max-width: 220px;
   max-height: 220px;
   border-radius: 10px;
   display: block;
+}
+
+.pack-contents {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg2);
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 460px;
+}
+.pack-contents-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 2px;
 }
 
 .pack-fields {
