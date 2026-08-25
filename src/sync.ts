@@ -7,7 +7,17 @@ import {
   categoryForSubcategory,
   canonicalSubcategory,
 } from './classify'
-import type { Entry, EventRec, PackLine, Product, Session, VnoItem, VnoLine, VnoReport } from './types'
+import type {
+  Entry,
+  EventRec,
+  LiquorLine,
+  PackLine,
+  Product,
+  Session,
+  VnoItem,
+  VnoLine,
+  VnoReport,
+} from './types'
 
 /**
  * Offline-first sync engine.
@@ -670,7 +680,7 @@ async function dropLocallyIfGoneFromServer(
 export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
-    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, pendingIds, deletedIds] = await Promise.all([
+    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, pendingIds, deletedIds] = await Promise.all([
       // Explicit limits: the server's default page size would silently truncate
       // one day, and a truncated list read as "the rest was deleted" would take
       // real counts with it.
@@ -682,6 +692,7 @@ export async function pullFromServer() {
       supabase.from('vno_items').select('*').limit(PULL_LIMIT),
       supabase.from('vno_reports').select('*').limit(PULL_LIMIT),
       supabase.from('vno_lines').select('*').limit(PULL_LIMIT),
+      supabase.from('liquor_program').select('*').limit(PULL_LIMIT),
       db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
       db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
@@ -770,6 +781,30 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.vnoReports, vnoR, pendingIds)
     await dropLocallyIfGoneFromServer(db.vnoLines, vnoL, pendingIds)
     await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds)
+
+    // Reference data, same as the VNO list: the server is the only author.
+    await dropLocallyIfGoneFromServer(db.liquorProgram, liq, pendingIds)
+    if (liq.data) {
+      await db.liquorProgram.bulkPut(
+        liq.data.map((r) => ({
+          id: r.id,
+          tier: r.tier as LiquorLine['tier'],
+          category: r.category ?? '',
+          brand: r.brand ?? '',
+          price: r.price === null ? null : Number(r.price),
+          priceEstimated: !!r.price_estimated,
+          previous: r.previous ?? '',
+          note: r.note ?? '',
+          matchRx: r.match_rx ?? '',
+          isNew: !!r.is_new,
+          decided: !!r.decided,
+          dropped: !!r.dropped,
+          counted: r.counted !== false,
+          sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
 
     // The usual list is edited on the server side only, so the server always wins.
     if (vnoI.data) {

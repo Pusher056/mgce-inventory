@@ -16,6 +16,7 @@ import type {
   VnoLine,
   LocalReceipt,
   VnoArea,
+  LiquorLine,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -33,6 +34,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   vnoReports: EntityTable<VnoReport, 'id'>
   vnoLines: EntityTable<VnoLine, 'id'>
   receipts: EntityTable<LocalReceipt, 'id'>
+  liquorProgram: EntityTable<LiquorLine, 'id'>
 }
 
 db.version(1).stores({
@@ -67,6 +69,11 @@ db.version(5).stores({
   vnoReports: 'id, date, updatedAt',
   vnoLines: 'id, reportId, [reportId+area]',
   receipts: 'id, reportId, uploaded',
+})
+
+// v6 adds the liquor program. Reference data, pulled from the server.
+db.version(6).stores({
+  liquorProgram: 'id, tier, sortIndex',
 })
 
 export function uuid(): string {

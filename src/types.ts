@@ -282,6 +282,42 @@ export interface LocalReceipt {
   createdAt: number
 }
 
+/**
+ * One line of the liquor program — which brand we pour for a category, at which
+ * tier. Reference data: what stock there is gets worked out live from the
+ * count, so the sheet is never out of date.
+ */
+export type LiquorTier = 'standard' | 'premium' | 'addition' | 'beer' | 'na'
+
+export const TIER_LABELS: Record<LiquorTier, string> = {
+  standard: 'Standard package',
+  premium: 'Premium package',
+  addition: 'Additions',
+  beer: 'Beer',
+  na: 'Non-alcoholic',
+}
+
+export interface LiquorLine {
+  id: string
+  tier: LiquorTier
+  category: string
+  brand: string
+  /** null = no price on the sheet, to be quoted */
+  price: number | null
+  priceEstimated: boolean
+  previous: string
+  note: string
+  /** JS regex run against brand + name + type of every counted product */
+  matchRx: string
+  isNew: boolean
+  decided: boolean
+  dropped: boolean
+  /** false for beer, which lives outside the Beverage Storage count */
+  counted: boolean
+  sortIndex: number
+  updatedAt: number
+}
+
 /** Section names as they appear in the 2026 template, in template order. */
 export const PACK_SECTIONS = [
   // Their template splits the beverage shelf four ways (N/A, beer, wine,

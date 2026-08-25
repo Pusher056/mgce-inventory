@@ -10,6 +10,7 @@ import EventsView from './components/EventsView'
 import EventDetail from './components/EventDetail'
 import PackList from './components/PackList'
 import VnoView from './components/VnoView'
+import LiquorProgram from './components/LiquorProgram'
 import type { Session } from './types'
 
 export default function App() {
@@ -60,7 +61,9 @@ export default function App() {
                   ? 'Events & Pack List'
                   : module === 'vno'
                     ? 'VNO Coffee'
-                    : 'MGCE Operations'}
+                    : module === 'liquor'
+                      ? 'Liquor Program'
+                      : 'MGCE Operations'}
         </h1>
         <button
           className="sync-pill"
@@ -99,6 +102,8 @@ export default function App() {
         <Home onOpen={(s) => setSessionId(s.id)} />
       ) : module === 'vno' ? (
         <VnoView />
+      ) : module === 'liquor' ? (
+        <LiquorProgram />
       ) : module === 'events' ? (
         <EventsView
           onOpen={(e) => {
