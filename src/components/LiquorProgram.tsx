@@ -1,22 +1,26 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db'
+import { db, addLiquorLine, updateLiquorLine, deleteLiquorLine } from '../db'
+import { syncNow } from '../sync'
 import { TIER_LABELS, displayName, totalBottles, type LiquorLine, type LiquorTier } from '../types'
+
+const TIERS: LiquorTier[] = ['standard', 'premium', 'addition', 'beer', 'na']
 
 /**
  * The brand list, with the shelf behind it.
  *
- * Nothing about stock is stored here: every figure is worked out from the
- * current count when the screen opens. That is the whole point — a printed
- * sheet is wrong the day after it is printed, and this one never is.
+ * Nothing about stock is stored: every figure is worked out from the current
+ * count when the screen opens. A printed sheet is wrong the day after it is
+ * printed; this one never is.
  */
 export default function LiquorProgram() {
   const lines = useLiveQuery(() => db.liquorProgram.orderBy('sortIndex').toArray(), []) ?? []
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
   const entries = useLiveQuery(() => db.entries.toArray(), []) ?? []
-  const [open, setOpen] = useState<LiquorTier | 'decisions' | 'runout' | null>('standard')
+  const [open, setOpen] = useState<LiquorTier | null>('standard')
+  const [editing, setEditing] = useState<LiquorLine | null>(null)
+  const [editMode, setEditMode] = useState(false)
 
-  /** Bottles on the shelf for every counted product, by id. */
   const stock = useMemo(() => {
     const perCase = new Map(products.map((p) => [p.id, p.unitsPerCase]))
     const total = new Map<string, number>()
@@ -27,7 +31,6 @@ export default function LiquorProgram() {
     return total
   }, [products, entries])
 
-  /** Everything a line's regex has to search: brand, name and type. */
   const haystacks = useMemo(
     () =>
       products
@@ -43,35 +46,33 @@ export default function LiquorProgram() {
     const cache = new Map<string, number>()
     return (rx: string) => {
       if (!rx) return 0
-      if (cache.has(rx)) return cache.get(rx)!
+      const hit = cache.get(rx)
+      if (hit !== undefined) return hit
       let n = 0
       try {
         const re = new RegExp(rx, 'i')
         for (const h of haystacks) if (re.test(h.text)) n += stock.get(h.id) ?? 0
       } catch {
-        // a bad pattern must not take the screen down
+        // a bad pattern must never take the screen down
       }
       cache.set(rx, n)
       return n
     }
   }, [haystacks, stock])
 
-  const byTier = (t: LiquorTier) => lines.filter((l) => l.tier === t)
-  const decided = lines.filter((l) => l.decided)
-
   const totals = useMemo(() => {
-    const counted = lines.filter((l) => l.counted && !l.dropped)
-    const empty = counted.filter((l) => bottlesFor(l.matchRx) === 0)
+    const counted = lines.filter((l) => l.counted)
+    const empty = counted.filter((l) => bottlesFor(l.matchRx) === 0 && bottlesFor(l.previousRx) === 0)
     return {
       lines: lines.length,
-      decided: decided.length,
       empty: empty.length,
       bottles: [...stock.values()].reduce((s, n) => s + n, 0),
+      tiers: new Set(lines.map((l) => l.tier)).size,
     }
-  }, [lines, decided.length, bottlesFor, stock])
+  }, [lines, bottlesFor, stock])
 
+  /** The brand we are pouring: how much of it is on the shelf. */
   function statusChip(l: LiquorLine) {
-    if (l.dropped) return <span className="lp-chip drop">DROPPED</span>
     if (!l.counted) return <span className="lp-chip mute">not counted</span>
     const n = bottlesFor(l.matchRx)
     if (n > 0) return <span className="lp-chip ok">{n} in stock</span>
@@ -80,7 +81,6 @@ export default function LiquorProgram() {
   }
 
   function price(l: LiquorLine) {
-    if (l.dropped) return '—'
     if (l.price === null) return <span className="lp-mute">to quote</span>
     return (
       <>
@@ -91,8 +91,7 @@ export default function LiquorProgram() {
   }
 
   function tierBlock(t: LiquorTier) {
-    const rows = byTier(t)
-    if (rows.length === 0) return null
+    const rows = lines.filter((l) => l.tier === t)
     const isOpen = open === t
     return (
       <div className="lp-block" key={t}>
@@ -105,23 +104,47 @@ export default function LiquorProgram() {
         </button>
         {isOpen && (
           <div className="lp-rows">
-            {rows.map((l) => (
-              <div key={l.id} className={`lp-row${l.dropped ? ' is-dropped' : ''}`}>
-                <div className="lp-cat">{l.category}</div>
-                <div className="lp-main">
-                  <div className="lp-brand">
-                    {l.brand}
-                    {l.decided && <span className="lp-chip dec">DECIDED</span>}
+            {rows.map((l) => {
+              const held = bottlesFor(l.previousRx)
+              return (
+                <div key={l.id} className="lp-row">
+                  <div className="lp-cat">{l.category}</div>
+                  <div className="lp-main">
+                    <div className="lp-brand">{l.brand}</div>
+                    {l.previous && <div className="lp-prev">Replaces {l.previous}</div>}
+                    {l.note && <div className="lp-note">{l.note}</div>}
                   </div>
-                  {l.previous && l.previous !== '—' && <div className="lp-prev">was {l.previous}</div>}
-                  {l.note && l.note !== '—' && <div className="lp-note">{l.note}</div>}
+                  <div className="lp-right">
+                    <div className="lp-price">{price(l)}</div>
+                    {statusChip(l)}
+                    {/* the bottle being replaced is usually still being poured */}
+                    {held > 0 && <div className="lp-held">{held} of the old one left</div>}
+                  </div>
+                  {editMode && (
+                    <button className="row-action" onClick={() => setEditing(l)} title="Edit">
+                      ✎
+                    </button>
+                  )}
                 </div>
-                <div className="lp-right">
-                  <div className="lp-price">{price(l)}</div>
-                  {statusChip(l)}
+              )
+            })}
+            {editMode && (
+              <div className="lp-row">
+                <div className="lp-cat" />
+                <div className="lp-main">
+                  <button
+                    className="chip-btn"
+                    onClick={async () => {
+                      const l = await addLiquorLine({ tier: t, category: 'New category', brand: 'New brand' })
+                      setEditing(l)
+                      void syncNow()
+                    }}
+                  >
+                    ＋ Add a line
+                  </button>
                 </div>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -131,8 +154,8 @@ export default function LiquorProgram() {
   return (
     <div className="screen lp">
       <p className="lp-intro">
-        What MGCE pours, by tier. Every stock figure is read from the Beverage Storage count as it
-        stands right now — nothing here is typed in by hand.
+        What MGCE pours, by tier. Stock is read from the Beverage Storage count as it stands right
+        now, so it is never out of date.
       </p>
 
       <div className="lp-stats">
@@ -141,51 +164,115 @@ export default function LiquorProgram() {
           <span>bottles counted</span>
         </div>
         <div className="lp-stat">
-          <b>{totals.decided}</b>
-          <span>open questions closed</span>
+          <b>{totals.lines}</b>
+          <span>lines in the program</span>
         </div>
         <div className="lp-stat">
           <b>{totals.empty}</b>
           <span>lines with nothing on the shelf</span>
         </div>
         <div className="lp-stat">
-          <b>{totals.lines}</b>
-          <span>lines in the program</span>
+          <b>{totals.tiers}</b>
+          <span>packages and lists</span>
         </div>
       </div>
 
-      {(['standard', 'premium', 'addition', 'beer', 'na'] as LiquorTier[]).map(tierBlock)}
+      <button className="chip-btn" style={{ marginBottom: 14 }} onClick={() => setEditMode(!editMode)}>
+        {editMode ? '✓ Done editing' : '✎ Edit the program'}
+      </button>
 
-      <div className="lp-block">
-        <button
-          className="lp-head"
-          onClick={() => setOpen(open === 'decisions' ? null : 'decisions')}
-        >
-          <span className="caret">{open === 'decisions' ? '▼' : '▶'}</span>
-          <span className="lp-title">The decisions</span>
-          <span className="lp-count">{decided.length} calls, with reasons</span>
-        </button>
-        {open === 'decisions' && (
-          <div className="lp-rows">
-            {decided.map((l) => (
-              <div key={l.id} className="lp-row">
-                <div className="lp-cat">{l.category}</div>
-                <div className="lp-main">
-                  <div className="lp-brand">{l.dropped ? `Dropped: ${l.brand}` : l.brand}</div>
-                  {l.previous && l.previous !== '—' && <div className="lp-prev">instead of {l.previous}</div>}
-                  <div className="lp-note">{l.note}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {TIERS.map(tierBlock)}
 
       <p className="lp-foot">
-        Prices marked <span className="lp-est">est.</span> are expectations for the tier, not quotes —
-        confirm with the distributor. Beer sits outside the Beverage Storage count, so those lines
-        show no figure.
+        Prices marked <span className="lp-est">est.</span> are expectations for the tier rather than
+        quotes. Beer sits outside the Beverage Storage count, so those lines carry no figure.
       </p>
+
+      {editing && <EditSheet line={editing} onClose={() => setEditing(null)} />}
+    </div>
+  )
+}
+
+function EditSheet({ line, onClose }: { line: LiquorLine; onClose: () => void }) {
+  const [draft, setDraft] = useState(line)
+  const set = <K extends keyof LiquorLine>(k: K, v: LiquorLine[K]) => setDraft({ ...draft, [k]: v })
+
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet tall" onClick={(e) => e.stopPropagation()}>
+        <h2>Edit line</h2>
+
+        <label className="field-label">Category</label>
+        <input value={draft.category} onChange={(e) => set('category', e.target.value)} />
+
+        <label className="field-label">Brand</label>
+        <input value={draft.brand} onChange={(e) => set('brand', e.target.value)} />
+
+        <label className="field-label">Price per bottle</label>
+        <input
+          inputMode="decimal"
+          value={draft.price === null ? '' : String(draft.price)}
+          placeholder="leave empty for “to quote”"
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^\d.]/g, '')
+            set('price', v === '' ? null : Number(v))
+          }}
+        />
+
+        <label className="lp-checkline">
+          <input
+            type="checkbox"
+            checked={draft.priceEstimated}
+            onChange={(e) => set('priceEstimated', e.target.checked)}
+          />
+          Price is an estimate, not a quote
+        </label>
+
+        <label className="field-label">Replaces</label>
+        <input
+          value={draft.previous}
+          placeholder="Bacardi · $15.28"
+          onChange={(e) => set('previous', e.target.value)}
+        />
+
+        <label className="field-label">Note</label>
+        <input value={draft.note} onChange={(e) => set('note', e.target.value)} />
+
+        <label className="field-label">Match this brand in the count</label>
+        <input value={draft.matchRx} placeholder="bombay" onChange={(e) => set('matchRx', e.target.value)} />
+        <div className="field-hint">
+          A word from the bottle name. This is how the line finds its own stock.
+        </div>
+
+        <label className="field-label">Match the brand it replaces</label>
+        <input value={draft.previousRx} placeholder="bacardi" onChange={(e) => set('previousRx', e.target.value)} />
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button
+            className="big-btn green"
+            style={{ flex: 1 }}
+            onClick={async () => {
+              await updateLiquorLine(line.id, draft)
+              onClose()
+              void syncNow()
+            }}
+          >
+            Save
+          </button>
+          <button
+            className="row-action danger"
+            title="Delete this line"
+            onClick={async () => {
+              if (!window.confirm(`Remove “${line.brand}” from the program?`)) return
+              await deleteLiquorLine(line.id)
+              onClose()
+              void syncNow()
+            }}
+          >
+            🗑
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

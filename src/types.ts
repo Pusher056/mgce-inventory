@@ -204,6 +204,7 @@ export type SyncTable =
   | 'pack_lines'
   | 'vno_reports'
   | 'vno_lines'
+  | 'liquor_program'
 
 export interface OutboxItem {
   seq?: number
@@ -309,8 +310,9 @@ export interface LiquorLine {
   note: string
   /** JS regex run against brand + name + type of every counted product */
   matchRx: string
+  /** Same, for the brand being replaced — it is usually still on the shelf */
+  previousRx: string
   isNew: boolean
-  decided: boolean
   dropped: boolean
   /** false for beer, which lives outside the Beverage Storage count */
   counted: boolean

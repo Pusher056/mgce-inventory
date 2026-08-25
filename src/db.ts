@@ -299,6 +299,44 @@ export async function deletePackLine(id: string) {
   await pushDelete('pack_lines', id)
 }
 
+/* ---------- Liquor program ---------- */
+
+export async function addLiquorLine(partial: Partial<LiquorLine> & { tier: LiquorLine['tier'] }): Promise<LiquorLine> {
+  const siblings = await db.liquorProgram.where('tier').equals(partial.tier).toArray()
+  const line: LiquorLine = {
+    id: uuid(),
+    category: '',
+    brand: '',
+    price: null,
+    priceEstimated: false,
+    previous: '',
+    note: '',
+    matchRx: '',
+    previousRx: '',
+    isNew: true,
+    dropped: false,
+    counted: partial.tier !== 'beer' && partial.tier !== 'na',
+    sortIndex: Math.max(0, ...siblings.map((s) => s.sortIndex)) + 10,
+    updatedAt: Date.now(),
+    ...partial,
+  }
+  await db.liquorProgram.add(line)
+  await queueSync('liquor_program', line.id)
+  return line
+}
+
+export async function updateLiquorLine(id: string, changes: Partial<LiquorLine>) {
+  await db.liquorProgram.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('liquor_program', id)
+}
+
+export async function deleteLiquorLine(id: string) {
+  await db.liquorProgram.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'liquor_program', ts: Date.now() })
+  await pushDelete('liquor_program', id)
+}
+
 /* ---------- VNO Coffee daily report ---------- */
 
 /** Midnight local, so a report belongs to the day it was worked. */

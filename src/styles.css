@@ -394,8 +394,16 @@ textarea {
 .lp-chip.ok { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; text-transform: none; letter-spacing: 0; font-weight: 700; }
 .lp-chip.act { background: rgba(248, 113, 113, 0.15); color: #f8a0a0; }
 .lp-chip.new { background: rgba(56, 189, 248, 0.15); color: var(--accent); }
-.lp-chip.dec { background: rgba(56, 189, 248, 0.15); color: var(--accent); margin-top: 0; }
-.lp-chip.drop { background: var(--bg3); color: var(--muted); }
+.lp-held { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+.lp-checkline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-top: 12px;
+}
+.lp-checkline input { width: 18px; height: 18px; flex: none; }
 .lp-chip.mute { background: var(--bg3); color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 600; }
 
 .lp-foot {

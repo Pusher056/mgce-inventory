@@ -160,6 +160,26 @@ function packLineToRow(l: PackLine) {
   }
 }
 
+function liquorLineToRow(l: LiquorLine) {
+  return {
+    id: l.id,
+    tier: l.tier,
+    category: l.category,
+    brand: l.brand,
+    price: l.price,
+    price_estimated: l.priceEstimated,
+    previous: l.previous,
+    note: l.note,
+    match_rx: l.matchRx,
+    previous_rx: l.previousRx ?? '',
+    is_new: l.isNew,
+    dropped: l.dropped,
+    counted: l.counted,
+    sort_index: l.sortIndex,
+    updated_at: new Date(l.updatedAt).toISOString(),
+  }
+}
+
 function vnoReportToRow(r: VnoReport) {
   const d = new Date(r.date)
   return {
@@ -205,6 +225,7 @@ async function pushOutbox() {
     pack_lines: new Set<string>(),
     vno_reports: new Set<string>(),
     vno_lines: new Set<string>(),
+    liquor_program: new Set<string>(),
   }
   for (const it of items) byTable[it.table].add(it.id)
 
@@ -217,6 +238,7 @@ async function pushOutbox() {
     'pack_lines',
     'vno_reports',
     'vno_lines',
+    'liquor_program',
   ] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
@@ -233,6 +255,8 @@ async function pushOutbox() {
       rows = (await db.vnoReports.bulkGet(ids)).filter((r): r is VnoReport => !!r).map(vnoReportToRow)
     } else if (table === 'vno_lines') {
       rows = (await db.vnoLines.bulkGet(ids)).filter((l): l is VnoLine => !!l).map(vnoLineToRow)
+    } else if (table === 'liquor_program') {
+      rows = (await db.liquorProgram.bulkGet(ids)).filter((l): l is LiquorLine => !!l).map(liquorLineToRow)
     } else {
       rows = (await db.entries.bulkGet(ids)).filter((e): e is Entry => !!e).map(entryToRow)
     }
@@ -782,11 +806,20 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.vnoLines, vnoL, pendingIds)
     await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds)
 
-    // Reference data, same as the VNO list: the server is the only author.
     await dropLocallyIfGoneFromServer(db.liquorProgram, liq, pendingIds)
     if (liq.data) {
+      const localLiq = new Map(
+        (await db.liquorProgram.bulkGet(liq.data.map((r) => r.id))).flatMap((l) => (l ? [[l.id, l]] : [])),
+      )
+      const incomingLiq = liq.data.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = localLiq.get(r.id)
+        if (!mine) return true
+        if (mine.previousRx === undefined) return true
+        return (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
       await db.liquorProgram.bulkPut(
-        liq.data.map((r) => ({
+        incomingLiq.map((r) => ({
           id: r.id,
           tier: r.tier as LiquorLine['tier'],
           category: r.category ?? '',
@@ -796,8 +829,8 @@ export async function pullFromServer() {
           previous: r.previous ?? '',
           note: r.note ?? '',
           matchRx: r.match_rx ?? '',
+          previousRx: r.previous_rx ?? '',
           isNew: !!r.is_new,
-          decided: !!r.decided,
           dropped: !!r.dropped,
           counted: r.counted !== false,
           sortIndex: r.sort_index ?? 0,
