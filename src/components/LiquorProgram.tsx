@@ -20,6 +20,7 @@ export default function LiquorProgram() {
   const [open, setOpen] = useState<LiquorTier | null>('standard')
   const [editing, setEditing] = useState<LiquorLine | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const stock = useMemo(() => {
     const perCase = new Map(products.map((p) => [p.id, p.unitsPerCase]))
@@ -177,9 +178,26 @@ export default function LiquorProgram() {
         </div>
       </div>
 
-      <button className="chip-btn" style={{ marginBottom: 14 }} onClick={() => setEditMode(!editMode)}>
-        {editMode ? '✓ Done editing' : '✎ Edit the program'}
-      </button>
+      <div className="lp-actions">
+        <button
+          className="chip-btn"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true)
+            try {
+              const { exportLiquorProgramPdf } = await import('../export')
+              await exportLiquorProgramPdf(lines, bottlesFor)
+            } finally {
+              setExporting(false)
+            }
+          }}
+        >
+          {exporting ? 'Building the PDF…' : '📄 Export PDF'}
+        </button>
+        <button className="chip-btn" onClick={() => setEditMode(!editMode)}>
+          {editMode ? '✓ Done editing' : '✎ Edit the program'}
+        </button>
+      </div>
 
       {TIERS.map(tierBlock)}
 

@@ -395,6 +395,7 @@ textarea {
 .lp-chip.act { background: rgba(248, 113, 113, 0.15); color: #f8a0a0; }
 .lp-chip.new { background: rgba(56, 189, 248, 0.15); color: var(--accent); }
 .lp-held { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+.lp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .lp-checkline {
   display: flex;
   align-items: center;
