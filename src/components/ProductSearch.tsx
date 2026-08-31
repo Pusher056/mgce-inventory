@@ -28,6 +28,18 @@ const AREA_BY_SECTION: Record<string, Area> = {
   'KITCHEN BEVERAGE/GARNISH': { storage: 'kitchen' },
 }
 
+/**
+ * Bottles are labelled the way the brand writes them — ESPOLÒN, Rosé — and
+ * nobody types the accent. Stripping them from both sides means "espolon"
+ * finds "ESPOLÒN".
+ */
+export function plain(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+}
+
 export default function ProductSearch({
   section,
   onPick,
@@ -62,7 +74,7 @@ export default function ProductSearch({
   const inInventory = useMemo(() => new Set(entries.map((e) => e.productId)), [entries])
 
   const results = useMemo(() => {
-    const needle = q.trim().toLowerCase()
+    const needle = plain(q.trim())
     const inArea = (p: Product) => {
       if (!area) return false
       if ((p.storage ?? 'beverage') !== area.storage) return false
@@ -71,7 +83,7 @@ export default function ProductSearch({
     const matches = (p: Product) =>
       [displayName(p), p.alias, p.brand, p.subcategory, p.location, p.barcode]
         .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(needle))
+        .some((v) => plain(String(v)).includes(needle))
 
     // Only what is really on a shelf: named, and belonging to one of the lists.
     const real = products.filter((p) => (displayName(p) || p.name).trim() !== '' && inInventory.has(p.id))

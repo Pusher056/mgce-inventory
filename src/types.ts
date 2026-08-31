@@ -226,6 +226,13 @@ export interface Tombstone {
   id: string
   table: SyncTable
   ts: number
+  /**
+   * The server has confirmed the delete. The stone is kept anyway for a few
+   * minutes: a pull already in flight still carries the row, and without the
+   * stone it would come straight back — which looked like having to delete
+   * something twice.
+   */
+  confirmed?: 0 | 1
 }
 
 /**

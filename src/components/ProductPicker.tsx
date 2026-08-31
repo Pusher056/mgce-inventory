@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { Entry, Product } from '../types'
 import { displayName, totalBottles } from '../types'
 import { Thumb } from './Thumb'
+import { plain } from './ProductSearch'
 
 interface Props {
   products: Product[]
@@ -22,19 +23,15 @@ export default function ProductPicker({ products, entries, onPick, onCreate, onC
   const dragStart = useRef(0)
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase()
+    const needle = plain(q.trim())
     // Only products that belong to this inventory (deleted ones don't reappear)
     const inInventory = products.filter((p) => stock.has(p.id))
     const sorted = inInventory.sort((a, b) => (a.name || 'zzz').localeCompare(b.name || 'zzz', 'es'))
     if (!needle) return sorted
-    return sorted.filter(
-      (p) =>
-        p.name.toLowerCase().includes(needle) ||
-        (p.alias ?? '').toLowerCase().includes(needle) ||
-        (p.brand ?? '').toLowerCase().includes(needle) ||
-        (p.subcategory ?? '').toLowerCase().includes(needle) ||
-        (p.location ?? '').toLowerCase().includes(needle) ||
-        (p.barcode ?? '').includes(needle),
+    return sorted.filter((p) =>
+      [p.name, p.alias, p.brand, p.subcategory, p.location, p.barcode]
+        .filter(Boolean)
+        .some((v) => plain(String(v)).includes(needle)),
     )
   }, [products, q, stock])
 

@@ -694,6 +694,9 @@ async function uploadReceipts() {
   }
 }
 
+/** How long a confirmed delete keeps blocking the row from coming back. */
+const TOMBSTONE_GRACE_MS = 5 * 60 * 1000
+
 /** Ceiling for a full-table pull; also the signal that a page was truncated. */
 const PULL_LIMIT = 5000
 
@@ -706,8 +709,12 @@ const LATER_PRODUCT_FIELDS = ['storage', 'contents'] as const satisfies readonly
 
 /** Deletes made with no signal: keep retrying until the server confirms them. */
 async function retryPendingDeletes() {
-  const pending = await db.tombstones.toArray()
-  for (const t of pending) await pushDelete(t.table, t.id)
+  const all = await db.tombstones.toArray()
+  for (const t of all) if (t.confirmed !== 1) await pushDelete(t.table, t.id)
+  // Confirmed stones have done their job once no request from before the delete
+  // can still be in flight.
+  const stale = all.filter((t) => t.confirmed === 1 && Date.now() - t.ts > TOMBSTONE_GRACE_MS)
+  if (stale.length > 0) await db.tombstones.bulkDelete(stale.map((t) => t.id))
 }
 
 /**
@@ -728,17 +735,26 @@ async function retryPendingDeletes() {
  * server's say-so.
  */
 async function dropLocallyIfGoneFromServer(
-  table: { toCollection: () => { primaryKeys: () => Promise<string[]> }; bulkDelete: (ids: string[]) => Promise<void> },
+  table: {
+    toArray: () => Promise<{ id: string; updatedAt: number }[]>
+    bulkDelete: (ids: string[]) => Promise<void>
+  },
   response: { data: { id: string }[] | null; error: unknown },
   pendingIds: Set<string>,
+  askedAt: number,
 ) {
   if (response.error || !response.data) return
   // A full page means the list was probably cut short, and a cut-short list is
   // not evidence that anything was deleted.
   if (response.data.length >= PULL_LIMIT) return
   const onServer = new Set(response.data.map((r) => r.id))
-  const localIds = await table.toCollection().primaryKeys()
-  const gone = localIds.filter((id) => !onServer.has(id) && !pendingIds.has(id))
+  const local = await table.toArray()
+  const gone = local
+    // Anything written after the server answered is newer than the answer, so
+    // its absence from that answer means nothing. Without this, adding a line
+    // while a sync was already in flight made it vanish a second later.
+    .filter((r) => !onServer.has(r.id) && !pendingIds.has(r.id) && r.updatedAt < askedAt)
+    .map((r) => r.id)
   if (gone.length > 0) await table.bulkDelete(gone)
 }
 
@@ -757,8 +773,8 @@ async function dropLocallyIfGoneFromServer(
 export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
-    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, rts, rpe, rst, rli, pendingIds, deletedIds] =
-      await Promise.all([
+    const askedAt = Date.now()
+    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, rts, rpe, rst, rli] = await Promise.all([
       // Explicit limits: the server's default page size would silently truncate
       // one day, and a truncated list read as "the rest was deleted" would take
       // real counts with it.
@@ -775,9 +791,12 @@ export async function pullFromServer() {
       supabase.from('route_people').select('*').limit(PULL_LIMIT),
       supabase.from('route_stops').select('*').limit(PULL_LIMIT),
       supabase.from('route_lines').select('*').limit(PULL_LIMIT),
-      db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
-      db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
+
+    // Read the local queues now, not alongside the requests: anything the user
+    // did while the network was busy has to count.
+    const pendingIds = new Set((await db.outbox.toArray()).map((i) => i.id))
+    const deletedIds = new Set((await db.tombstones.toArray()).map((i) => i.id))
     /** Rows this device is still holding on to, or has deliberately deleted. */
     const skip = (id: string) => pendingIds.has(id) || deletedIds.has(id)
 
@@ -857,18 +876,18 @@ export async function pullFromServer() {
     }
     // Runs even when the server lists nothing: deleting the last event still has
     // to reach the other devices.
-    await dropLocallyIfGoneFromServer(db.events, evs, pendingIds)
-    await dropLocallyIfGoneFromServer(db.packLines, lines, pendingIds)
-    await dropLocallyIfGoneFromServer(db.entries, ents, pendingIds)
-    await dropLocallyIfGoneFromServer(db.vnoReports, vnoR, pendingIds)
-    await dropLocallyIfGoneFromServer(db.vnoLines, vnoL, pendingIds)
-    await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds)
+    await dropLocallyIfGoneFromServer(db.events, evs, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packLines, lines, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.entries, ents, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.vnoReports, vnoR, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.vnoLines, vnoL, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds, askedAt)
 
-    await dropLocallyIfGoneFromServer(db.liquorProgram, liq, pendingIds)
-    await dropLocallyIfGoneFromServer(db.routes, rts, pendingIds)
-    await dropLocallyIfGoneFromServer(db.routePeople, rpe, pendingIds)
-    await dropLocallyIfGoneFromServer(db.routeStops, rst, pendingIds)
-    await dropLocallyIfGoneFromServer(db.routeLines, rli, pendingIds)
+    await dropLocallyIfGoneFromServer(db.liquorProgram, liq, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.routes, rts, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.routePeople, rpe, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.routeStops, rst, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.routeLines, rli, pendingIds, askedAt)
 
     /** Server rows worth taking: unknown here, or written more recently there. */
     const newer = <R extends { id: string; updated_at: string }, T extends { updatedAt: number }>(

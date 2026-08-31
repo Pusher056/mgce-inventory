@@ -178,7 +178,7 @@ export async function deleteSession(id: string) {
   await db.tombstones.bulkPut(entryIds.map((e) => ({ id: e, table: 'entries' as const, ts: Date.now() })))
   // Once the server confirms the session is gone its entries went with it,
   // so their tombstones have nothing left to guard against.
-  if (await pushDelete('sessions', id)) await db.tombstones.bulkDelete(entryIds)
+  if (await pushDelete('sessions', id)) await confirmTombstones(entryIds)
 }
 
 /**
@@ -196,12 +196,19 @@ export async function deleteEntry(id: string) {
  * Try to delete the row on the server. The tombstone is only dropped once the
  * server confirms; if there is no signal it survives and sync.ts retries it.
  */
+/** Children that went with a cascade: keep their stones for the grace period. */
+async function confirmTombstones(ids: string[]) {
+  const now = Date.now()
+  for (const id of ids) await db.tombstones.update(id, { confirmed: 1, ts: now })
+}
+
 export async function pushDelete(table: Tombstone['table'], id: string): Promise<boolean> {
   if (!navigator.onLine) return false
   try {
     const { error } = await supabase.from(table).delete().eq('id', id)
     if (error) return false
-    await db.tombstones.delete(id)
+    // Marked, not removed — see Tombstone.confirmed.
+    await db.tombstones.update(id, { confirmed: 1, ts: Date.now() })
     return true
   } catch {
     // offline — the tombstone stays and sync.ts will retry
@@ -262,7 +269,7 @@ export async function deleteEvent(id: string): Promise<DeletedEvent | null> {
   await db.tombstones.put({ id, table: 'events', ts: Date.now() })
   await db.tombstones.bulkPut(lineIds.map((l) => ({ id: l, table: 'pack_lines' as const, ts: Date.now() })))
   // Lines cascade via FK once the server confirms the event is gone.
-  if (await pushDelete('events', id)) await db.tombstones.bulkDelete(lineIds)
+  if (await pushDelete('events', id)) await confirmTombstones(lineIds)
   return { event, lines }
 }
 
@@ -562,7 +569,7 @@ export async function deleteVnoReport(id: string): Promise<DeletedVnoReport | nu
   await db.tombstones.put({ id, table: 'vno_reports', ts: Date.now() })
   await db.tombstones.bulkPut(lineIds.map((l) => ({ id: l, table: 'vno_lines' as const, ts: Date.now() })))
   // lines cascade on the server once the report is gone
-  if (await pushDelete('vno_reports', id)) await db.tombstones.bulkDelete(lineIds)
+  if (await pushDelete('vno_reports', id)) await confirmTombstones(lineIds)
   return { report, lines }
 }
 

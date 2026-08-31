@@ -10,6 +10,7 @@ import { Thumb } from './Thumb'
 import CountPad from './CountPad'
 import ProductPicker from './ProductPicker'
 import SwipeRow from './SwipeRow'
+import { plain } from './ProductSearch'
 
 // Heavy, rarely-open screens load the moment they're needed, not at startup:
 // the scanner drags in a 1 MB barcode engine, Organize pulls in the camera.
@@ -130,19 +131,15 @@ export default function SessionView({ session }: { session: Session }) {
   // All entries are the inventory — including 0/0, which means "out of stock".
   // The desktop search box narrows the same list rather than opening a sheet.
   const visibleEntries = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
+    // accents stripped both sides: "espolon" has to find "ESPOLÒN"
+    const needle = plain(filter.trim())
     if (!needle) return entries
     return entries.filter((e) => {
       const p = productMap.get(e.productId)
       if (!p) return false
-      return (
-        displayName(p).toLowerCase().includes(needle) ||
-        (p.brand ?? '').toLowerCase().includes(needle) ||
-        (p.alias ?? '').toLowerCase().includes(needle) ||
-        (p.subcategory ?? '').toLowerCase().includes(needle) ||
-        (p.location ?? '').toLowerCase().includes(needle) ||
-        (p.barcode ?? '').includes(needle)
-      )
+      return [displayName(p), p.brand, p.alias, p.subcategory, p.location, p.barcode]
+        .filter(Boolean)
+        .some((v) => plain(String(v)).includes(needle))
     })
   }, [entries, productMap, filter])
 
