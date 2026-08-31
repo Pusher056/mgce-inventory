@@ -38,7 +38,9 @@ const MODULES: ModuleDef[] = [
     icon: '🚚',
     title: 'Driver Routes',
     blurb: 'Build the run sheet: stops, pick-ups, drop-offs and numbers',
-    ready: true,
+    // built ahead of the plan and nowhere near finished — parked until we come
+    // back to it properly
+    ready: false,
   },
   {
     id: 'vno',
