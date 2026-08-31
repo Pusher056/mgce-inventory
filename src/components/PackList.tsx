@@ -65,15 +65,22 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
   const unusedSections = PACK_SECTIONS.filter((s) => !sections.includes(s))
 
+  /**
+   * A section someone invented has no shelf behind it — "PJ to order" is not a
+   * place in the warehouse. Opening the product picker there just shows an
+   * empty list, so these sections only ever take typed-in items.
+   */
+  const isCustom = (section: string) => !PACK_SECTIONS.includes(section as (typeof PACK_SECTIONS)[number])
+
   async function addSection(name: string) {
     const clean = name.trim()
     if (!clean) return
     setAddingSection(false)
     setCustomSection('')
     if (!sections.includes(clean)) await updateEvent(eventId, { packSections: [...sections, clean] })
-    // straight into the picker: adding a section is only ever a step towards
-    // putting something in it
-    setPicking(clean)
+    // straight into adding something: a section is only ever a step towards it
+    if (isCustom(clean)) setSpecial(clean)
+    else setPicking(clean)
     void syncNow()
   }
 
@@ -189,12 +196,20 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
               </div>
             )}
             <div className="pack-actions">
-              <button className="chip-btn" onClick={() => setPicking(section)}>
-                ＋ Add product
-              </button>
-              <button className="chip-btn" onClick={() => setSpecial(section)}>
-                ＋ Special request
-              </button>
+              {isCustom(section) ? (
+                <button className="chip-btn" onClick={() => setSpecial(section)}>
+                  ＋ Add a product
+                </button>
+              ) : (
+                <>
+                  <button className="chip-btn" onClick={() => setPicking(section)}>
+                    ＋ Add product
+                  </button>
+                  <button className="chip-btn" onClick={() => setSpecial(section)}>
+                    ＋ Special request
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )
@@ -211,9 +226,9 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
       {special && (
         <div className="sheet-backdrop" onClick={() => setSpecial(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Special request</h2>
+            <h2>{isCustom(special) ? `Add to ${special}` : 'Special request'}</h2>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              Something we do not stock. It never touches the warehouse count.
+              Type what you need. It never touches the warehouse count.
             </div>
             <label className="field-label">What is it?</label>
             <input
