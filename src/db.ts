@@ -17,6 +17,11 @@ import type {
   LocalReceipt,
   VnoArea,
   LiquorLine,
+  Route,
+  RoutePerson,
+  RouteStop,
+  RouteLine,
+  RoutePersonRole,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -35,6 +40,10 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   vnoLines: EntityTable<VnoLine, 'id'>
   receipts: EntityTable<LocalReceipt, 'id'>
   liquorProgram: EntityTable<LiquorLine, 'id'>
+  routes: EntityTable<Route, 'id'>
+  routePeople: EntityTable<RoutePerson, 'id'>
+  routeStops: EntityTable<RouteStop, 'id'>
+  routeLines: EntityTable<RouteLine, 'id'>
 }
 
 db.version(1).stores({
@@ -74,6 +83,14 @@ db.version(5).stores({
 // v6 adds the liquor program. Reference data, pulled from the server.
 db.version(6).stores({
   liquorProgram: 'id, tier, sortIndex',
+})
+
+// v7 adds driver routing sheets. Additive.
+db.version(7).stores({
+  routes: 'id, date, updatedAt',
+  routePeople: 'id, routeId, sortIndex',
+  routeStops: 'id, routeId, sortIndex',
+  routeLines: 'id, stopId, sortIndex',
 })
 
 export function uuid(): string {
@@ -297,6 +314,134 @@ export async function deletePackLine(id: string) {
   await db.outbox.where('id').equals(id).delete()
   await db.tombstones.put({ id, table: 'pack_lines', ts: Date.now() })
   await pushDelete('pack_lines', id)
+}
+
+
+/* ---------- driver routing sheets ---------- */
+
+export async function createRoute(name: string, date: number): Promise<Route> {
+  const r: Route = {
+    id: uuid(),
+    name: name.trim(),
+    date: startOfDay(date),
+    vehicle: '',
+    eodLabel: 'Driver/Support Time Sheet',
+    eodUrl: '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  await db.routes.add(r)
+  await queueSync('routes', r.id)
+  return r
+}
+
+export async function updateRoute(id: string, changes: Partial<Route>) {
+  await db.routes.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('routes', id)
+}
+
+export async function deleteRoute(id: string) {
+  const stops = await db.routeStops.where('routeId').equals(id).toArray()
+  const stopIds = stops.map((s) => s.id)
+  const lines = await db.routeLines.where('stopId').anyOf(stopIds).toArray()
+  const people = await db.routePeople.where('routeId').equals(id).toArray()
+  await db.routeLines.bulkDelete(lines.map((l) => l.id))
+  await db.routeStops.bulkDelete(stopIds)
+  await db.routePeople.bulkDelete(people.map((p) => p.id))
+  await db.routes.delete(id)
+  const all = [id, ...stopIds, ...lines.map((l) => l.id), ...people.map((p) => p.id)]
+  await db.outbox.where('id').anyOf(all).delete()
+  await db.tombstones.put({ id, table: 'routes', ts: Date.now() })
+  // children cascade on the server once the route is gone
+  await pushDelete('routes', id)
+}
+
+export async function addRoutePerson(routeId: string, role: RoutePersonRole): Promise<RoutePerson> {
+  const siblings = await db.routePeople.where('routeId').equals(routeId).toArray()
+  const p: RoutePerson = {
+    id: uuid(),
+    routeId,
+    role,
+    name: '',
+    phone: '',
+    sortIndex: Math.max(0, ...siblings.map((s) => s.sortIndex)) + 10,
+    updatedAt: Date.now(),
+  }
+  await db.routePeople.add(p)
+  await queueSync('route_people', p.id)
+  return p
+}
+
+export async function updateRoutePerson(id: string, changes: Partial<RoutePerson>) {
+  await db.routePeople.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('route_people', id)
+}
+
+export async function deleteRoutePerson(id: string) {
+  await db.routePeople.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'route_people', ts: Date.now() })
+  await pushDelete('route_people', id)
+}
+
+export async function addRouteStop(routeId: string): Promise<RouteStop> {
+  const siblings = await db.routeStops.where('routeId').equals(routeId).toArray()
+  const s: RouteStop = {
+    id: uuid(),
+    routeId,
+    timeLabel: '',
+    place: '',
+    address: '',
+    addressUrl: '',
+    sortIndex: Math.max(0, ...siblings.map((x) => x.sortIndex)) + 10,
+    updatedAt: Date.now(),
+  }
+  await db.routeStops.add(s)
+  await queueSync('route_stops', s.id)
+  return s
+}
+
+export async function updateRouteStop(id: string, changes: Partial<RouteStop>) {
+  await db.routeStops.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('route_stops', id)
+}
+
+export async function deleteRouteStop(id: string) {
+  const lines = await db.routeLines.where('stopId').equals(id).toArray()
+  await db.routeLines.bulkDelete(lines.map((l) => l.id))
+  await db.routeStops.delete(id)
+  await db.outbox.where('id').anyOf([id, ...lines.map((l) => l.id)]).delete()
+  await db.tombstones.put({ id, table: 'route_stops', ts: Date.now() })
+  await pushDelete('route_stops', id)
+}
+
+export async function addRouteLine(stopId: string, kind: RouteLine['kind']): Promise<RouteLine> {
+  const siblings = await db.routeLines.where('stopId').equals(stopId).toArray()
+  const l: RouteLine = {
+    id: uuid(),
+    stopId,
+    kind,
+    text: '',
+    bold: false,
+    highlight: false,
+    sortIndex: Math.max(0, ...siblings.map((s) => s.sortIndex)) + 10,
+    updatedAt: Date.now(),
+  }
+  await db.routeLines.add(l)
+  await queueSync('route_lines', l.id)
+  return l
+}
+
+export async function updateRouteLine(id: string, changes: Partial<RouteLine>) {
+  await db.routeLines.update(id, { ...changes, updatedAt: Date.now() })
+  await queueSync('route_lines', id)
+}
+
+export async function deleteRouteLine(id: string) {
+  await db.routeLines.delete(id)
+  await db.outbox.where('id').equals(id).delete()
+  await db.tombstones.put({ id, table: 'route_lines', ts: Date.now() })
+  await pushDelete('route_lines', id)
 }
 
 /* ---------- Liquor program ---------- */

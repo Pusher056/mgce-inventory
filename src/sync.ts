@@ -17,6 +17,10 @@ import type {
   VnoItem,
   VnoLine,
   VnoReport,
+  Route,
+  RoutePerson,
+  RouteStop,
+  RouteLine,
 } from './types'
 
 /**
@@ -180,6 +184,39 @@ function liquorLineToRow(l: LiquorLine) {
   }
 }
 
+function routeToRow(r: Route) {
+  const d = new Date(r.date)
+  return {
+    id: r.id,
+    name: r.name,
+    date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    vehicle: r.vehicle,
+    eod_label: r.eodLabel,
+    eod_url: r.eodUrl,
+    created_at: new Date(r.createdAt).toISOString(),
+    updated_at: new Date(r.updatedAt).toISOString(),
+  }
+}
+function routePersonToRow(p: RoutePerson) {
+  return {
+    id: p.id, route_id: p.routeId, role: p.role, name: p.name, phone: p.phone,
+    sort_index: p.sortIndex, updated_at: new Date(p.updatedAt).toISOString(),
+  }
+}
+function routeStopToRow(x: RouteStop) {
+  return {
+    id: x.id, route_id: x.routeId, time_label: x.timeLabel, place: x.place,
+    address: x.address, address_url: x.addressUrl,
+    sort_index: x.sortIndex, updated_at: new Date(x.updatedAt).toISOString(),
+  }
+}
+function routeLineToRow(l: RouteLine) {
+  return {
+    id: l.id, stop_id: l.stopId, kind: l.kind, text: l.text, bold: l.bold,
+    highlight: l.highlight, sort_index: l.sortIndex, updated_at: new Date(l.updatedAt).toISOString(),
+  }
+}
+
 function vnoReportToRow(r: VnoReport) {
   const d = new Date(r.date)
   return {
@@ -226,6 +263,10 @@ async function pushOutbox() {
     vno_reports: new Set<string>(),
     vno_lines: new Set<string>(),
     liquor_program: new Set<string>(),
+    routes: new Set<string>(),
+    route_people: new Set<string>(),
+    route_stops: new Set<string>(),
+    route_lines: new Set<string>(),
   }
   for (const it of items) byTable[it.table].add(it.id)
 
@@ -239,6 +280,10 @@ async function pushOutbox() {
     'vno_reports',
     'vno_lines',
     'liquor_program',
+    'routes',
+    'route_people',
+    'route_stops',
+    'route_lines',
   ] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
@@ -257,6 +302,14 @@ async function pushOutbox() {
       rows = (await db.vnoLines.bulkGet(ids)).filter((l): l is VnoLine => !!l).map(vnoLineToRow)
     } else if (table === 'liquor_program') {
       rows = (await db.liquorProgram.bulkGet(ids)).filter((l): l is LiquorLine => !!l).map(liquorLineToRow)
+    } else if (table === 'routes') {
+      rows = (await db.routes.bulkGet(ids)).filter((r): r is Route => !!r).map(routeToRow)
+    } else if (table === 'route_people') {
+      rows = (await db.routePeople.bulkGet(ids)).filter((p): p is RoutePerson => !!p).map(routePersonToRow)
+    } else if (table === 'route_stops') {
+      rows = (await db.routeStops.bulkGet(ids)).filter((x): x is RouteStop => !!x).map(routeStopToRow)
+    } else if (table === 'route_lines') {
+      rows = (await db.routeLines.bulkGet(ids)).filter((l): l is RouteLine => !!l).map(routeLineToRow)
     } else {
       rows = (await db.entries.bulkGet(ids)).filter((e): e is Entry => !!e).map(entryToRow)
     }
@@ -704,7 +757,8 @@ async function dropLocallyIfGoneFromServer(
 export async function pullFromServer() {
   if (!navigator.onLine) return
   try {
-    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, pendingIds, deletedIds] = await Promise.all([
+    const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, rts, rpe, rst, rli, pendingIds, deletedIds] =
+      await Promise.all([
       // Explicit limits: the server's default page size would silently truncate
       // one day, and a truncated list read as "the rest was deleted" would take
       // real counts with it.
@@ -717,6 +771,10 @@ export async function pullFromServer() {
       supabase.from('vno_reports').select('*').limit(PULL_LIMIT),
       supabase.from('vno_lines').select('*').limit(PULL_LIMIT),
       supabase.from('liquor_program').select('*').limit(PULL_LIMIT),
+      supabase.from('routes').select('*').limit(PULL_LIMIT),
+      supabase.from('route_people').select('*').limit(PULL_LIMIT),
+      supabase.from('route_stops').select('*').limit(PULL_LIMIT),
+      supabase.from('route_lines').select('*').limit(PULL_LIMIT),
       db.outbox.toArray().then((o) => new Set(o.map((i) => i.id))),
       db.tombstones.toArray().then((t) => new Set(t.map((i) => i.id))),
     ])
@@ -807,6 +865,76 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.vnoItems, vnoI, pendingIds)
 
     await dropLocallyIfGoneFromServer(db.liquorProgram, liq, pendingIds)
+    await dropLocallyIfGoneFromServer(db.routes, rts, pendingIds)
+    await dropLocallyIfGoneFromServer(db.routePeople, rpe, pendingIds)
+    await dropLocallyIfGoneFromServer(db.routeStops, rst, pendingIds)
+    await dropLocallyIfGoneFromServer(db.routeLines, rli, pendingIds)
+
+    /** Server rows worth taking: unknown here, or written more recently there. */
+    const newer = <R extends { id: string; updated_at: string }, T extends { updatedAt: number }>(
+      rows: R[],
+      local: Map<string, T>,
+    ): R[] =>
+      rows.filter((r) => {
+        if (skip(r.id)) return false
+        const mine = local.get(r.id)
+        return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
+      })
+
+    if (rts.data?.length) {
+      const local = new Map((await db.routes.bulkGet(rts.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])))
+      await db.routes.bulkPut(
+        newer(rts.data, local).map((r) => {
+          const [y, m, d] = String(r.date).split('-').map(Number)
+          return {
+            id: r.id,
+            name: r.name ?? '',
+            date: new Date(y, (m ?? 1) - 1, d ?? 1).getTime(),
+            vehicle: r.vehicle ?? '',
+            eodLabel: r.eod_label ?? '',
+            eodUrl: r.eod_url ?? '',
+            createdAt: Date.parse(r.created_at) || Date.now(),
+            updatedAt: Date.parse(r.updated_at) || Date.now(),
+          }
+        }),
+      )
+    }
+    if (rpe.data?.length) {
+      const local = new Map(
+        (await db.routePeople.bulkGet(rpe.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])),
+      )
+      await db.routePeople.bulkPut(
+        newer(rpe.data, local).map((r) => ({
+          id: r.id, routeId: r.route_id, role: r.role as RoutePerson['role'],
+          name: r.name ?? '', phone: r.phone ?? '', sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
+    if (rst.data?.length) {
+      const local = new Map(
+        (await db.routeStops.bulkGet(rst.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])),
+      )
+      await db.routeStops.bulkPut(
+        newer(rst.data, local).map((r) => ({
+          id: r.id, routeId: r.route_id, timeLabel: r.time_label ?? '', place: r.place ?? '',
+          address: r.address ?? '', addressUrl: r.address_url ?? '', sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
+    if (rli.data?.length) {
+      const local = new Map(
+        (await db.routeLines.bulkGet(rli.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])),
+      )
+      await db.routeLines.bulkPut(
+        newer(rli.data, local).map((r) => ({
+          id: r.id, stopId: r.stop_id, kind: r.kind as RouteLine['kind'], text: r.text ?? '',
+          bold: !!r.bold, highlight: !!r.highlight, sortIndex: r.sort_index ?? 0,
+          updatedAt: Date.parse(r.updated_at) || Date.now(),
+        })),
+      )
+    }
     if (liq.data) {
       const localLiq = new Map(
         (await db.liquorProgram.bulkGet(liq.data.map((r) => r.id))).flatMap((l) => (l ? [[l.id, l]] : [])),

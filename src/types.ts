@@ -205,6 +205,10 @@ export type SyncTable =
   | 'vno_reports'
   | 'vno_lines'
   | 'liquor_program'
+  | 'routes'
+  | 'route_people'
+  | 'route_stops'
+  | 'route_lines'
 
 export interface OutboxItem {
   seq?: number
@@ -316,6 +320,66 @@ export interface LiquorLine {
   dropped: boolean
   /** false for beer, which lives outside the Beverage Storage count */
   counted: boolean
+  sortIndex: number
+  updatedAt: number
+}
+
+/**
+ * A driver's routing sheet, laid out the way they already build them in Google
+ * Sheets: who is on the run, what vehicle, then a stop at a time with an
+ * address and a list of pick-ups, drop-offs and warnings.
+ */
+export type RoutePersonRole = 'Driver' | 'Assistant' | 'Planner' | 'Chef' | 'Captain'
+export const ROUTE_ROLES: RoutePersonRole[] = ['Driver', 'Assistant', 'Planner', 'Chef', 'Captain']
+
+export type RouteLineKind = 'pickup' | 'dropoff' | 'info'
+export const ROUTE_LINE_LABELS: Record<RouteLineKind, string> = {
+  pickup: 'PICK UP ⤴',
+  dropoff: 'DROP OFF ⤵',
+  info: 'INFO 🚨',
+}
+
+export interface Route {
+  id: string
+  name: string
+  /** Midnight local; the weekday shown on the sheet comes from this. */
+  date: number
+  vehicle: string
+  eodLabel: string
+  eodUrl: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface RoutePerson {
+  id: string
+  routeId: string
+  role: RoutePersonRole
+  name: string
+  phone: string
+  sortIndex: number
+  updatedAt: number
+}
+
+export interface RouteStop {
+  id: string
+  routeId: string
+  timeLabel: string
+  place: string
+  address: string
+  /** The Google Maps link he pastes today, kept separate so the text stays clean */
+  addressUrl: string
+  sortIndex: number
+  updatedAt: number
+}
+
+export interface RouteLine {
+  id: string
+  stopId: string
+  kind: RouteLineKind
+  text: string
+  bold: boolean
+  highlight: boolean
   sortIndex: number
   updatedAt: number
 }
