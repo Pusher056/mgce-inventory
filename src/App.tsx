@@ -12,6 +12,7 @@ import PackList from './components/PackList'
 import VnoView from './components/VnoView'
 import LiquorProgram from './components/LiquorProgram'
 import RoutesView from './components/RoutesView'
+import PackInbox from './components/PackInbox'
 import type { Session } from './types'
 
 export default function App() {
@@ -58,15 +59,17 @@ export default function App() {
               ? event.name
               : module === 'inventory'
                 ? 'Inventory'
-                : module === 'events'
-                  ? 'Events & Pack List'
-                  : module === 'routes'
-                    ? 'Driver Routes'
-                    : module === 'vno'
-                      ? 'VNO Coffee'
-                      : module === 'liquor'
-                        ? 'Liquor Program'
-                        : 'MGCE Operations'}
+                : module === 'inbox'
+                  ? 'Pack List Inbox'
+                  : module === 'events'
+                    ? 'Events & Pack List'
+                    : module === 'routes'
+                      ? 'Driver Routes'
+                      : module === 'vno'
+                        ? 'VNO Coffee'
+                        : module === 'liquor'
+                          ? 'Liquor Program'
+                          : 'MGCE Operations'}
         </h1>
         <button
           className="sync-pill"
@@ -103,6 +106,8 @@ export default function App() {
         <EventDetail eventId={event.id} onOpenPackList={() => setPackListOpen(true)} />
       ) : module === 'inventory' ? (
         <Home onOpen={(s) => setSessionId(s.id)} />
+      ) : module === 'inbox' ? (
+        <PackInbox />
       ) : module === 'routes' ? (
         <RoutesView />
       ) : module === 'vno' ? (

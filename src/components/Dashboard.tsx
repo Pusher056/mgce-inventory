@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 
-export type ModuleId = 'inventory' | 'events' | 'routes' | 'vno' | 'liquor' | 'reports'
+export type ModuleId = 'inventory' | 'inbox' | 'events' | 'routes' | 'vno' | 'liquor' | 'reports'
 
 interface ModuleDef {
   id: ModuleId
@@ -24,6 +24,13 @@ const MODULES: ModuleDef[] = [
     icon: '📦',
     title: 'Inventory',
     blurb: 'Count storage, track stock, locations and exports',
+    ready: true,
+  },
+  {
+    id: 'inbox',
+    icon: '📥',
+    title: 'Pack List Inbox',
+    blurb: 'Read the week: drop in their emails and see what changed',
     ready: true,
   },
   {

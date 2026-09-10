@@ -391,6 +391,32 @@ export interface RouteLine {
   updatedAt: number
 }
 
+/**
+ * A pack list read out of an email or a dropped file. Kept so the next version
+ * of the same event can be compared against it — that comparison is the whole
+ * point of reading them here rather than in the inbox.
+ */
+export interface PackImport {
+  id: string
+  /** event name, lowercased and squeezed — how two versions find each other */
+  eventKey: string
+  filename: string
+  eventName: string
+  eventDate: string
+  venue: string
+  planner: string
+  guestCount: string
+  iceNeeds: string
+  kitchenPickup: string
+  kitchenDelivery: string
+  emailSubject: string
+  emailFrom: string
+  /** What the planner actually typed — "Fabio, we also need…" */
+  emailBody: string
+  lines: { section: string; item: string; size: string; qty: string; note: string }[]
+  importedAt: number
+}
+
 /** Section names as they appear in the 2026 template, in template order. */
 export const PACK_SECTIONS = [
   // Their template splits the beverage shelf four ways (N/A, beer, wine,

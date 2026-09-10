@@ -22,6 +22,7 @@ import type {
   RouteStop,
   RouteLine,
   RoutePersonRole,
+  PackImport,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -44,6 +45,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   routePeople: EntityTable<RoutePerson, 'id'>
   routeStops: EntityTable<RouteStop, 'id'>
   routeLines: EntityTable<RouteLine, 'id'>
+  packImports: EntityTable<PackImport, 'id'>
 }
 
 db.version(1).stores({
@@ -91,6 +93,12 @@ db.version(7).stores({
   routePeople: 'id, routeId, sortIndex',
   routeStops: 'id, routeId, sortIndex',
   routeLines: 'id, stopId, sortIndex',
+})
+
+// v8 stores the pack lists read out of emails. Local to this device on purpose:
+// they are a reading aid, not shared data.
+db.version(8).stores({
+  packImports: 'id, eventKey, importedAt',
 })
 
 export function uuid(): string {
