@@ -48,7 +48,7 @@ function base64ToBytes(b64: string): Uint8Array {
   return out
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -128,9 +128,12 @@ function walk(part: Part, out: { text: string[]; html: string[]; atts: EmailAtta
 }
 
 /** Everything below this is the thread they replied on, not what they wrote. */
-function trimQuoted(body: string): string {
-  const cut = body.search(/\n\s*(-{3,}\s*Original Message|From:\s.+\nSent:|On .+ wrote:|_{10,})/i)
-  return (cut > 0 ? body.slice(0, cut) : body).trim()
+export function trimQuoted(body: string): string {
+  // Outlook writes CRLF; leaving the carriage returns in makes the text look
+  // right in one browser and doubled in another.
+  const text = body.replace(/\r\n?/g, '\n')
+  const cut = text.search(/\n\s*(-{3,}\s*Original Message|From:\s.+\nSent:|On .+ wrote:|_{10,})/i)
+  return (cut > 0 ? text.slice(0, cut) : text).trim()
 }
 
 export function parseEml(raw: string): ParsedEmail {

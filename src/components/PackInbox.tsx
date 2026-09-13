@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, uuid } from '../db'
 import { diffPackLists, type ParsedPackList } from '../packlistParse'
 import { parseEml, isSpreadsheet } from '../emailParse'
+import { parseMsg } from '../msgParse'
 import { displayName, totalBottles, type PackImport } from '../types'
 import { plain } from './ProductSearch'
 
@@ -76,13 +77,24 @@ export default function PackInbox() {
           let email = { subject: '', from: '', body: '' }
           const books: { filename: string; bytes: Uint8Array }[] = []
 
-          if (/\.eml$/i.test(name)) {
-            const mail = parseEml(await file.text())
+          if (/\.eml$/i.test(name) || /\.msg$/i.test(name)) {
+            const mail = /\.msg$/i.test(name)
+              ? parseMsg(new Uint8Array(await file.arrayBuffer()), XLSX.CFB)
+              : parseEml(await file.text())
             email = { subject: mail.subject, from: mail.from, body: mail.body }
             books.push(...mail.attachments.filter((a) => isSpreadsheet(a.filename)))
-            if (books.length === 0) trouble.push(`${name}: the email has no spreadsheet attached`)
-          } else if (/\.msg$/i.test(name)) {
-            trouble.push(`${name}: Outlook .msg files can't be read — drag the message out as .eml instead`)
+            if (books.length === 0) {
+              trouble.push(
+                mail.attachments.length > 0
+                  ? `${name}: nothing attached but ${mail.attachments.map((a) => a.filename).join(', ')}`
+                  : `${name}: the message has no attachment`,
+              )
+            }
+          } else if (/\.(jpe?g|png|heic|heif|webp|gif|pdf)$/i.test(name)) {
+            // A photograph of a pack list is not a pack list: there are no
+            // numbers in it to read. Say so here rather than leave him
+            // wondering why nothing appeared.
+            trouble.push(`${name}: a photo or PDF can't be read yet — send the Excel or the message itself`)
             continue
           } else if (isSpreadsheet(name)) {
             books.push({ filename: name, bytes: new Uint8Array(await file.arrayBuffer()) })
@@ -147,15 +159,19 @@ export default function PackInbox() {
   return (
     <div className="screen">
       <p className="lp-intro">
-        Drop the pack lists here — the spreadsheets on their own, or whole emails saved out of
-        Outlook. A second version of the same event is compared against the first.
+        Drop the pack lists here — the spreadsheets on their own, or whole messages dragged out of
+        Outlook on either computer. The workbook travels inside the message, so the message alone
+        is enough. A second version of the same event is compared against the first.
       </p>
 
       <input
         ref={fileRef}
         type="file"
         multiple
-        accept=".xls,.xlsx,.xlsm,.eml,.msg"
+        // Extensions alone grey out half the files on an iPhone, so the media
+        // types go in too — and photos are allowed through to the picker so
+        // that choosing one gets an answer instead of a dead button.
+        accept=".xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-outlook,message/rfc822,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
         style={{ display: 'none' }}
         onChange={(e) => {
           // Copy first: a FileList is live, and clearing the input so the same
@@ -312,10 +328,24 @@ export default function PackInbox() {
         </button>
       )}
 
+      <div className="inbox-how">
+        <div className="inbox-how-title">How to get the messages out of Outlook</div>
+        <div>
+          <b>Windows</b> — select the emails and drag them onto a folder on the desktop. You get one
+          file per message and nothing else; that is normal. The Excel is inside each one and this
+          screen opens it.
+        </div>
+        <div>
+          <b>Mac</b> — same drag, same result.
+        </div>
+        <div>
+          <b>iPhone</b> — open the email in Outlook, tap the attachment, then Share ▸ Save to Files.
+          Pick it here afterwards. A photo of the screen has no numbers in it to read.
+        </div>
+      </div>
+
       <p className="lp-foot">
         What you drop here stays on this device — it is a way of reading the week, not shared data.
-        Outlook on a Mac drags messages out as .eml; those carry the spreadsheet and the message
-        together.
       </p>
     </div>
   )
