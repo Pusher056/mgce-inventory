@@ -21,6 +21,12 @@ import type {
   RoutePerson,
   RouteStop,
   RouteLine,
+  PackWeek,
+  PackImport,
+  PackPacked,
+  PackLineState,
+  ItemAlias,
+  PackFile,
 } from './types'
 
 /**
@@ -247,6 +253,86 @@ function vnoLineToRow(l: VnoLine) {
   }
 }
 
+// ---------- pack list inbox ----------
+
+const iso = (ms: number) => new Date(ms || Date.now()).toISOString()
+const ms = (s: string | null | undefined) => (s ? Date.parse(s) || Date.now() : Date.now())
+
+function packWeekToRow(w: PackWeek) {
+  return { id: w.id, start_date: w.startDate, label: w.label, created_at: iso(w.createdAt), updated_at: iso(w.updatedAt) }
+}
+function packImportToRow(i: PackImport) {
+  return {
+    id: i.id,
+    event_key: i.eventKey,
+    week_start: i.weekStart,
+    filename: i.filename,
+    event_name: i.eventName,
+    event_date: i.eventDate,
+    event_iso: i.eventIso,
+    event_time: i.eventTime,
+    venue: i.venue,
+    planner: i.planner,
+    guest_count: i.guestCount,
+    ice_needs: i.iceNeeds,
+    ice_delivery_time: i.iceDeliveryTime,
+    kitchen_pickup: i.kitchenPickup,
+    kitchen_delivery: i.kitchenDelivery,
+    special_notes: i.specialNotes,
+    additional_notes: i.additionalNotes,
+    legend: i.legend ?? {},
+    email_subject: i.emailSubject,
+    email_from: i.emailFrom,
+    email_body: i.emailBody,
+    lines: i.lines,
+    imported_at: iso(i.importedAt),
+    updated_at: iso(i.updatedAt),
+  }
+}
+function packPackedToRow(p: PackPacked) {
+  return {
+    id: p.id, week_start: p.weekStart, event_key: p.eventKey, item_key: p.itemKey,
+    packed_at: iso(p.packedAt), updated_at: iso(p.updatedAt),
+  }
+}
+function packLineStateToRow(x: PackLineState) {
+  return {
+    id: x.id, week_start: x.weekStart, event_key: x.eventKey, item_key: x.itemKey,
+    status: x.status, product_id: x.productId, updated_at: iso(x.updatedAt),
+  }
+}
+function itemAliasToRow(a: ItemAlias) {
+  return {
+    id: a.id, alias: a.alias, canonical: a.canonical, kind: a.kind ?? 'same',
+    created_at: iso(a.createdAt), updated_at: iso(a.updatedAt),
+  }
+}
+function packFileToRow(f: PackFile) {
+  return {
+    id: f.id, week_start: f.weekStart, event_key: f.eventKey, filename: f.filename, kind: f.kind,
+    path: f.path, added_at: iso(f.addedAt), updated_at: iso(f.updatedAt),
+  }
+}
+
+/**
+ * The photos and PDFs he dropped into a week go up once, so the phone can open
+ * them too. The row is re-queued with its storage path when the upload lands.
+ */
+async function uploadPackFiles() {
+  const pending = await db.packFiles.where('uploaded').equals(0).toArray()
+  for (const f of pending) {
+    if (!f.blob) continue
+    const safe = f.filename.replace(/[^\w.-]+/g, '_')
+    const path = `${f.id}/${safe}`
+    const { error } = await supabase.storage
+      .from('pack-files')
+      .upload(path, f.blob, { contentType: f.blob.type || 'application/octet-stream', upsert: true })
+    if (error) continue // no signal — next sync
+    await db.packFiles.update(f.id, { path, uploaded: 1, updatedAt: Date.now() })
+    await db.outbox.add({ table: 'pack_files', id: f.id, ts: Date.now() })
+  }
+}
+
 // ---------- push ----------
 
 async function pushOutbox() {
@@ -267,6 +353,12 @@ async function pushOutbox() {
     route_people: new Set<string>(),
     route_stops: new Set<string>(),
     route_lines: new Set<string>(),
+    pack_weeks: new Set<string>(),
+    pack_imports: new Set<string>(),
+    pack_packed: new Set<string>(),
+    pack_line_states: new Set<string>(),
+    item_aliases: new Set<string>(),
+    pack_files: new Set<string>(),
   }
   for (const it of items) byTable[it.table].add(it.id)
 
@@ -284,6 +376,12 @@ async function pushOutbox() {
     'route_people',
     'route_stops',
     'route_lines',
+    'pack_weeks',
+    'pack_imports',
+    'pack_packed',
+    'pack_line_states',
+    'item_aliases',
+    'pack_files',
   ] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
@@ -310,11 +408,28 @@ async function pushOutbox() {
       rows = (await db.routeStops.bulkGet(ids)).filter((x): x is RouteStop => !!x).map(routeStopToRow)
     } else if (table === 'route_lines') {
       rows = (await db.routeLines.bulkGet(ids)).filter((l): l is RouteLine => !!l).map(routeLineToRow)
+    } else if (table === 'pack_weeks') {
+      rows = (await db.packWeeks.bulkGet(ids)).filter((x): x is PackWeek => !!x).map(packWeekToRow)
+    } else if (table === 'pack_imports') {
+      rows = (await db.packImports.bulkGet(ids)).filter((x): x is PackImport => !!x).map(packImportToRow)
+    } else if (table === 'pack_packed') {
+      rows = (await db.packPacked.bulkGet(ids)).filter((x): x is PackPacked => !!x).map(packPackedToRow)
+    } else if (table === 'pack_line_states') {
+      rows = (await db.packLineStates.bulkGet(ids)).filter((x): x is PackLineState => !!x).map(packLineStateToRow)
+    } else if (table === 'item_aliases') {
+      rows = (await db.itemAliases.bulkGet(ids)).filter((x): x is ItemAlias => !!x).map(itemAliasToRow)
+    } else if (table === 'pack_files') {
+      rows = (await db.packFiles.bulkGet(ids)).filter((x): x is PackFile => !!x).map(packFileToRow)
     } else {
       rows = (await db.entries.bulkGet(ids)).filter((e): e is Entry => !!e).map(entryToRow)
     }
+    // Only the queue entries read at the start are cleared. Clearing the whole
+    // table's queue also swept away anything added while this upload was in
+    // flight — tick a line mid-sync and it never reached the server, then the
+    // next pull, finding it missing there, took it off this device too.
+    const sent = items.filter((i) => i.table === table && i.seq !== undefined).map((i) => i.seq as number)
     if (rows.length === 0) {
-      await db.outbox.where('table').equals(table).delete()
+      await db.outbox.bulkDelete(sent)
       continue
     }
     let { error } = await supabase.from(table).upsert(rows)
@@ -335,7 +450,7 @@ async function pushOutbox() {
       ;({ error } = await supabase.from(table).upsert(rows))
     }
     if (error) throw new Error(`push ${table}: ${error.message}`)
-    await db.outbox.where('table').equals(table).delete()
+    await db.outbox.bulkDelete(sent)
   }
 }
 
@@ -653,6 +768,7 @@ export async function syncNow() {
   const errors = await runStages([
     ['push', pushOutbox],
     ['recibos', uploadReceipts],
+    ['archivos', uploadPackFiles],
     ['borrar', retryPendingDeletes],
     ['bajar', pullFromServer],
     ['borrar-fotos', wipeAllPhotos],
@@ -792,6 +908,14 @@ export async function pullFromServer() {
       supabase.from('route_stops').select('*').limit(PULL_LIMIT),
       supabase.from('route_lines').select('*').limit(PULL_LIMIT),
     ])
+    const [pWeeks, pImports, pPacked, pStates, pAliases, pFiles] = await Promise.all([
+      supabase.from('pack_weeks').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_imports').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_packed').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_line_states').select('*').limit(PULL_LIMIT),
+      supabase.from('item_aliases').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_files').select('*').limit(PULL_LIMIT),
+    ])
 
     // Read the local queues now, not alongside the requests: anything the user
     // did while the network was busy has to count.
@@ -888,6 +1012,12 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.routePeople, rpe, pendingIds, askedAt)
     await dropLocallyIfGoneFromServer(db.routeStops, rst, pendingIds, askedAt)
     await dropLocallyIfGoneFromServer(db.routeLines, rli, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packWeeks, pWeeks, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packImports, pImports, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packPacked, pPacked, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packLineStates, pStates, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.itemAliases, pAliases, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packFiles, pFiles, pendingIds, askedAt)
 
     /** Server rows worth taking: unknown here, or written more recently there. */
     const newer = <R extends { id: string; updated_at: string }, T extends { updatedAt: number }>(
@@ -899,6 +1029,112 @@ export async function pullFromServer() {
         const mine = local.get(r.id)
         return !mine || (Date.parse(r.updated_at) || 0) > mine.updatedAt
       })
+
+    /** Local copies of these server rows, by id. */
+    const held = async <T extends { id: string }>(
+      table: { bulkGet: (ids: string[]) => Promise<(T | undefined)[]> },
+      rows: { id: string }[],
+    ) => new Map((await table.bulkGet(rows.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x] as const] : [])))
+
+    if (pWeeks.data?.length) {
+      await db.packWeeks.bulkPut(
+        newer(pWeeks.data, await held<PackWeek>(db.packWeeks, pWeeks.data)).map((r) => ({
+          id: r.id,
+          startDate: String(r.start_date),
+          label: r.label ?? '',
+          createdAt: ms(r.created_at),
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pImports.data?.length) {
+      await db.packImports.bulkPut(
+        newer(pImports.data, await held<PackImport>(db.packImports, pImports.data)).map((r) => ({
+          id: r.id,
+          eventKey: r.event_key,
+          weekStart: r.week_start ?? '',
+          filename: r.filename ?? '',
+          eventName: r.event_name ?? '',
+          eventDate: r.event_date ?? '',
+          eventIso: r.event_iso ?? '',
+          eventTime: r.event_time ?? '',
+          venue: r.venue ?? '',
+          planner: r.planner ?? '',
+          guestCount: r.guest_count ?? '',
+          iceNeeds: r.ice_needs ?? '',
+          iceDeliveryTime: r.ice_delivery_time ?? '',
+          kitchenPickup: r.kitchen_pickup ?? '',
+          kitchenDelivery: r.kitchen_delivery ?? '',
+          specialNotes: r.special_notes ?? '',
+          additionalNotes: r.additional_notes ?? '',
+          legend: r.legend ?? {},
+          emailSubject: r.email_subject ?? '',
+          emailFrom: r.email_from ?? '',
+          emailBody: r.email_body ?? '',
+          lines: r.lines ?? [],
+          importedAt: ms(r.imported_at),
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pPacked.data?.length) {
+      await db.packPacked.bulkPut(
+        newer(pPacked.data, await held<PackPacked>(db.packPacked, pPacked.data)).map((r) => ({
+          id: r.id,
+          weekStart: r.week_start,
+          eventKey: r.event_key,
+          itemKey: r.item_key,
+          packedAt: ms(r.packed_at),
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pStates.data?.length) {
+      await db.packLineStates.bulkPut(
+        newer(pStates.data, await held<PackLineState>(db.packLineStates, pStates.data)).map((r) => ({
+          id: r.id,
+          weekStart: r.week_start,
+          eventKey: r.event_key,
+          itemKey: r.item_key,
+          status: (r.status ?? '') as PackLineState['status'],
+          productId: r.product_id ?? null,
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pAliases.data?.length) {
+      await db.itemAliases.bulkPut(
+        newer(pAliases.data, await held<ItemAlias>(db.itemAliases, pAliases.data)).map((r) => ({
+          id: r.id,
+          alias: r.alias,
+          canonical: r.canonical,
+          kind: (r.kind === 'different' || r.kind === 'use' ? r.kind : 'same') as ItemAlias['kind'],
+          createdAt: ms(r.created_at),
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pFiles.data?.length) {
+      const local = await held<PackFile>(db.packFiles, pFiles.data)
+      await db.packFiles.bulkPut(
+        newer(pFiles.data, local).map((r) => {
+          const mine = local.get(r.id)
+          return {
+            id: r.id,
+            weekStart: r.week_start ?? '',
+            eventKey: r.event_key ?? '',
+            filename: r.filename ?? '',
+            kind: (r.kind === 'pdf' ? 'pdf' : 'photo') as PackFile['kind'],
+            // The bytes never come down with the row; keep them if we have them.
+            blob: mine?.blob,
+            path: r.path ?? null,
+            uploaded: (r.path ? 1 : (mine?.uploaded ?? 0)) as 0 | 1,
+            addedAt: ms(r.added_at),
+            updatedAt: ms(r.updated_at),
+          }
+        }),
+      )
+    }
 
     if (rts.data?.length) {
       const local = new Map((await db.routes.bulkGet(rts.data.map((r) => r.id))).flatMap((x) => (x ? [[x.id, x]] : [])))

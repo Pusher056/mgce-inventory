@@ -209,6 +209,12 @@ export type SyncTable =
   | 'route_people'
   | 'route_stops'
   | 'route_lines'
+  | 'pack_weeks'
+  | 'pack_imports'
+  | 'pack_packed'
+  | 'pack_line_states'
+  | 'item_aliases'
+  | 'pack_files'
 
 export interface OutboxItem {
   seq?: number
@@ -428,6 +434,7 @@ export interface PackImport {
   emailBody: string
   lines: { section: string; sheet?: string; item: string; size: string; qty: string; note: string }[]
   importedAt: number
+  updatedAt: number
 }
 
 /** A Saturday-to-Friday week. He can make an empty one and fill it as files arrive. */
@@ -437,6 +444,7 @@ export interface PackWeek {
   startDate: string
   label: string
   createdAt: number
+  updatedAt: number
 }
 
 /**
@@ -450,25 +458,60 @@ export interface PackPacked {
   eventKey: string
   itemKey: string
   packedAt: number
+  updatedAt: number
 }
 
-/** A photo or PDF he dropped in, kept beside the week he dropped it into. */
+/**
+ * A photo or PDF he dropped in, kept beside the week he dropped it into. The
+ * bytes go up to storage once; another device holds only the path and fetches
+ * the file the first time it is opened.
+ */
 export interface PackFile {
   id: string
   weekStart: string
   eventKey: string
   filename: string
   kind: 'photo' | 'pdf'
-  blob: Blob
+  /** Here on the device that added it, or after the first open elsewhere. */
+  blob?: Blob
+  /** Where it sits in storage once uploaded. */
+  path: string | null
+  uploaded: 0 | 1
   addedAt: number
+  updatedAt: number
 }
 
-/** "Mise trays - the tall ones" is the thing we already call Silver Organic Trays. */
+/**
+ * His ruling on a name.
+ *  - "same": two names, one thing — one line and one total.
+ *  - "different": remembered so the pair is never suggested again. 4" and 6"
+ *    plates are not the same plate, and he should only have to say so once.
+ *  - "use": when they write this, send that product. `canonical` is the
+ *    product id. They write La Vendemmia; we pour Mionetto.
+ */
 export interface ItemAlias {
   id: string
   alias: string
   canonical: string
+  kind: 'same' | 'different' | 'use'
   createdAt: number
+  updatedAt: number
+}
+
+/**
+ * What he decided about one line of one event: not his to pack (the football
+ * helmets nobody said were someone else's), removed outright, or which bottle
+ * he is sending when they only wrote "Rum". Keyed like PackPacked so it
+ * survives the next version of the pack list.
+ */
+export interface PackLineState {
+  id: string
+  weekStart: string
+  eventKey: string
+  itemKey: string
+  status: '' | 'notMine' | 'removed'
+  productId: string | null
+  updatedAt: number
 }
 
 /** Section names as they appear in the 2026 template, in template order. */

@@ -4,12 +4,13 @@
 // all and is kept beside the event so he can open it and work from it — which
 // is the honest version of "upload a photo", not a promise the app can't keep.
 
-import { db, uuid } from './db'
+import { uuid } from './db'
+import { addFile, saveImport } from './packStore'
 import { parseEml, isSpreadsheet } from './emailParse'
 import { parseMsg } from './msgParse'
 import { parseEventDate, weekStartIso } from './packWeeks'
 import { plain } from './components/ProductSearch'
-import type { PackFile, PackImport } from './types'
+import type { PackImport } from './types'
 import { parsePackList, type ParsedPackList } from './packlistParse'
 
 export interface IngestReport {
@@ -67,6 +68,7 @@ function toImport(
     emailBody: meta.body,
     lines: parsed.lines,
     importedAt: Date.now(),
+    updatedAt: Date.now(),
   }
 }
 
@@ -80,9 +82,7 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
   const XLSX = await import('xlsx')
 
   async function store(rec: PackImport) {
-    const existing = await db.packImports.where('eventKey').equals(rec.eventKey).count()
-    await db.packImports.add(rec)
-    if (existing > 0) report.updated++
+    if ((await saveImport(rec)) === 'updated') report.updated++
     else report.added++
   }
 
@@ -135,7 +135,7 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
         const { readPdfText, linesFromPdf } = await import('./pdfParse')
         const text = await readPdfText(new Uint8Array(await file.arrayBuffer()))
         if (text.scanned) {
-          await keep(file, 'pdf', weekStart)
+          await addFile(file, 'pdf', weekStart)
           report.files++
           report.problems.push(`${name}: scanned PDF — kept as a picture, there is no text in it to read`)
           continue
@@ -168,15 +168,16 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
           emailBody: '',
           lines: linesFromPdf(text.pages),
           importedAt: Date.now(),
+          updatedAt: Date.now(),
         })
         // Keep the PDF too: the reading is a best effort, the file is the truth.
-        await keep(file, 'pdf', weekStart)
+        await addFile(file, 'pdf', weekStart)
         report.files++
         continue
       }
 
       if (isPhoto(name)) {
-        await keep(file, 'photo', weekStart)
+        await addFile(file, 'photo', weekStart)
         report.files++
         continue
       }
@@ -187,16 +188,4 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
     }
   }
   return report
-}
-
-async function keep(file: File, kind: PackFile['kind'], weekStart: string) {
-  await db.packFiles.add({
-    id: uuid(),
-    weekStart,
-    eventKey: '',
-    filename: file.name,
-    kind,
-    blob: file,
-    addedAt: Date.now(),
-  })
 }

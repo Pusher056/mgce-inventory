@@ -1,16 +1,34 @@
 import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, uuid } from '../db'
+import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists } from '../packlistParse'
 import { describeIce, describeQty, parseIce, parseQty } from '../packUnits'
 import { findMaybeSame, itemKey, sectionOwner } from '../packMatch'
-import { prettyDate } from '../packWeeks'
-import { displayName, totalBottles, type PackImport } from '../types'
+import { buildShelf, canonicalizer, matchItem, onHand, sameKind, type LineMatch, type ShelfItem } from '../packCatalog'
+import { fromIso, isoDate, parseWeekLabel, prettyDate, weekLabel, weekStartOf } from '../packWeeks'
+import {
+  decidePair,
+  decideUse,
+  deleteEvent,
+  deleteFiles,
+  fileBlob,
+  lineId,
+  moveEvent,
+  setLineState,
+  setPacked,
+  undoPair,
+  undoVersion,
+} from '../packStore'
+import { totalBottles, type PackFile, type PackImport, type Storage } from '../types'
+import ActionRow from './ActionRow'
 
-const ACCEPT_BOOK = '.xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const ACCEPT_BOOK =
+  '.xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const ACCEPT_PDF = '.pdf,application/pdf'
 const ACCEPT_PHOTO = 'image/*'
+
+type Line = PackImport['lines'][number]
 
 interface EventGroup {
   latest: PackImport
@@ -18,13 +36,33 @@ interface EventGroup {
   versions: number
 }
 
+const addDays = (iso: string, n: number) => {
+  const d = fromIso(iso)
+  return isoDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n))
+}
+
+/** Toggle membership of a key in a Set held in state. */
+function useToggleSet() {
+  const [set, setSet] = useState<Set<string>>(new Set())
+  const toggle = (k: string) =>
+    setSet((cur) => {
+      const next = new Set(cur)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
+  return [set, toggle] as const
+}
+
 /**
  * One week of pack lists.
  *
- * Everything the planners asked for that week, summed once at the top so he
- * has a single number to trust, then each event on its own with a tick beside
- * every line. A line he ticks leaves the list; an event he finishes folds away
- * and the next one comes up.
+ * The totals and the shopping list sit folded at the top — one number per
+ * item across every event, there when he wants it and out of the way when he
+ * is packing. Below, each event folds too, so the whole week fits on a screen
+ * and he opens them one at a time. Inside an event every line ticks packed,
+ * and swipes to "not mine" or "remove" when a planner put something on the
+ * list that was never his to bring.
  */
 export default function PackWeekView({ weekStart, label }: { weekStart: string; label: string }) {
   const imports = useLiveQuery(
@@ -32,6 +70,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     [weekStart],
   )
   const packed = useLiveQuery(() => db.packPacked.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
+  const states = useLiveQuery(() => db.packLineStates.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const files = useLiveQuery(() => db.packFiles.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
   const entries = useLiveQuery(() => db.entries.toArray(), []) ?? []
@@ -42,16 +81,14 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const photoRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<IngestReport | null>(null)
-  const [openDelivery, setOpenDelivery] = useState<string | null>(null)
-  const [openUnknown, setOpenUnknown] = useState<Set<string>>(new Set())
-  const [showDone, setShowDone] = useState<Set<string>>(new Set())
+  const [open, toggleOpen] = useToggleSet()
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [moveTo, setMoveTo] = useState('')
+  const [moveError, setMoveError] = useState('')
+  const [pickFor, setPickFor] = useState<string | null>(null)
+  const [addFor, setAddFor] = useState<string | null>(null)
 
-  /**
-   * Bottles on the shelf, by product — and only for products that have
-   * actually been counted. Inventory covers the beverage shelf; the office and
-   * dry storage lists exist as products but nobody counts them, and printing
-   * "0 in stock" beside forty of them says something untrue.
-   */
+  /** Bottles on the shelf, by product. */
   const stock = useMemo(() => {
     const perCase = new Map(products.map((p) => [p.id, p.unitsPerCase]))
     const total = new Map<string, number>()
@@ -61,27 +98,31 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     return total
   }, [products, entries])
 
-  /** Everything the warehouse knows the name of, by squeezed key. */
-  const catalogue = useMemo(() => {
-    const map = new Map<string, { name: string; have: number | null }>()
-    for (const p of products) {
-      const name = displayName(p) || p.name
-      if (!name) continue
-      // A zero on the beverage shelf is a real answer — we counted, there are
-      // none. A zero on an office product is the placeholder row the seed
-      // script left behind, and reporting it as "0 in stock" would be a lie
-      // about a shelf nobody has looked at.
-      const n = stock.get(p.id)
-      const have = n === undefined || (n === 0 && p.storage !== 'beverage') ? null : n
-      map.set(itemKey(`${p.brand ?? ''} ${name}`), { name, have })
-      map.set(itemKey(name), { name, have })
+  const shelf = useMemo(() => buildShelf(products, stock), [products, stock])
+  const canon = useMemo(() => canonicalizer(aliases), [aliases])
+
+  /** "When they write this, send that." */
+  const useFor = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const a of aliases) if (a.kind === 'use') m.set(itemKey(a.alias), a.canonical)
+    return m
+  }, [aliases])
+
+  // Rebuilt whenever the shelf or the rulings change; lookups inside a render
+  // are then cheap however many lines the week has.
+  const matchCache = useMemo(() => new Map<string, LineMatch>(), [shelf, useFor])
+  const match = (item: string): LineMatch => {
+    const k = itemKey(item)
+    let m = matchCache.get(k)
+    if (!m) {
+      m = matchItem(item, shelf, useFor.get(k) ?? useFor.get(canon(item)))
+      matchCache.set(k, m)
     }
-    for (const a of aliases) {
-      const hit = map.get(itemKey(a.canonical))
-      map.set(itemKey(a.alias), hit ?? { name: a.canonical, have: null })
-    }
-    return map
-  }, [products, aliases, stock])
+    return m
+  }
+
+  const packedIds = useMemo(() => new Set(packed.map((p) => p.id)), [packed])
+  const stateById = useMemo(() => new Map(states.map((s) => [s.id, s])), [states])
 
   const groups: EventGroup[] = useMemo(() => {
     const map = new Map<string, PackImport[]>()
@@ -90,34 +131,32 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       list.push(imp)
       map.set(imp.eventKey, list)
     }
-    return [...map.values()]
-      .map((list) => ({ latest: list[0], previous: list[1], versions: list.length }))
-      .sort((a, b) => (a.latest.eventIso || 'z').localeCompare(b.latest.eventIso || 'z'))
+    return [...map.values()].map((list) => ({ latest: list[0], previous: list[1], versions: list.length }))
   }, [imports])
 
-  /** His lines only: kitchen is not his, and a section nobody has ruled on stays in, marked. */
-  const mineOf = (g: EventGroup) => g.latest.lines.filter((l) => sectionOwner(l.section, l.sheet) !== 'kitchen')
-
-  const packedIds = useMemo(() => new Set(packed.map((p) => p.id)), [packed])
-  const idOf = (eventKey: string, item: string) => `${weekStart}|${eventKey}|${itemKey(item)}`
-
-  async function togglePacked(eventKey: string, item: string) {
-    const id = idOf(eventKey, item)
-    if (packedIds.has(id)) await db.packPacked.delete(id)
-    else await db.packPacked.add({ id, weekStart, eventKey, itemKey: itemKey(item), packedAt: Date.now() })
+  /** His lines: kitchen is not his; lines he set aside are out of play. */
+  const linesOf = (g: EventGroup) => {
+    const all = g.latest.lines.filter((l) => sectionOwner(l.section, l.sheet) !== 'kitchen')
+    const aside: { line: Line; status: string }[] = []
+    const live: Line[] = []
+    for (const l of all) {
+      const st = stateById.get(lineId(weekStart, g.latest.eventKey, l.item))?.status
+      if (st) aside.push({ line: l, status: st })
+      else live.push(l)
+    }
+    return { live, aside }
   }
 
   /** One number per item across the whole week, in the unit he counts it in. */
   const totals = useMemo(() => {
-    const map = new Map<string, { item: string; base: number; unit: string; unclear: string[] }>()
+    const map = new Map<string, { item: string; base: number; unit: string; unclear: string[]; m: LineMatch }>()
     for (const g of groups) {
-      for (const l of mineOf(g)) {
-        const q = parseQty(l.qty, l.item, l.size)
-        const key = itemKey(l.item)
+      for (const l of linesOf(g).live) {
+        const key = canon(l.item)
         if (!key) continue
-        const row = map.get(key) ?? { item: l.item, base: 0, unit: q.baseUnit, unclear: [] }
-        // A quantity with no number in it — "Yes - assortment" — cannot join a
-        // total, so it is shown as written rather than silently dropped.
+        const q = parseQty(l.qty, l.item, l.size)
+        const row = map.get(key) ?? { item: l.item, base: 0, unit: q.baseUnit, unclear: [], m: match(l.item) }
+        // No number in it — "Yes - assortment" — cannot join a total; shown as written.
         if (q.base === null) row.unclear.push(`${g.latest.eventName}: ${q.raw}`)
         else row.base += q.base
         if (q.baseUnit) row.unit = q.baseUnit
@@ -125,29 +164,32 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       }
     }
     return [...map.entries()]
-      .map(([key, v]) => ({ key, ...v, have: catalogue.get(key)?.have ?? null, known: catalogue.has(key) }))
+      .map(([key, v]) => ({ key, ...v, have: onHand(v.m), known: v.m.kind !== 'none' }))
       .sort((a, b) => a.item.localeCompare(b.item))
-  }, [groups, catalogue])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, stateById, matchCache, canon])
 
   // Worth ordering: something nobody stocks, or something counted and short.
-  // A product that exists but has never been counted is neither — we do not
-  // know what is on that shelf, and guessing is how a pallet goes out wrong.
-  const toOrder = useMemo(
-    () => totals.filter((t) => !t.known || (t.have !== null && t.have < t.base)),
-    [totals],
-  )
+  // Counted-never is neither — we do not know what is on that shelf.
+  const toOrder = useMemo(() => totals.filter((t) => !t.known || (t.have !== null && t.have < t.base)), [totals])
+
+  const decidedPairs = useMemo(() => {
+    const s = new Set<string>()
+    for (const a of aliases) {
+      if (a.kind === 'use') continue
+      s.add(`${itemKey(a.alias)}|${itemKey(a.canonical)}`)
+      s.add(`${itemKey(a.canonical)}|${itemKey(a.alias)}`)
+    }
+    return s
+  }, [aliases])
 
   const maybeSame = useMemo(() => {
-    const names = [...new Set(groups.flatMap((g) => mineOf(g).map((l) => l.item)))]
-    const linked = new Set(aliases.map((a) => `${itemKey(a.alias)}|${itemKey(a.canonical)}`))
-    return findMaybeSame(names, (a, b) =>
-      linked.has(`${itemKey(a)}|${itemKey(b)}`) || linked.has(`${itemKey(b)}|${itemKey(a)}`),
-    )
-  }, [groups, aliases])
+    const names = [...new Set(groups.flatMap((g) => linesOf(g).live.map((l) => l.item)))]
+    return findMaybeSame(names, (a, b) => decidedPairs.has(`${itemKey(a)}|${itemKey(b)}`) || canon(a) === canon(b))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, decidedPairs, stateById, canon])
 
-  async function linkSame(a: string, b: string) {
-    await db.itemAliases.add({ id: uuid(), alias: a, canonical: b, createdAt: Date.now() })
-  }
+  const productLabel = (id: string) => shelf.find((s) => s.id === id)?.label ?? 'a product no longer in inventory'
 
   async function drop(picked: File[]) {
     if (!picked.length) return
@@ -174,12 +216,105 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     void drop(picked)
   }
 
-  const toggleIn = (set: Set<string>, key: string, put: (s: Set<string>) => void) => {
-    const next = new Set(set)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    put(next)
+  async function openFile(f: PackFile) {
+    const blob = await fileBlob(f)
+    if (!blob) {
+      window.alert('This file has not reached this device yet — it is still uploading from the one that added it.')
+      return
+    }
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    // The tab holds its own reference; this only drops ours.
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   }
+
+  async function doMove(g: EventGroup, target: string) {
+    await moveEvent(weekStart, g.latest.eventKey, target)
+    setMenuFor(null)
+    setMoveTo('')
+  }
+
+  /** Under the line: which bottle goes, or the ones to choose from. */
+  function renderMatch(l: Line, id: string) {
+    const m = match(l.item)
+    const picking = pickFor === id
+    if (m.kind === 'none') return null
+
+    const choices: ShelfItem[] =
+      m.kind === 'options' ? m.options : picking ? [...m.alternatives, ...sameKind(m.product, shelf)] : m.alternatives
+    const unique = [...new Map(choices.map((c) => [c.id, c])).values()]
+    const shown = picking ? unique : unique.slice(0, 3)
+
+    return (
+      <div className="wk-match">
+        {m.kind === 'product' && (
+          <div className="wk-match-line">
+            → {m.product.label}
+            <span className={`wk-have${(m.product.have ?? 0) > 0 ? ' ok' : m.product.have === 0 ? ' out' : ''}`}>
+              {m.product.have === null ? 'not counted' : `${m.product.have} in stock`}
+            </span>
+            {sameKind(m.product, shelf).length > 0 && (
+              <button className="wk-link" onClick={() => setPickFor(picking ? null : id)}>
+                {picking ? 'done' : 'change'}
+              </button>
+            )}
+          </div>
+        )}
+        {m.kind === 'product' && m.alternatives.length > 0 && !picking && (
+          <div className="wk-match-note">None of that on the shelf — we have:</div>
+        )}
+        {m.kind === 'options' && (
+          <div className="wk-match-note">
+            They asked for &ldquo;{l.item}&rdquo; — {m.options.length} we could send. Pick one and it&rsquo;s
+            remembered:
+          </div>
+        )}
+        {shown.length > 0 && (
+          <div className="wk-choices">
+            {shown.map((c) => (
+              <button
+                key={c.id}
+                className="wk-choice"
+                onClick={() => {
+                  void decideUse(l.item, c.id)
+                  setPickFor(null)
+                }}
+              >
+                {c.label}
+                <b>{c.have === null ? '—' : c.have}</b>
+              </button>
+            ))}
+            {!picking && unique.length > shown.length && (
+              <button className="wk-link" onClick={() => setPickFor(id)}>
+                +{unique.length - shown.length} more
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Events still to pack first, by date; finished ones sink to the bottom.
+  const ordered = useMemo(() => {
+    const done = (g: EventGroup) => {
+      const { live } = linesOf(g)
+      return live.length > 0 && live.every((l) => packedIds.has(lineId(weekStart, g.latest.eventKey, l.item)))
+    }
+    return [...groups].sort(
+      (a, b) =>
+        Number(done(a)) - Number(done(b)) || (a.latest.eventIso || 'z').localeCompare(b.latest.eventIso || 'z'),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, packedIds, stateById])
+
+  const foldHead = (id: string, title: string, count: number, tone = '') => (
+    <button className={`wk-fold-head ${tone}`} onClick={() => toggleOpen(id)}>
+      <span>{title}</span>
+      <span className="wk-count">{count}</span>
+      <span className="wk-caret">{open.has(id) ? '▾' : '▸'}</span>
+    </button>
+  )
 
   return (
     <div className="screen">
@@ -203,12 +338,16 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       {report && (
         <div className="inbox-report">
           <div>
-            {report.added > 0 && <b>{report.added} new</b>}
-            {report.added > 0 && (report.updated > 0 || report.files > 0) && ' · '}
-            {report.updated > 0 && <b>{report.updated} updated</b>}
-            {report.updated > 0 && report.files > 0 && ' · '}
-            {report.files > 0 && <b>{report.files} kept as pictures</b>}
-            {report.added + report.updated + report.files === 0 && 'Nothing read.'}
+            {[
+              report.added > 0 && `${report.added} new`,
+              report.updated > 0 && `${report.updated} updated`,
+              report.files > 0 && `${report.files} kept as pictures`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Nothing read.'}
+            <button className="wk-link" style={{ marginLeft: 10 }} onClick={() => setReport(null)}>
+              dismiss
+            </button>
           </div>
           {report.problems.map((p, i) => (
             <div className="inbox-problem" key={i}>
@@ -220,108 +359,306 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
       {totals.length > 0 && (
         <div className="lp-block">
-          <div className="wk-head ok">Everything they asked for · {label}</div>
-          {totals.map((t) => (
-            <div className="lp-row" key={t.key}>
-              <div className="lp-main">
-                <div className="lp-brand">{t.item}</div>
-                {t.unclear.length > 0 && (
-                  <div className="lp-note warn">⚠ written as {t.unclear.join(' · ')}</div>
-                )}
-              </div>
-              <div className="lp-right">
-                <div className="lp-price">
-                  {t.base > 0 ? describeQty({ raw: '', base: t.base, baseUnit: t.unit, writtenUnit: '', unclear: false }, t.item) : '—'}
+          {foldHead('_totals', 'Everything they asked for', totals.length, 'ok')}
+          {open.has('_totals') &&
+            totals.map((t) => (
+              <div className="lp-row" key={t.key}>
+                <div className="lp-main">
+                  <div className="lp-brand">{t.item}</div>
+                  {t.unclear.length > 0 && <div className="lp-note warn">⚠ written as {t.unclear.join(' · ')}</div>}
                 </div>
-                {t.known && t.have !== null && (
-                  <span className={`lp-chip ${t.have >= t.base ? 'ok' : 'act'}`}>{t.have} in stock</span>
-                )}
-                {t.known && t.have === null && <span className="lp-chip">not counted</span>}
-                {!t.known && <span className="lp-chip act">not in inventory</span>}
+                <div className="lp-right">
+                  <div className="lp-price">
+                    {t.base > 0
+                      ? describeQty({ raw: '', base: t.base, baseUnit: t.unit, writtenUnit: '', unclear: false }, t.item)
+                      : '—'}
+                  </div>
+                  {t.known && t.have !== null && (
+                    <span className={`lp-chip ${t.have >= t.base ? 'ok' : 'act'}`}>{t.have} in stock</span>
+                  )}
+                  {t.known && t.have === null && <span className="lp-chip">not counted</span>}
+                  {!t.known && <span className="lp-chip act">not in inventory</span>}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
       {toOrder.length > 0 && (
         <div className="lp-block">
-          <div className="wk-head act">Need to order</div>
-          {toOrder.map((t) => (
-            <div className="lp-row" key={t.key}>
-              <div className="lp-main">
-                <div className="lp-brand">{t.item}</div>
-                <div className="lp-note">{t.known ? `only ${t.have} on the shelf` : 'not in inventory'}</div>
+          {foldHead('_order', 'Need to order', toOrder.length, 'act')}
+          {open.has('_order') &&
+            toOrder.map((t) => (
+              <div className="lp-row" key={t.key}>
+                <div className="lp-main">
+                  <div className="lp-brand">{t.item}</div>
+                  <div className="lp-note">{t.known ? `only ${t.have} on the shelf` : 'not in inventory'}</div>
+                </div>
+                <div className="lp-right">
+                  <div className="lp-price">{t.base > 0 ? t.base.toLocaleString() : (t.unclear[0] ?? '—')}</div>
+                </div>
               </div>
-              <div className="lp-right">
-                <div className="lp-price">{t.base > 0 ? t.base.toLocaleString() : t.unclear[0] ?? '—'}</div>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
       {maybeSame.length > 0 && (
         <div className="lp-block">
-          <div className="wk-head warn">⚠ Might be the same thing</div>
-          {maybeSame.map((m, i) => (
-            <div className="lp-row" key={i}>
-              <div className="lp-main">
-                <div className="lp-brand">
-                  {m.a} <span className="muted">and</span> {m.b}
+          {foldHead('_same', '⚠ Might be the same thing', maybeSame.length, 'warn')}
+          {open.has('_same') &&
+            maybeSame.map((m) => (
+              <div className="lp-row" key={`${m.a}|${m.b}`}>
+                <div className="lp-main">
+                  <div className="lp-brand">
+                    {m.a} <span className="muted">and</span> {m.b}
+                  </div>
+                </div>
+                <div className="lp-right wk-pair-btns">
+                  <button className="chip-btn" onClick={() => void decidePair(m.a, m.b, 'same')}>
+                    Same
+                  </button>
+                  <button className="chip-btn" onClick={() => void decidePair(m.a, m.b, 'different')}>
+                    Not the same
+                  </button>
                 </div>
               </div>
-              <div className="lp-right">
-                <button className="chip-btn" onClick={() => void linkSame(m.a, m.b)}>
-                  Same
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
-      {groups.map((g) => {
-        const mine = mineOf(g)
-        const known = mine.filter((l) => catalogue.has(itemKey(l.item)))
-        const unknown = mine.filter((l) => !catalogue.has(itemKey(l.item)))
-        const open = known.filter((l) => !packedIds.has(idOf(g.latest.eventKey, l.item)))
-        const doneCount = mine.length - open.length - unknown.filter((l) => !packedIds.has(idOf(g.latest.eventKey, l.item))).length
-        const openUnknownRows = unknown.filter((l) => !packedIds.has(idOf(g.latest.eventKey, l.item)))
-        // An event with nothing of his in it has not been "finished" — it never
-        // had anything to pack, and saying otherwise would read as a lie.
-        const allDone = mine.length > 0 && open.length === 0 && openUnknownRows.length === 0
-        const ice = parseIce(g.latest.iceNeeds)
-        const changes = g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []
-        const deliveryOpen = openDelivery === g.latest.eventKey
-        const unknownOpen = openUnknown.has(g.latest.eventKey)
-        const doneOpen = showDone.has(g.latest.eventKey)
-
-        return (
-          <div className={`lp-block${allDone ? ' wk-complete' : ''}`} key={g.latest.eventKey}>
-            <div className="wk-ev">
-              <div className="wk-ev-main">
-                <div className="wk-ev-name">{g.latest.eventName}</div>
-                <div className="wk-ev-sub">
-                  {[
-                    g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate,
-                    g.latest.venue,
-                    // "16 MEALS TOTAL" already says what it is; only a bare
-                    // number needs the word adding to it.
-                    g.latest.guestCount &&
-                      (/^[\d,]+$/.test(g.latest.guestCount) ? `${g.latest.guestCount} guests` : g.latest.guestCount),
-                    g.versions > 1 && `v${g.versions}`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+      {aliases.length > 0 && (
+        <div className="lp-block">
+          {foldHead('_rulings', 'Your rulings', aliases.length)}
+          {open.has('_rulings') &&
+            aliases.map((a) => (
+              <div className="lp-row" key={a.id}>
+                <div className="lp-main">
+                  <div className="lp-brand">
+                    {a.kind === 'use' ? (
+                      <>
+                        &ldquo;{a.alias}&rdquo; <span className="muted">→ send</span> {productLabel(a.canonical)}
+                      </>
+                    ) : (
+                      <>
+                        {a.alias}{' '}
+                        <span className="muted">{a.kind === 'same' ? '= same as' : '≠ not the same as'}</span>{' '}
+                        {a.canonical}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="lp-right">
+                  <button className="chip-btn" onClick={() => void undoPair(a.id)}>
+                    Undo
+                  </button>
                 </div>
               </div>
-              <button className="chip-btn" onClick={() => setOpenDelivery(deliveryOpen ? null : g.latest.eventKey)}>
-                🚚 Delivery {deliveryOpen ? '▾' : '▸'}
+            ))}
+        </div>
+      )}
+
+      {ordered.map((g) => {
+        const key = g.latest.eventKey
+        const { live, aside } = linesOf(g)
+        const isPacked = (l: Line) => packedIds.has(lineId(weekStart, key, l.item))
+        const openKnown = live.filter((l) => !isPacked(l) && match(l.item).kind !== 'none')
+        const openUnknown = live.filter((l) => !isPacked(l) && match(l.item).kind === 'none')
+        const doneLines = live.filter(isPacked)
+        const allDone = live.length > 0 && openKnown.length === 0 && openUnknown.length === 0
+        const isOpen = open.has(key)
+        const ice = parseIce(g.latest.iceNeeds)
+        const changes = g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []
+
+        const lineRow = (l: Line, i: number, unknownRow = false) => {
+          const id = lineId(weekStart, key, l.item)
+          const unsure = sectionOwner(l.section, l.sheet) === 'unsure'
+          return (
+            <div key={`${id}-${i}`}>
+              <ActionRow
+                onTap={() => void setPacked(weekStart, key, l.item, true)}
+                actions={[
+                  {
+                    label: 'Not mine',
+                    icon: '🙅',
+                    tone: 'accent',
+                    onClick: () => void setLineState(weekStart, key, l.item, { status: 'notMine' }),
+                  },
+                  {
+                    label: 'Remove',
+                    icon: '🗑',
+                    tone: 'danger',
+                    onClick: () => void setLineState(weekStart, key, l.item, { status: 'removed' }),
+                  },
+                  ...(unknownRow
+                    ? [
+                        {
+                          label: 'Add to list',
+                          icon: '＋',
+                          tone: 'muted' as const,
+                          onClick: () => setAddFor(addFor === id ? null : id),
+                        },
+                      ]
+                    : []),
+                ]}
+              >
+                <span className="wk-tick" />
+                <span className="wk-item-main">
+                  <span className={`wk-item-name${unknownRow ? ' mono' : ''}`}>
+                    {unknownRow ? `“${l.item}”` : l.item}
+                  </span>
+                  {(l.size || l.note || unsure || unknownRow) && (
+                    <span className="wk-item-sub">
+                      {[unknownRow && l.section, l.size, l.note, !unknownRow && unsure && `? ${l.section}`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  )}
+                </span>
+                <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
+              </ActionRow>
+              {!unknownRow && renderMatch(l, id)}
+              {unknownRow && addFor === id && (
+                <div className="wk-addto">
+                  Add &ldquo;{l.item}&rdquo; to:
+                  {(
+                    [
+                      ['office', 'Office items'],
+                      ['dry', 'Dry storage'],
+                      ['beverage', 'Beverage'],
+                    ] as [Storage, string][]
+                  ).map(([storage, name]) => (
+                    <button
+                      key={storage}
+                      className="chip-btn"
+                      onClick={async () => {
+                        await createProduct({ storage, name: l.item })
+                        setAddFor(null)
+                      }}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        return (
+          <div className={`lp-block${allDone ? ' wk-complete' : ''}`} key={key}>
+            <div className="wk-ev">
+              <button className="wk-ev-toggle" onClick={() => toggleOpen(key)}>
+                <span className="wk-caret">{isOpen ? '▾' : '▸'}</span>
+                <span className="wk-ev-main">
+                  <span className="wk-ev-name">{g.latest.eventName}</span>
+                  <span className="wk-ev-sub">
+                    {[
+                      g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate,
+                      g.latest.venue,
+                      // "16 MEALS TOTAL" already says what it is; only a bare number needs the word.
+                      g.latest.guestCount &&
+                        (/^[\d,]+$/.test(g.latest.guestCount) ? `${g.latest.guestCount} guests` : g.latest.guestCount),
+                      g.versions > 1 && `v${g.versions}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                  <span className={`wk-ev-prog${allDone ? ' ok' : ''}`}>
+                    {allDone
+                      ? '✓ everything packed'
+                      : `${doneLines.length} of ${live.length} packed${openUnknown.length ? ` · ⚠ ${openUnknown.length} unknown` : ''}`}
+                  </span>
+                </span>
               </button>
+              <div className="wk-ev-btns">
+                <button className="chip-btn" onClick={() => toggleOpen(`${key}#delivery`)}>
+                  🚚 Delivery
+                </button>
+                <button
+                  className="chip-btn"
+                  aria-label="Event options"
+                  onClick={() => {
+                    setMenuFor(menuFor === key ? null : key)
+                    setMoveError('')
+                  }}
+                >
+                  ⋯
+                </button>
+              </div>
             </div>
 
-            {deliveryOpen && (
+            {menuFor === key && (
+              <div className="wk-menu">
+                {g.versions > 1 && (
+                  <button
+                    className="chip-btn"
+                    onClick={async () => {
+                      if (
+                        window.confirm(
+                          `Drop version ${g.versions} of ${g.latest.eventName}? Version ${g.versions - 1} becomes current again.`,
+                        )
+                      ) {
+                        await undoVersion(g.latest.id)
+                        setMenuFor(null)
+                      }
+                    }}
+                  >
+                    ↶ Undo last version
+                  </button>
+                )}
+                <div className="wk-move">
+                  <span className="muted small">Move to week:</span>
+                  <button className="chip-btn" onClick={() => void doMove(g, addDays(weekStart, -7))}>
+                    ‹ {weekLabel(addDays(weekStart, -7))}
+                  </button>
+                  <button className="chip-btn" onClick={() => void doMove(g, addDays(weekStart, 7))}>
+                    {weekLabel(addDays(weekStart, 7))} ›
+                  </button>
+                </div>
+                <div className="wk-move">
+                  <input
+                    value={moveTo}
+                    placeholder="or type one: 10.10.26 - 10.16.26"
+                    onChange={(e) => {
+                      setMoveTo(e.target.value)
+                      setMoveError('')
+                    }}
+                  />
+                  <button
+                    className="chip-btn"
+                    onClick={() => {
+                      const start = parseWeekLabel(moveTo)
+                      if (!start) {
+                        setMoveError('Write it the way they do — 10.10.26 - 10.16.26')
+                        return
+                      }
+                      void doMove(g, isoDate(weekStartOf(fromIso(start))))
+                    }}
+                  >
+                    Move
+                  </button>
+                </div>
+                {moveError && <div className="wk-err">{moveError}</div>}
+                <button
+                  className="chip-btn danger"
+                  onClick={async () => {
+                    const n = g.versions
+                    if (
+                      window.confirm(
+                        `Delete ${g.latest.eventName}${n > 1 ? ` and all ${n} versions` : ''}? What was packed for it goes too.`,
+                      )
+                    ) {
+                      await deleteEvent(weekStart, key)
+                      setMenuFor(null)
+                    }
+                  }}
+                >
+                  🗑 Delete event
+                </button>
+              </div>
+            )}
+
+            {open.has(`${key}#delivery`) && (
               <div className="wk-delivery">
                 <div className="wk-dl">
                   <span>Kitchen pickup</span>
@@ -353,7 +690,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     </div>
                   </div>
                 )}
-                {Object.keys(g.latest.legend).length > 0 && (
+                {Object.keys(g.latest.legend ?? {}).length > 0 && (
                   <div className="wk-legend">
                     {Object.entries(g.latest.legend).map(([rgb, meaning]) => (
                       <span key={rgb}>
@@ -366,90 +703,87 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               </div>
             )}
 
-            {changes.length > 0 && (
-              <div className="inbox-changes">
-                <div className="inbox-changes-title">Changed in this version</div>
-                {changes.map((c, i) => (
-                  <div key={i} className={`inbox-change ${c.kind}`}>
-                    {c.kind === 'added' && `＋ ${c.item} — ${c.to}`}
-                    {c.kind === 'removed' && `− ${c.item} — no longer wanted`}
-                    {c.kind === 'changed' && `↕ ${c.item} — ${c.from} → ${c.to}`}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {g.latest.emailBody && (
-              <div className="inbox-email">
-                <div className="inbox-email-title">What they wrote{g.latest.emailFrom && ` · ${g.latest.emailFrom}`}</div>
-                <div className="inbox-email-body">{g.latest.emailBody}</div>
-              </div>
-            )}
-
-            {allDone ? (
-              <div className="wk-alldone">✓ {g.latest.eventName} — everything packed</div>
-            ) : (
-              open.map((l, i) => (
-                <button className="wk-item" key={i} onClick={() => void togglePacked(g.latest.eventKey, l.item)}>
-                  <span className="wk-tick" />
-                  <span className="wk-item-main">
-                    <span className="wk-item-name">{l.item}</span>
-                    {(l.size || l.note || sectionOwner(l.section, l.sheet) === 'unsure') && (
-                      <span className="wk-item-sub">
-                        {[l.size, l.note, sectionOwner(l.section, l.sheet) === 'unsure' && `? ${l.section}`]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    )}
-                  </span>
-                  <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
-                </button>
-              ))
-            )}
-
-            {openUnknownRows.length > 0 && (
+            {isOpen && (
               <>
-                <button
-                  className="wk-fold"
-                  onClick={() => toggleIn(openUnknown, g.latest.eventKey, setOpenUnknown)}
-                >
-                  ⚠ Unknown &mdash; not in our lists ({openUnknownRows.length}) {unknownOpen ? '▾' : '▸'}
-                </button>
-                {unknownOpen &&
-                  openUnknownRows.map((l, i) => (
-                    <button className="wk-item" key={i} onClick={() => void togglePacked(g.latest.eventKey, l.item)}>
-                      <span className="wk-tick" />
-                      <span className="wk-item-main">
-                        <span className="wk-item-name mono">&ldquo;{l.item}&rdquo;</span>
-                        <span className="wk-item-sub">{[l.section, l.size, l.note].filter(Boolean).join(' · ')}</span>
-                      </span>
-                      <span className="wk-item-qty">{l.qty}</span>
-                    </button>
-                  ))}
-              </>
-            )}
-
-            {doneCount > 0 && (
-              <>
-                <button className="wk-fold" onClick={() => toggleIn(showDone, g.latest.eventKey, setShowDone)}>
-                  ✓ Already packed ({doneCount}) {doneOpen ? '▾' : '▸'}
-                </button>
-                {doneOpen &&
-                  mine
-                    .filter((l) => packedIds.has(idOf(g.latest.eventKey, l.item)))
-                    .map((l, i) => (
-                      <button
-                        className="wk-item done"
-                        key={i}
-                        onClick={() => void togglePacked(g.latest.eventKey, l.item)}
-                      >
-                        <span className="wk-tick on">✓</span>
-                        <span className="wk-item-main">
-                          <span className="wk-item-name">{l.item}</span>
-                        </span>
-                        <span className="wk-item-qty">{l.qty}</span>
-                      </button>
+                {changes.length > 0 && (
+                  <div className="inbox-changes">
+                    <div className="inbox-changes-title">Changed in this version</div>
+                    {changes.map((c, i) => (
+                      <div key={i} className={`inbox-change ${c.kind}`}>
+                        {c.kind === 'added' && `＋ ${c.item} — ${c.to}`}
+                        {c.kind === 'removed' && `− ${c.item} — no longer wanted`}
+                        {c.kind === 'changed' && `↕ ${c.item} — ${c.from} → ${c.to}`}
+                      </div>
                     ))}
+                  </div>
+                )}
+
+                {g.latest.emailBody && (
+                  <div className="inbox-email">
+                    <div className="inbox-email-title">
+                      What they wrote{g.latest.emailFrom && ` · ${g.latest.emailFrom}`}
+                    </div>
+                    <div className="inbox-email-body">{g.latest.emailBody}</div>
+                  </div>
+                )}
+
+                {allDone && <div className="wk-alldone">✓ {g.latest.eventName} — everything packed</div>}
+                {openKnown.map((l, i) => lineRow(l, i))}
+
+                {openUnknown.length > 0 && (
+                  <>
+                    <button className="wk-fold" onClick={() => toggleOpen(`${key}#unknown`)}>
+                      ⚠ Unknown — not in our lists ({openUnknown.length}) {open.has(`${key}#unknown`) ? '▾' : '▸'}
+                    </button>
+                    {open.has(`${key}#unknown`) && openUnknown.map((l, i) => lineRow(l, i, true))}
+                  </>
+                )}
+
+                {doneLines.length > 0 && (
+                  <>
+                    <button className="wk-fold" onClick={() => toggleOpen(`${key}#done`)}>
+                      ✓ Already packed ({doneLines.length}) {open.has(`${key}#done`) ? '▾' : '▸'}
+                    </button>
+                    {open.has(`${key}#done`) &&
+                      doneLines.map((l, i) => (
+                        <button
+                          className="wk-item done"
+                          key={i}
+                          onClick={() => void setPacked(weekStart, key, l.item, false)}
+                          title="Tap to un-pack"
+                        >
+                          <span className="wk-tick on">✓</span>
+                          <span className="wk-item-main">
+                            <span className="wk-item-name">{l.item}</span>
+                          </span>
+                          <span className="wk-item-qty">{l.qty}</span>
+                        </button>
+                      ))}
+                  </>
+                )}
+
+                {aside.length > 0 && (
+                  <>
+                    <button className="wk-fold" onClick={() => toggleOpen(`${key}#aside`)}>
+                      Set aside — not mine or removed ({aside.length}) {open.has(`${key}#aside`) ? '▾' : '▸'}
+                    </button>
+                    {open.has(`${key}#aside`) &&
+                      aside.map(({ line: l, status }, i) => (
+                        <div className="wk-item aside" key={i}>
+                          <span className="wk-item-main">
+                            <span className="wk-item-name">{l.item}</span>
+                            <span className="wk-item-sub">{status === 'notMine' ? 'not mine' : 'removed'}</span>
+                          </span>
+                          <button
+                            className="chip-btn"
+                            onClick={() => void setLineState(weekStart, key, l.item, { status: '' })}
+                          >
+                            Put back
+                          </button>
+                        </div>
+                      ))}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -458,27 +792,29 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
       {files.length > 0 && (
         <div className="lp-block">
-          <div className="wk-head">Pictures and PDFs you dropped in</div>
-          {files.map((f) => (
-            <div className="lp-row" key={f.id}>
-              <div className="lp-main">
-                <div className="lp-brand">{f.filename}</div>
+          {foldHead('_files', 'Pictures and PDFs you dropped in', files.length)}
+          {open.has('_files') &&
+            files.map((f) => (
+              <div className="lp-row" key={f.id}>
+                <div className="lp-main">
+                  <div className="lp-brand">{f.filename}</div>
+                  {!f.path && !f.blob && <div className="lp-note">still uploading from the other device</div>}
+                </div>
+                <div className="lp-right wk-pair-btns">
+                  <button className="chip-btn" onClick={() => void openFile(f)}>
+                    Open
+                  </button>
+                  <button
+                    className="chip-btn danger"
+                    onClick={async () => {
+                      if (window.confirm(`Delete ${f.filename}?`)) await deleteFiles([f])
+                    }}
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
-              <div className="lp-right">
-                <button
-                  className="chip-btn"
-                  onClick={() => {
-                    const url = URL.createObjectURL(f.blob)
-                    window.open(url, '_blank')
-                    // The tab holds its own reference; this only drops ours.
-                    setTimeout(() => URL.revokeObjectURL(url), 60000)
-                  }}
-                >
-                  Open
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
@@ -488,6 +824,13 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           <br />
           Drop in the pack lists 👆
         </div>
+      )}
+
+      {groups.length > 0 && (
+        <p className="lp-foot">
+          {label}. Tap a line when it&rsquo;s packed. Swipe it either way for &ldquo;not mine&rdquo; or
+          &ldquo;remove&rdquo;.
+        </p>
       )}
     </div>
   )

@@ -92,6 +92,11 @@ export function similarity(a: string, b: string): number {
   let hit = 0
   for (const t of ta) if (tb.has(t)) hit++
 
+  // A different number is a different thing: 4" and 6" plates, 12oz and 16oz
+  // cups. A size is never a spelling difference.
+  const nums = (x: string) => [...x.matchAll(/\d+(?:\.\d+)?/g)].map((m) => m[0]).sort().join(',')
+  if (nums(a) !== nums(b)) return 0
+
   const different = [...ta, ...tb].filter((t) => !(ta.has(t) && tb.has(t)))
   if (different.length > 0 && different.every((t) => DISTINGUISHING.test(t))) return 0
 

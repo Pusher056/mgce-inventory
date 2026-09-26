@@ -28,6 +28,7 @@ import type {
   PackPacked,
   PackFile,
   ItemAlias,
+  PackLineState,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -55,6 +56,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   packPacked: EntityTable<PackPacked, 'id'>
   packFiles: EntityTable<PackFile, 'id'>
   itemAliases: EntityTable<ItemAlias, 'id'>
+  packLineStates: EntityTable<PackLineState, 'id'>
 }
 
 db.version(1).stores({
@@ -135,6 +137,41 @@ db.version(9)
         legend: {},
       })
     }
+  })
+
+// v10 makes the inbox shared: what goes in on the PC has to be there on the
+// phone in the warehouse. Every row gains the updatedAt the sync compares on,
+// and everything already here is queued to go up once.
+db.version(10)
+  .stores({
+    packFiles: 'id, weekStart, eventKey, uploaded',
+    itemAliases: 'id, alias, canonical',
+    packLineStates: 'id, weekStart, [weekStart+eventKey]',
+  })
+  .upgrade(async (tx) => {
+    const now = Date.now()
+    const outbox = tx.table<OutboxItem>('outbox')
+    const touch = async (name: string, table: OutboxItem['table'], extra: (r: Record<string, unknown>) => Record<string, unknown> = () => ({})) => {
+      const t = tx.table(name)
+      for (const r of (await t.toArray()) as Record<string, unknown>[]) {
+        const stamp = (r.updatedAt as number) || (r.importedAt as number) || (r.createdAt as number) || (r.packedAt as number) || (r.addedAt as number) || now
+        await t.update(r.id as string, { updatedAt: stamp, ...extra(r) })
+        await outbox.add({ table, id: r.id as string, ts: now })
+      }
+    }
+    await touch('packWeeks', 'pack_weeks')
+    await touch('packImports', 'pack_imports')
+    await touch('packPacked', 'pack_packed')
+    await touch('packFiles', 'pack_files', () => ({ path: null, uploaded: 0 }))
+
+    // Every "same" made so far becomes explicit, except the ones that differ
+    // only by a number: 4" and 6" plates were linked by mistake, and a size is
+    // never a spelling difference. Those turn into "different" so the pair is
+    // not offered again.
+    const digits = (x: unknown) => [...String(x ?? '').matchAll(/\d+/g)].map((m) => m[0]).sort().join(',')
+    await touch('itemAliases', 'item_aliases', (r) => ({
+      kind: digits(r.alias) !== digits(r.canonical) ? 'different' : 'same',
+    }))
   })
 
 export function uuid(): string {

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { isoDate, parseWeekLabel, weekIdOf, weekLabel, weekStartOf } from '../packWeeks'
+import { isoDate, parseWeekLabel, weekLabel, weekStartOf } from '../packWeeks'
+import { createWeek, deleteWeek } from '../packStore'
 
 /**
  * The weeks, and nothing else.
@@ -41,6 +42,7 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
           pictures: files.filter((f) => f.weekStart === start).length,
           started: done.size,
           current: start === thisWeek,
+          past: start < thisWeek,
         }
       })
       .filter((r) => r.events > 0 || r.pictures > 0 || r.current || weeks.some((w) => w.startDate === r.start))
@@ -54,10 +56,7 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
     }
     // Snap to the Saturday even if they wrote a midweek date.
     const snapped = isoDate(weekStartOf(new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, Number(start.slice(8, 10)))))
-    const id = weekIdOf(snapped)
-    if (!(await db.packWeeks.get(id))) {
-      await db.packWeeks.add({ id, startDate: snapped, label: weekLabel(snapped), createdAt: Date.now() })
-    }
+    await createWeek(snapped)
     setDraft('')
     setError('')
     setAdding(false)
@@ -72,19 +71,40 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
       </p>
 
       {rows.map((r) => (
-        <button key={r.start} className="wk-row" onClick={() => onOpen(r.start, r.label)}>
-          <span className="wk-row-main">
-            <span className="wk-row-label">
-              {r.label}
-              {r.current && <span className="badge" style={{ marginLeft: 8 }}>this week</span>}
+        <div key={r.start} className="wk-row-wrap">
+          <button className="wk-row" onClick={() => onOpen(r.start, r.label)}>
+            <span className="wk-row-main">
+              <span className="wk-row-label">
+                {r.label}
+                {r.current && <span className="badge" style={{ marginLeft: 8 }}>this week</span>}
+                {r.past && <span className="badge" style={{ marginLeft: 8 }}>past</span>}
+              </span>
+              <span className="wk-row-sub">
+                {r.events > 0 ? `${r.events} event${r.events === 1 ? '' : 's'}` : 'empty'}
+                {r.pictures > 0 && ` · ${r.pictures} picture${r.pictures === 1 ? '' : 's'}`}
+              </span>
             </span>
-            <span className="wk-row-sub">
-              {r.events > 0 ? `${r.events} event${r.events === 1 ? '' : 's'}` : 'empty'}
-              {r.pictures > 0 && ` · ${r.pictures} picture${r.pictures === 1 ? '' : 's'}`}
-            </span>
-          </span>
-          <span className="wk-row-go">›</span>
-        </button>
+            <span className="wk-row-go">›</span>
+          </button>
+          <button
+            className="wk-row-del"
+            aria-label={`Delete week ${r.label}`}
+            title="Delete this week"
+            onClick={async () => {
+              const what = [
+                r.events > 0 && `${r.events} event${r.events === 1 ? '' : 's'}`,
+                r.pictures > 0 && `${r.pictures} picture${r.pictures === 1 ? '' : 's'}`,
+              ]
+                .filter(Boolean)
+                .join(' and ')
+              if (window.confirm(`Delete the week ${r.label}${what ? ` and its ${what}` : ''}? This can't be undone.`)) {
+                await deleteWeek(r.start)
+              }
+            }}
+          >
+            🗑
+          </button>
+        </div>
       ))}
 
       {adding ? (
