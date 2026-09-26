@@ -4,10 +4,12 @@ import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists } from '../packlistParse'
 import { describeIce, describeQty, parseIce, parseQty } from '../packUnits'
-import { findMaybeSame, itemKey, sectionOwner } from '../packMatch'
+import { findMaybeSame, itemKey } from '../packMatch'
+import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, type Ownership } from '../packOwner'
 import { buildShelf, canonicalizer, matchItem, onHand, sameKind, type LineMatch, type ShelfItem } from '../packCatalog'
 import { fromIso, isoDate, parseWeekLabel, prettyDate, weekLabel, weekStartOf } from '../packWeeks'
 import {
+  decideOwner,
   decidePair,
   decideUse,
   deleteEvent,
@@ -134,17 +136,32 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     return [...map.values()].map((list) => ({ latest: list[0], previous: list[1], versions: list.length }))
   }, [imports])
 
-  /** His lines: kitchen is not his; lines he set aside are out of play. */
+  const rules = useMemo(() => ownerRules(aliases), [aliases])
+
+  /**
+   * Split an event's lines by whose they are. Not his by rule (kitchen, a
+   * planner's initials, his own earlier answer) goes to "not yours" with the
+   * reason; set aside by hand for this event goes to "set aside"; the rest is
+   * his to pack — including the ones still waiting for him to say.
+   */
   const linesOf = (g: EventGroup) => {
-    const all = g.latest.lines.filter((l) => sectionOwner(l.section, l.sheet) !== 'kitchen')
     const aside: { line: Line; status: string }[] = []
+    const notYours: { line: Line; own: Ownership }[] = []
     const live: Line[] = []
-    for (const l of all) {
+    const own = new Map<Line, Ownership>()
+    for (const l of g.latest.lines) {
       const st = stateById.get(lineId(weekStart, g.latest.eventKey, l.item))?.status
-      if (st) aside.push({ line: l, status: st })
+      if (st && st !== 'mine') {
+        aside.push({ line: l, status: st })
+        continue
+      }
+      // Answered "mine" for this event: no rule gets to take it back off the list.
+      const o: Ownership = st === 'mine' ? { whose: 'mine', why: '', source: 'ruling' } : ownerOf(l, rules)
+      own.set(l, o)
+      if (o.whose === 'notMine') notYours.push({ line: l, own: o })
       else live.push(l)
     }
-    return { live, aside }
+    return { live, aside, notYours, own }
   }
 
   /** One number per item across the whole week, in the unit he counts it in. */
@@ -167,7 +184,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       .map(([key, v]) => ({ key, ...v, have: onHand(v.m), known: v.m.kind !== 'none' }))
       .sort((a, b) => a.item.localeCompare(b.item))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, stateById, matchCache, canon])
+  }, [groups, stateById, matchCache, canon, rules])
 
   // Worth ordering: something nobody stocks, or something counted and short.
   // Counted-never is neither — we do not know what is on that shelf.
@@ -176,7 +193,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const decidedPairs = useMemo(() => {
     const s = new Set<string>()
     for (const a of aliases) {
-      if (a.kind === 'use') continue
+      if (a.kind !== 'same' && a.kind !== 'different') continue
       s.add(`${itemKey(a.alias)}|${itemKey(a.canonical)}`)
       s.add(`${itemKey(a.canonical)}|${itemKey(a.alias)}`)
     }
@@ -187,7 +204,23 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     const names = [...new Set(groups.flatMap((g) => linesOf(g).live.map((l) => l.item)))]
     return findMaybeSame(names, (a, b) => decidedPairs.has(`${itemKey(a)}|${itemKey(b)}`) || canon(a) === canon(b))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, decidedPairs, stateById, canon])
+  }, [groups, decidedPairs, stateById, canon, rules])
+
+  /**
+   * Section headings nothing knows yet — the new format, mostly. Asked about
+   * once for the whole section instead of line by line.
+   */
+  const newSections = useMemo(() => {
+    const count = new Map<string, number>()
+    for (const g of groups) {
+      for (const l of g.latest.lines) {
+        if (!l.section || sectionIsKnown(l.section, l.sheet)) continue
+        if (rules.sections.has(sectionRuleKey(l.section))) continue
+        count.set(l.section, (count.get(l.section) ?? 0) + 1)
+      }
+    }
+    return [...count.entries()].sort((a, b) => b[1] - a[1])
+  }, [groups, rules])
 
   const productLabel = (id: string) => shelf.find((s) => s.id === id)?.label ?? 'a product no longer in inventory'
 
@@ -306,7 +339,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         Number(done(a)) - Number(done(b)) || (a.latest.eventIso || 'z').localeCompare(b.latest.eventIso || 'z'),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, packedIds, stateById])
+  }, [groups, packedIds, stateById, rules])
 
   const foldHead = (id: string, title: string, count: number, tone = '') => (
     <button className={`wk-fold-head ${tone}`} onClick={() => toggleOpen(id)}>
@@ -426,6 +459,34 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         </div>
       )}
 
+      {newSections.length > 0 && (
+        <div className="lp-block">
+          {foldHead('_sections', '? Sections I haven’t seen before', newSections.length, 'warn')}
+          {open.has('_sections') &&
+            newSections.map(([section, n]) => (
+              <div className="lp-row" key={section}>
+                <div className="lp-main">
+                  <div className="lp-brand">{section}</div>
+                  <div className="lp-note">
+                    {n} line{n === 1 ? '' : 's'} this week. Is this section yours to pack?
+                  </div>
+                </div>
+                <div className="lp-right wk-pair-btns">
+                  <button className="chip-btn" onClick={() => void decideOwner(sectionRuleKey(section), 'mine')}>
+                    Mine
+                  </button>
+                  <button className="chip-btn" onClick={() => void decideOwner(sectionRuleKey(section), 'notMine')}>
+                    Not mine
+                  </button>
+                  <button className="chip-btn" onClick={() => void decideOwner(sectionRuleKey(section), 'ask')}>
+                    Depends
+                  </button>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+
       {aliases.length > 0 && (
         <div className="lp-block">
           {foldHead('_rulings', 'Your rulings', aliases.length)}
@@ -437,6 +498,13 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     {a.kind === 'use' ? (
                       <>
                         &ldquo;{a.alias}&rdquo; <span className="muted">→ send</span> {productLabel(a.canonical)}
+                      </>
+                    ) : a.kind === 'mine' || a.kind === 'notMine' || a.kind === 'ask' ? (
+                      <>
+                        {a.alias.startsWith('§') ? `Section ${a.alias.slice(1)}` : a.alias}{' '}
+                        <span className="muted">
+                          {a.kind === 'mine' ? '→ yours' : a.kind === 'notMine' ? '→ not yours' : '→ ask each time'}
+                        </span>
                       </>
                     ) : (
                       <>
@@ -459,7 +527,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
       {ordered.map((g) => {
         const key = g.latest.eventKey
-        const { live, aside } = linesOf(g)
+        const { live, aside, notYours, own } = linesOf(g)
         const isPacked = (l: Line) => packedIds.has(lineId(weekStart, key, l.item))
         const openKnown = live.filter((l) => !isPacked(l) && match(l.item).kind !== 'none')
         const openUnknown = live.filter((l) => !isPacked(l) && match(l.item).kind === 'none')
@@ -471,7 +539,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
         const lineRow = (l: Line, i: number, unknownRow = false) => {
           const id = lineId(weekStart, key, l.item)
-          const unsure = sectionOwner(l.section, l.sheet) === 'unsure'
+          const asking = own.get(l)?.whose === 'ask'
           return (
             <div key={`${id}-${i}`}>
               <ActionRow
@@ -506,16 +574,45 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className={`wk-item-name${unknownRow ? ' mono' : ''}`}>
                     {unknownRow ? `“${l.item}”` : l.item}
                   </span>
-                  {(l.size || l.note || unsure || unknownRow) && (
+                  {(l.size || l.note || unknownRow) && (
                     <span className="wk-item-sub">
-                      {[unknownRow && l.section, l.size, l.note, !unknownRow && unsure && `? ${l.section}`]
-                        .filter(Boolean)
-                        .join(' · ')}
+                      {[unknownRow && l.section, l.size, l.note].filter(Boolean).join(' · ')}
                     </span>
                   )}
                 </span>
                 <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
               </ActionRow>
+              {asking && (
+                <div className="wk-ask">
+                  <span>
+                    ? {l.section} — {own.get(l)?.why}. Is this one yours?
+                  </span>
+                  {own.get(l)?.why === 'depends on the event' ? (
+                    // These sections change hands from one event to the next,
+                    // so the answer holds for this event and is asked again next time.
+                    <>
+                      <button className="chip-btn" onClick={() => void setLineState(weekStart, key, l.item, { status: 'mine' })}>
+                        Mine
+                      </button>
+                      <button
+                        className="chip-btn"
+                        onClick={() => void setLineState(weekStart, key, l.item, { status: 'notMine' })}
+                      >
+                        Not mine
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="chip-btn" onClick={() => void decideOwner(l.item, 'mine')}>
+                        Mine
+                      </button>
+                      <button className="chip-btn" onClick={() => void decideOwner(l.item, 'notMine')}>
+                        Not mine
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               {!unknownRow && renderMatch(l, id)}
               {unknownRow && addFor === id && (
                 <div className="wk-addto">
@@ -762,6 +859,28 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   </>
                 )}
 
+                {notYours.length > 0 && (
+                  <>
+                    <button className="wk-fold" onClick={() => toggleOpen(`${key}#notyours`)}>
+                      Not yours — kitchen or someone else ({notYours.length}) {open.has(`${key}#notyours`) ? '▾' : '▸'}
+                    </button>
+                    {open.has(`${key}#notyours`) &&
+                      notYours.map(({ line: l, own: o }, i) => (
+                        <div className="wk-item aside" key={i}>
+                          <span className="wk-item-main">
+                            <span className="wk-item-name">{l.item}</span>
+                            <span className="wk-item-sub">
+                              {[o.why, l.section, l.note].filter(Boolean).join(' · ')}
+                            </span>
+                          </span>
+                          <button className="chip-btn" onClick={() => void decideOwner(l.item, 'mine')}>
+                            It&rsquo;s mine
+                          </button>
+                        </div>
+                      ))}
+                  </>
+                )}
+
                 {aside.length > 0 && (
                   <>
                     <button className="wk-fold" onClick={() => toggleOpen(`${key}#aside`)}>
@@ -774,6 +893,18 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                             <span className="wk-item-name">{l.item}</span>
                             <span className="wk-item-sub">{status === 'notMine' ? 'not mine' : 'removed'}</span>
                           </span>
+                          {status === 'notMine' && (
+                            <button
+                              className="chip-btn"
+                              title="Remember it for every event from now on"
+                              onClick={async () => {
+                                await decideOwner(l.item, 'notMine')
+                                await setLineState(weekStart, key, l.item, { status: '' })
+                              }}
+                            >
+                              Never mine
+                            </button>
+                          )}
                           <button
                             className="chip-btn"
                             onClick={() => void setLineState(weekStart, key, l.item, { status: '' })}

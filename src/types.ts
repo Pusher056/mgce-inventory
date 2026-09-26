@@ -493,7 +493,12 @@ export interface ItemAlias {
   id: string
   alias: string
   canonical: string
-  kind: 'same' | 'different' | 'use'
+  /**
+   * Plus whose it is to pack, learned from his answers: "mine" / "notMine"
+   * for an item, or for a whole section when `alias` starts with "§" — where
+   * "ask" means the section goes either way and each line is asked about.
+   */
+  kind: 'same' | 'different' | 'use' | 'mine' | 'notMine' | 'ask'
   createdAt: number
   updatedAt: number
 }
@@ -509,7 +514,8 @@ export interface PackLineState {
   weekStart: string
   eventKey: string
   itemKey: string
-  status: '' | 'notMine' | 'removed'
+  /** 'mine' answers the question for a section that goes either way — for this event only. */
+  status: '' | 'notMine' | 'removed' | 'mine'
   productId: string | null
   updatedAt: number
 }

@@ -1108,7 +1108,7 @@ export async function pullFromServer() {
           id: r.id,
           alias: r.alias,
           canonical: r.canonical,
-          kind: (r.kind === 'different' || r.kind === 'use' ? r.kind : 'same') as ItemAlias['kind'],
+          kind: (['different', 'use', 'mine', 'notMine', 'ask'].includes(r.kind) ? r.kind : 'same') as ItemAlias['kind'],
           createdAt: ms(r.created_at),
           updatedAt: ms(r.updated_at),
         })),

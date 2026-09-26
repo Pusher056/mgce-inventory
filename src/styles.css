@@ -1501,3 +1501,18 @@ textarea {
 .wk-alldone { padding: 14px 16px; border-top: 1px solid var(--bg3); color: #6ee7a0; font-size: 13.5px; }
 .wk-complete { opacity: 0.72; }
 
+
+/* whose is it — asked on the line itself */
+.wk-ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 0 16px 11px 50px;
+  font-size: 12.5px;
+  color: var(--amber, #fbbf24);
+}
+.wk-ask > span { flex-basis: 100%; }
+@media (min-width: 900px) {
+  .wk-ask > span { flex-basis: auto; margin-right: 4px; }
+}

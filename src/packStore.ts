@@ -155,7 +155,7 @@ export async function setLineState(
 export async function decidePair(a: string, b: string, kind: ItemAlias['kind']) {
   const existing = await db.itemAliases
     .filter((x) => {
-      if (x.kind === 'use') return false
+      if (x.kind !== 'same' && x.kind !== 'different') return false
       const pa = itemKey(x.alias)
       const pb = itemKey(x.canonical)
       return (pa === itemKey(a) && pb === itemKey(b)) || (pa === itemKey(b) && pb === itemKey(a))
@@ -174,6 +174,24 @@ export async function decideUse(item: string, productId: string) {
   const old = await db.itemAliases.filter((x) => x.kind === 'use' && itemKey(x.alias) === key).toArray()
   await removeRows('itemAliases', old.map((x) => x.id))
   await putRow('itemAliases', { id: uuid(), alias: item, canonical: productId, kind: 'use' as const, createdAt: Date.now(), updatedAt: Date.now() })
+}
+
+/**
+ * Whose it is, learned. `key` is an item name, or a section key ("§BAR NEEDS")
+ * for the whole section. Replaces whatever was said about it before.
+ */
+export async function decideOwner(key: string, kind: 'mine' | 'notMine' | 'ask') {
+  const isSection = key.startsWith('§')
+  const k = isSection ? key : itemKey(key)
+  const old = await db.itemAliases
+    .filter(
+      (x) =>
+        (x.kind === 'mine' || x.kind === 'notMine' || x.kind === 'ask') &&
+        (isSection ? x.alias === k : !x.alias.startsWith('§') && itemKey(x.alias) === k),
+    )
+    .toArray()
+  await removeRows('itemAliases', old.map((x) => x.id))
+  await putRow('itemAliases', { id: uuid(), alias: key, canonical: '', kind, createdAt: Date.now(), updatedAt: Date.now() })
 }
 
 export async function undoPair(id: string) {
