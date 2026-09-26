@@ -398,23 +398,77 @@ export interface RouteLine {
  */
 export interface PackImport {
   id: string
-  /** event name, lowercased and squeezed — how two versions find each other */
+  /**
+   * Event name plus its date. Two files that agree on both are the same event,
+   * so the second one is a new version rather than a second event on the
+   * board — which is the whole reason he can drop updates in all week.
+   */
   eventKey: string
+  /** Start of the Saturday-to-Friday week this event falls in, as yyyy-mm-dd. */
+  weekStart: string
   filename: string
   eventName: string
   eventDate: string
+  /** yyyy-mm-dd worked out from eventDate or the filename, when it could be. */
+  eventIso: string
+  eventTime: string
   venue: string
   planner: string
   guestCount: string
   iceNeeds: string
+  iceDeliveryTime: string
   kitchenPickup: string
   kitchenDelivery: string
+  specialNotes: string
+  additionalNotes: string
+  legend: Record<string, string>
   emailSubject: string
   emailFrom: string
   /** What the planner actually typed — "Fabio, we also need…" */
   emailBody: string
-  lines: { section: string; item: string; size: string; qty: string; note: string }[]
+  lines: { section: string; sheet?: string; item: string; size: string; qty: string; note: string }[]
   importedAt: number
+}
+
+/** A Saturday-to-Friday week. He can make an empty one and fill it as files arrive. */
+export interface PackWeek {
+  id: string
+  /** yyyy-mm-dd of the Saturday. */
+  startDate: string
+  label: string
+  createdAt: number
+}
+
+/**
+ * One packed tick. Keyed by week, event and item so it survives a new version
+ * of the pack list landing on top — what he already carried to the pallet does
+ * not un-happen because a planner changed a number.
+ */
+export interface PackPacked {
+  id: string
+  weekStart: string
+  eventKey: string
+  itemKey: string
+  packedAt: number
+}
+
+/** A photo or PDF he dropped in, kept beside the week he dropped it into. */
+export interface PackFile {
+  id: string
+  weekStart: string
+  eventKey: string
+  filename: string
+  kind: 'photo' | 'pdf'
+  blob: Blob
+  addedAt: number
+}
+
+/** "Mise trays - the tall ones" is the thing we already call Silver Organic Trays. */
+export interface ItemAlias {
+  id: string
+  alias: string
+  canonical: string
+  createdAt: number
 }
 
 /** Section names as they appear in the 2026 template, in template order. */

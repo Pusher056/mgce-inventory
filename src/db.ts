@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { supabase } from './supabase'
+import { parseEventDate, weekStartIso } from './packWeeks'
 import type {
   Product,
   Session,
@@ -23,6 +24,10 @@ import type {
   RouteLine,
   RoutePersonRole,
   PackImport,
+  PackWeek,
+  PackPacked,
+  PackFile,
+  ItemAlias,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -46,6 +51,10 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   routeStops: EntityTable<RouteStop, 'id'>
   routeLines: EntityTable<RouteLine, 'id'>
   packImports: EntityTable<PackImport, 'id'>
+  packWeeks: EntityTable<PackWeek, 'id'>
+  packPacked: EntityTable<PackPacked, 'id'>
+  packFiles: EntityTable<PackFile, 'id'>
+  itemAliases: EntityTable<ItemAlias, 'id'>
 }
 
 db.version(1).stores({
@@ -100,6 +109,33 @@ db.version(7).stores({
 db.version(8).stores({
   packImports: 'id, eventKey, importedAt',
 })
+
+// v9 puts the pack lists into weeks, remembers what has been packed, and keeps
+// the photos and PDFs he drops in beside them. Still local to this device.
+db.version(9)
+  .stores({
+    packImports: 'id, eventKey, weekStart, importedAt',
+    packWeeks: 'id, startDate',
+    packPacked: 'id, weekStart, [weekStart+eventKey]',
+    packFiles: 'id, weekStart, eventKey',
+    itemAliases: 'id, alias',
+  })
+  .upgrade(async (tx) => {
+    // Imports from v8 predate weeks; park them where their own date says.
+    const table = tx.table<PackImport & { weekStart?: string }>('packImports')
+    for (const rec of await table.toArray()) {
+      const iso = parseEventDate(rec.eventDate) ?? parseEventDate(rec.filename)
+      await table.update(rec.id, {
+        weekStart: iso ? weekStartIso(iso) : '',
+        eventIso: iso ?? '',
+        eventTime: '',
+        iceDeliveryTime: '',
+        specialNotes: '',
+        additionalNotes: '',
+        legend: {},
+      })
+    }
+  })
 
 export function uuid(): string {
   return crypto.randomUUID()

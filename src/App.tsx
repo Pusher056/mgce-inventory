@@ -13,6 +13,7 @@ import VnoView from './components/VnoView'
 import LiquorProgram from './components/LiquorProgram'
 import RoutesView from './components/RoutesView'
 import PackInbox from './components/PackInbox'
+import PackWeekView from './components/PackWeekView'
 import type { Session } from './types'
 
 export default function App() {
@@ -25,6 +26,9 @@ export default function App() {
   // the pack list is a screen inside the event, so the header's back arrow has
   // to land on the event — not jump all the way out to the list of events
   const [packListOpen, setPackListOpen] = useState(false)
+  // The inbox opens on the list of weeks; a week is a screen inside it, so the
+  // back arrow lands on the weeks rather than jumping out to the dashboard.
+  const [week, setWeek] = useState<{ start: string; label: string } | null>(null)
   const sync = useSyncExternalStore(subscribeSync, getSyncState)
   const updateReady = useSyncExternalStore(subscribeUpdate, isUpdateReady)
   const session: Session | undefined = useLiveQuery(
@@ -45,6 +49,7 @@ export default function App() {
               if (sessionId) setSessionId(null)
               else if (packListOpen) setPackListOpen(false)
               else if (eventId) setEventId(null)
+              else if (week) setWeek(null)
               else setModule(null)
             }}
             aria-label="Back"
@@ -60,7 +65,7 @@ export default function App() {
               : module === 'inventory'
                 ? 'Inventory'
                 : module === 'inbox'
-                  ? 'Pack List Inbox'
+                  ? (week?.label ?? 'Pack List Inbox')
                   : module === 'events'
                     ? 'Events & Pack List'
                     : module === 'routes'
@@ -107,7 +112,11 @@ export default function App() {
       ) : module === 'inventory' ? (
         <Home onOpen={(s) => setSessionId(s.id)} />
       ) : module === 'inbox' ? (
-        <PackInbox />
+        week ? (
+          <PackWeekView weekStart={week.start} label={week.label} />
+        ) : (
+          <PackInbox onOpen={(start, label) => setWeek({ start, label })} />
+        )
       ) : module === 'routes' ? (
         <RoutesView />
       ) : module === 'vno' ? (
