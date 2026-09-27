@@ -1516,3 +1516,26 @@ textarea {
 @media (min-width: 900px) {
   .wk-ask > span { flex-basis: auto; margin-right: 4px; }
 }
+
+/* which event asked for how much of a week total */
+.wk-ev-chip { margin-top: 7px; font-size: 12px; padding: 4px 10px; }
+.wk-parts {
+  margin: 0 16px 12px;
+  border: 1px solid var(--bg3);
+  border-radius: 10px;
+  background: var(--bg2);
+  overflow: hidden;
+}
+.wk-part {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--bg3);
+}
+.wk-part:first-child { border-top: none; }
+.wk-part-ev { min-width: 0; }
+.wk-part-qty { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
+.wk-part-qty .muted { font-weight: 400; }
+.wk-part-total { font-weight: 800; background: rgba(255, 255, 255, 0.03); }

@@ -32,6 +32,17 @@ const ACCEPT_PHOTO = 'image/*'
 
 type Line = PackImport['lines'][number]
 
+/** One event's share of a week total. */
+interface Part {
+  eventKey: string
+  event: string
+  iso: string
+  /** Exactly as each line was written — "1 roll", "2 case". */
+  written: string[]
+  /** In the base unit, when it could be worked out. */
+  base: number | null
+}
+
 interface EventGroup {
   latest: PackImport
   previous: PackImport | undefined
@@ -164,19 +175,42 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     return { live, aside, notYours, own }
   }
 
-  /** One number per item across the whole week, in the unit he counts it in. */
+  /**
+   * One number per item across the whole week, in the unit he counts it in —
+   * and, behind it, which event asked for how much, so a total of 300 can be
+   * traced back to the three events that make it up.
+   */
   const totals = useMemo(() => {
-    const map = new Map<string, { item: string; base: number; unit: string; unclear: string[]; m: LineMatch }>()
+    const map = new Map<
+      string,
+      { item: string; base: number; unit: string; unclear: string[]; m: LineMatch; parts: Part[] }
+    >()
     for (const g of groups) {
       for (const l of linesOf(g).live) {
         const key = canon(l.item)
         if (!key) continue
         const q = parseQty(l.qty, l.item, l.size)
-        const row = map.get(key) ?? { item: l.item, base: 0, unit: q.baseUnit, unclear: [], m: match(l.item) }
+        const row = map.get(key) ?? { item: l.item, base: 0, unit: q.baseUnit, unclear: [], m: match(l.item), parts: [] }
         // No number in it — "Yes - assortment" — cannot join a total; shown as written.
         if (q.base === null) row.unclear.push(`${g.latest.eventName}: ${q.raw}`)
         else row.base += q.base
         if (q.baseUnit) row.unit = q.baseUnit
+        // "2" in the quantity and "(case)" beside it reads as "2 case".
+        const written = q.writtenUnit && !/[a-z]/i.test(l.qty) ? `${l.qty} ${q.writtenUnit}` : l.qty
+        // The same event can ask twice (two sections); it is one line here.
+        const mine = row.parts.find((p) => p.eventKey === g.latest.eventKey)
+        if (mine) {
+          mine.written.push(written)
+          if (q.base !== null) mine.base = (mine.base ?? 0) + q.base
+        } else {
+          row.parts.push({
+            eventKey: g.latest.eventKey,
+            event: g.latest.eventName,
+            iso: g.latest.eventIso,
+            written: [written],
+            base: q.base,
+          })
+        }
         map.set(key, row)
       }
     }
@@ -341,6 +375,51 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, packedIds, stateById, rules])
 
+  type TotalRow = (typeof totals)[number]
+
+  /** The "Events" button on a total, and the little window it opens. */
+  const eventsButton = (t: TotalRow, where: string) => (
+    <button className="chip-btn wk-ev-chip" onClick={() => toggleOpen(`${where}:${t.key}`)}>
+      📋 Events ({t.parts.length}) {open.has(`${where}:${t.key}`) ? '▾' : '▸'}
+    </button>
+  )
+  const eventsPanel = (t: TotalRow, where: string) =>
+    open.has(`${where}:${t.key}`) && (
+      <div className="wk-parts">
+        {[...t.parts]
+          .sort((a, b) => (a.iso || 'z').localeCompare(b.iso || 'z'))
+          .map((p) => {
+            const amount =
+              p.base !== null
+                ? describeQty({ raw: '', base: p.base, baseUnit: t.unit, writtenUnit: '', unclear: false }, t.item)
+                : p.written.join(' + ')
+            // Say how it was written when the conversion changed it: "1 roll" → 10 bags.
+            const asWritten = p.written.join(' + ')
+            const showWritten = p.base !== null && asWritten.replace(/\s/g, '') !== String(p.base)
+            return (
+              <div className="wk-part" key={p.eventKey}>
+                <span className="wk-part-ev">
+                  {p.event}
+                  {p.iso && <span className="muted"> · {prettyDate(p.iso)}</span>}
+                </span>
+                <span className="wk-part-qty">
+                  {amount}
+                  {showWritten && <span className="muted"> (wrote &ldquo;{asWritten}&rdquo;)</span>}
+                </span>
+              </div>
+            )
+          })}
+        <div className="wk-part wk-part-total">
+          <span>Total</span>
+          <span>
+            {t.base > 0
+              ? describeQty({ raw: '', base: t.base, baseUnit: t.unit, writtenUnit: '', unclear: false }, t.item)
+              : '—'}
+          </span>
+        </div>
+      </div>
+    )
+
   const foldHead = (id: string, title: string, count: number, tone = '') => (
     <button className={`wk-fold-head ${tone}`} onClick={() => toggleOpen(id)}>
       <span>{title}</span>
@@ -395,10 +474,12 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           {foldHead('_totals', 'Everything they asked for', totals.length, 'ok')}
           {open.has('_totals') &&
             totals.map((t) => (
-              <div className="lp-row" key={t.key}>
+              <div key={t.key}>
+              <div className="lp-row">
                 <div className="lp-main">
                   <div className="lp-brand">{t.item}</div>
                   {t.unclear.length > 0 && <div className="lp-note warn">⚠ written as {t.unclear.join(' · ')}</div>}
+                  {eventsButton(t, 'tot')}
                 </div>
                 <div className="lp-right">
                   <div className="lp-price">
@@ -413,6 +494,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   {!t.known && <span className="lp-chip act">not in inventory</span>}
                 </div>
               </div>
+              {eventsPanel(t, 'tot')}
+              </div>
             ))}
         </div>
       )}
@@ -422,14 +505,18 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           {foldHead('_order', 'Need to order', toOrder.length, 'act')}
           {open.has('_order') &&
             toOrder.map((t) => (
-              <div className="lp-row" key={t.key}>
-                <div className="lp-main">
-                  <div className="lp-brand">{t.item}</div>
-                  <div className="lp-note">{t.known ? `only ${t.have} on the shelf` : 'not in inventory'}</div>
+              <div key={t.key}>
+                <div className="lp-row">
+                  <div className="lp-main">
+                    <div className="lp-brand">{t.item}</div>
+                    <div className="lp-note">{t.known ? `only ${t.have} on the shelf` : 'not in inventory'}</div>
+                    {eventsButton(t, 'ord')}
+                  </div>
+                  <div className="lp-right">
+                    <div className="lp-price">{t.base > 0 ? t.base.toLocaleString() : (t.unclear[0] ?? '—')}</div>
+                  </div>
                 </div>
-                <div className="lp-right">
-                  <div className="lp-price">{t.base > 0 ? t.base.toLocaleString() : (t.unclear[0] ?? '—')}</div>
-                </div>
+                {eventsPanel(t, 'ord')}
               </div>
             ))}
         </div>
