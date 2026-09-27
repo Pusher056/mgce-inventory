@@ -522,6 +522,12 @@ export interface PackLineState {
   /** 'mine' answers the question for a section that goes either way — for this event only. */
   status: '' | 'notMine' | 'removed' | 'mine'
   productId: string | null
+  /**
+   * "Only have 6": he went to pack it and there wasn't enough. The line stays
+   * open — it isn't packed until the rest turns up — and the gap goes on the
+   * order list.
+   */
+  onlyHave?: number | null
   updatedAt: number
 }
 

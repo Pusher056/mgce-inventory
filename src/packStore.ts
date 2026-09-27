@@ -133,6 +133,10 @@ export const lineId = (weekStart: string, eventKey: string, item: string) => `${
 
 export async function setPacked(weekStart: string, eventKey: string, item: string, on: boolean) {
   const id = lineId(weekStart, eventKey, item)
+  // Packed means the whole amount went out, so a shortage noted on it is over.
+  if (on && (await db.packLineStates.get(id))?.onlyHave != null) {
+    await setLineState(weekStart, eventKey, item, { onlyHave: null })
+  }
   if (on) {
     await putRow('packPacked', { id, weekStart, eventKey, itemKey: itemKey(item), packedAt: Date.now(), updatedAt: Date.now() })
   } else {
@@ -145,7 +149,7 @@ export async function setLineState(
   weekStart: string,
   eventKey: string,
   item: string,
-  patch: Partial<Pick<PackLineState, 'status' | 'productId'>>,
+  patch: Partial<Pick<PackLineState, 'status' | 'productId' | 'onlyHave'>>,
 ) {
   const id = lineId(weekStart, eventKey, item)
   const prev = await db.packLineStates.get(id)
@@ -156,11 +160,13 @@ export async function setLineState(
     itemKey: itemKey(item),
     status: prev?.status ?? '',
     productId: prev?.productId ?? null,
+    onlyHave: prev?.onlyHave ?? null,
     updatedAt: Date.now(),
     ...patch,
   }
   // Nothing left to remember: drop the row instead of keeping an empty one.
-  if (!next.status && !next.productId) await removeRows('packLineStates', [id])
+  const hasShort = next.onlyHave !== null && next.onlyHave !== undefined
+  if (!next.status && !next.productId && !hasShort) await removeRows('packLineStates', [id])
   else await putRow('packLineStates', next)
 }
 

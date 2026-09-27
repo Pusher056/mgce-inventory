@@ -305,7 +305,7 @@ function packPackedToRow(p: PackPacked) {
 function packLineStateToRow(x: PackLineState) {
   return {
     id: x.id, week_start: x.weekStart, event_key: x.eventKey, item_key: x.itemKey,
-    status: x.status, product_id: x.productId, updated_at: iso(x.updatedAt),
+    status: x.status, product_id: x.productId, only_have: x.onlyHave ?? null, updated_at: iso(x.updatedAt),
   }
 }
 function itemAliasToRow(a: ItemAlias) {
@@ -1106,6 +1106,7 @@ export async function pullFromServer() {
           itemKey: r.item_key,
           status: (r.status ?? '') as PackLineState['status'],
           productId: r.product_id ?? null,
+          onlyHave: r.only_have === null || r.only_have === undefined ? null : Number(r.only_have),
           updatedAt: ms(r.updated_at),
         })),
       )

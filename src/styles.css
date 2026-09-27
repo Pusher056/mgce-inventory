@@ -1565,3 +1565,21 @@ textarea {
 .wk-order-btns { display: flex; flex-direction: column; gap: 4px; }
 .wk-order-btns .chip-btn { padding: 4px 10px; line-height: 1; }
 .wk-order-btns .chip-btn:disabled { opacity: 0.3; }
+
+/* "only have" — how many there actually are */
+.wk-short {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 16px 12px 50px;
+  font-size: 13px;
+}
+.wk-short input { width: 84px; }
+
+/* dragging events into order on a computer */
+.wk-grip { cursor: grab; color: var(--muted); font-size: 16px; padding: 2px 2px 0 0; user-select: none; }
+.wk-ev[draggable='true'] { cursor: grab; }
+.wk-dragging { opacity: 0.45; }
+.wk-drop-before { box-shadow: 0 -3px 0 0 var(--accent); }
+.wk-drop-after { box-shadow: 0 3px 0 0 var(--accent); }

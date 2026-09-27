@@ -112,6 +112,13 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const aliases = useLiveQuery(() => db.itemAliases.toArray(), []) ?? []
   const week = useLiveQuery(() => db.packWeeks.get(weekIdOf(weekStart)), [weekStart])
   const [reordering, setReordering] = useState(false)
+  const [shortFor, setShortFor] = useState<string | null>(null)
+  const [shortDraft, setShortDraft] = useState('')
+  // A mouse can drag events into order; a thumb gets arrows instead, because
+  // dragging while scrolling a long list goes wrong on a phone.
+  const [canDrag] = useState(() => !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches)
+  const [dragKey, setDragKey] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<{ key: string; after: boolean } | null>(null)
 
   const bookRef = useRef<HTMLInputElement>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
@@ -453,6 +460,42 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, packedIds, stateById, rules, week])
 
+  /** Drop one event before or after another. */
+  async function dropOn(from: string, to: string, after: boolean) {
+    if (from === to) return
+    const keys = ordered.map((g) => g.latest.eventKey).filter((k) => k !== from)
+    const at = keys.indexOf(to)
+    if (at < 0) return
+    keys.splice(after ? at + 1 : at, 0, from)
+    await setWeekOrder(weekStart, keys)
+  }
+
+  /**
+   * Lines he marked "only have" and hasn't packed yet — what he went to pack
+   * and couldn't. Shown on the order list whatever they are, drinks or not:
+   * he flagged them himself.
+   */
+  const shorts = useMemo(() => {
+    const out: { key: string; event: string; item: string; need: string; have: number; missing: number | null }[] = []
+    for (const g of groups) {
+      for (const l of g.latest.lines) {
+        const id = lineId(weekStart, g.latest.eventKey, l.item)
+        const st = stateById.get(id)
+        if (st?.onlyHave == null || st.status === 'notMine' || st.status === 'removed' || packedIds.has(id)) continue
+        const q = parseQty(l.qty, l.item, l.size)
+        out.push({
+          key: id,
+          event: g.latest.eventName,
+          item: l.item,
+          need: q.base !== null ? describeQty(q, l.item) : l.qty,
+          have: st.onlyHave,
+          missing: q.base !== null ? Math.max(0, q.base - st.onlyHave) : null,
+        })
+      }
+    }
+    return out
+  }, [groups, stateById, packedIds, weekStart])
+
   async function move(eventKey: string, step: -1 | 1) {
     const keys = ordered.map((g) => g.latest.eventKey)
     const i = keys.indexOf(eventKey)
@@ -612,9 +655,23 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         </div>
       )}
 
-      {toOrder.length > 0 && (
+      {toOrder.length + shorts.length > 0 && (
         <div className="lp-block">
-          {foldHead('_order', 'Need to order', toOrder.length, 'act')}
+          {foldHead('_order', 'Need to order', toOrder.length + shorts.length, 'act')}
+          {open.has('_order') &&
+            shorts.map((s) => (
+              <div className="lp-row" key={s.key}>
+                <div className="lp-main">
+                  <div className="lp-brand">{s.item}</div>
+                  <div className="lp-note warn">
+                    ⚠ short for {s.event}: you have {s.have} of {s.need}
+                  </div>
+                </div>
+                <div className="lp-right">
+                  <div className="lp-price">{s.missing !== null ? `${s.missing} short` : 'short'}</div>
+                </div>
+              </div>
+            ))}
           {open.has('_order') &&
             toOrder.map((t) => (
               <div key={t.key}>
@@ -732,7 +789,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       {ordered.length > 1 && (
         <div className="wk-order-bar">
           <span className="muted small">
-            {reordering ? 'Move events with ▲ ▼ — the order is saved for every device.' : `${ordered.length} events`}
+            {reordering
+              ? 'Move events with ▲ ▼ — the order is saved for every device.'
+              : canDrag
+                ? `${ordered.length} events · drag one by its ⠿ to move it`
+                : `${ordered.length} events`}
           </span>
           {!reordering && (week?.order?.length ?? 0) > 0 && (
             <button
@@ -744,9 +805,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               reset to date &amp; time
             </button>
           )}
-          <button className={`chip-btn${reordering ? ' on' : ''}`} onClick={() => setReordering(!reordering)}>
-            {reordering ? '✓ Done' : '↕ Reorder'}
-          </button>
+          {!canDrag && (
+            <button className={`chip-btn${reordering ? ' on' : ''}`} onClick={() => setReordering(!reordering)}>
+              {reordering ? '✓ Done' : '↕ Reorder'}
+            </button>
+          )}
         </div>
       )}
 
@@ -761,6 +824,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const openKnown = live.filter((l) => !isPacked(l))
         const notListed = (l: Line) => match(l.item).kind === 'none' && !isDrink(l, match(l.item), drinkRulings)
         const doneLines = live.filter(isPacked)
+        const shortHere = shorts.filter((s) => s.key.startsWith(`${weekStart}|${key}|`)).length
         const allDone = live.length > 0 && openKnown.length === 0
         const isOpen = open.has(key)
         const ice = parseIce(g.latest.iceNeeds)
@@ -770,6 +834,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           const unknownRow = notListed(l)
           const id = lineId(weekStart, key, l.item)
           const asking = own.get(l)?.whose === 'ask'
+          const onlyHave = stateById.get(id)?.onlyHave
+          const needBase = parseQty(l.qty, l.item, l.size).base
           return (
             <div key={`${id}-${i}`}>
               <ActionRow
@@ -780,6 +846,15 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     icon: '🙅',
                     tone: 'accent',
                     onClick: () => void setLineState(weekStart, key, l.item, { status: 'notMine' }),
+                  },
+                  {
+                    label: 'Only have',
+                    icon: '½',
+                    tone: 'muted',
+                    onClick: () => {
+                      setShortFor(shortFor === id ? null : id)
+                      setShortDraft(onlyHave != null ? String(onlyHave) : '')
+                    },
                   },
                   {
                     label: 'Remove',
@@ -810,6 +885,56 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 </span>
                 <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
               </ActionRow>
+              {onlyHave != null && shortFor !== id && (
+                <div className="wk-match">
+                  <div className="wk-match-line">
+                    <span className="wk-have out">
+                      only have {onlyHave}
+                      {needBase !== null && ` of ${needBase} · ${Math.max(0, needBase - onlyHave)} short`}
+                    </span>
+                    <button
+                      className="wk-link"
+                      onClick={() => {
+                        setShortFor(id)
+                        setShortDraft(String(onlyHave))
+                      }}
+                    >
+                      change
+                    </button>
+                    <button className="wk-link" onClick={() => void setLineState(weekStart, key, l.item, { onlyHave: null })}>
+                      clear
+                    </button>
+                  </div>
+                </div>
+              )}
+              {shortFor === id && (
+                <form
+                  className="wk-short"
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    const n = Number(shortDraft.replace(',', '.'))
+                    if (shortDraft.trim() === '' || !Number.isFinite(n) || n < 0) return
+                    await setLineState(weekStart, key, l.item, { onlyHave: n })
+                    setShortFor(null)
+                  }}
+                >
+                  <span>How many do you have?</span>
+                  <input
+                    autoFocus
+                    inputMode="decimal"
+                    value={shortDraft}
+                    onChange={(e) => setShortDraft(e.target.value.replace(/[^\d.,]/g, ''))}
+                    placeholder="0"
+                  />
+                  {needBase !== null && <span className="muted">of {needBase}</span>}
+                  <button className="chip-btn" type="submit" disabled={shortDraft.trim() === ''}>
+                    Save
+                  </button>
+                  <button className="chip-btn" type="button" onClick={() => setShortFor(null)}>
+                    Cancel
+                  </button>
+                </form>
+              )}
               {asking && (
                 <div className="wk-ask">
                   <span>
@@ -881,8 +1006,43 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         }
 
         return (
-          <div className={`lp-block${allDone ? ' wk-complete' : ''}`} key={key}>
-            <div className="wk-ev">
+          <div
+            className={`lp-block${allDone ? ' wk-complete' : ''}${dragKey === key ? ' wk-dragging' : ''}${
+              dropAt?.key === key ? (dropAt.after ? ' wk-drop-after' : ' wk-drop-before') : ''
+            }`}
+            key={key}
+            onDragOver={(e) => {
+              if (!dragKey) return
+              e.preventDefault()
+              const r = e.currentTarget.getBoundingClientRect()
+              const after = e.clientY > r.top + r.height / 2
+              if (dropAt?.key !== key || dropAt.after !== after) setDropAt({ key, after })
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (dragKey && dropAt) void dropOn(dragKey, dropAt.key, dropAt.after)
+              setDragKey(null)
+              setDropAt(null)
+            }}
+          >
+            <div
+              className="wk-ev"
+              draggable={canDrag}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', key)
+                setDragKey(key)
+              }}
+              onDragEnd={() => {
+                setDragKey(null)
+                setDropAt(null)
+              }}
+            >
+              {canDrag && (
+                <span className="wk-grip" title="Drag to move this event" aria-hidden="true">
+                  ⠿
+                </span>
+              )}
               {reordering && (
                 <div className="wk-order-btns">
                   <button
@@ -922,7 +1082,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className={`wk-ev-prog${allDone ? ' ok' : ''}`}>
                     {allDone
                       ? '✓ everything packed'
-                      : `${doneLines.length} of ${live.length} packed`}
+                      : `${doneLines.length} of ${live.length} packed${
+                          shortHere > 0 ? ` · ⚠ ${shortHere} short` : ''
+                        }`}
                   </span>
                 </span>
               </button>
