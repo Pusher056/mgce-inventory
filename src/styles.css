@@ -1543,3 +1543,25 @@ textarea {
 .wk-row-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .wk-have.warn { background: rgba(251, 191, 36, 0.14); color: var(--amber, #fbbf24); }
+
+/* on a phone only this strip ticks a line — see inTapZone */
+.tap-zone {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin: -12px 0 -12px -16px;
+  padding: 12px 12px 12px 16px;
+  border-right: 1px solid var(--bg3);
+}
+@media (min-width: 900px) {
+  .tap-zone { border-right: none; margin-right: 0; padding-right: 0; }
+}
+
+/* reordering events */
+.wk-order-bar { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; flex-wrap: wrap; }
+.wk-order-bar > span:first-child { flex: 1; min-width: 160px; }
+.chip-btn.on { border-color: var(--accent); color: var(--accent); }
+.wk-order-btns { display: flex; flex-direction: column; gap: 4px; }
+.wk-order-btns .chip-btn { padding: 4px 10px; line-height: 1; }
+.wk-order-btns .chip-btn:disabled { opacity: 0.3; }

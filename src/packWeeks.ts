@@ -133,3 +133,24 @@ export function parseWeekLabel(raw: string): string | null {
 export function prettyDate(iso: string): string {
   return fromIso(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 }
+
+/**
+ * When an event starts, in minutes after midnight, from however they wrote it:
+ * "2:00pm - 6:30pm", "9AM-3PM", "6-9PM" (the pm belongs to both), "10 am".
+ * Null when there is no time in it.
+ */
+export function startMinutes(raw: string): number | null {
+  const s = String(raw ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const m = /(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)?/.exec(s)
+  if (!m) return null
+  let h = Number(m[1])
+  const min = Number(m[2] ?? 0)
+  if (h > 23 || min > 59) return null
+  // "6-9PM": the first time borrows the am/pm written after the second.
+  let half: string | undefined = m[3]
+  if (!half) half = /\d\s*(am|pm|a\b|p\b)/.exec(s.slice(m.index + m[0].length))?.[1]
+  if (half?.startsWith('p') && h < 12) h += 12
+  if (half?.startsWith('a') && h === 12) h = 0
+  return h * 60 + min
+}
+

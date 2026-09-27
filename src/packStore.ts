@@ -55,6 +55,20 @@ export async function createWeek(startIso: string) {
   await putRow('packWeeks', { id, startDate: startIso, label: weekLabel(startIso), createdAt: Date.now(), updatedAt: Date.now() })
 }
 
+/** The order he packs this week's events in. */
+export async function setWeekOrder(startIso: string, order: string[]) {
+  const id = weekIdOf(startIso)
+  const week = await db.packWeeks.get(id)
+  await putRow('packWeeks', {
+    id,
+    startDate: startIso,
+    label: weekLabel(startIso),
+    createdAt: week?.createdAt ?? Date.now(),
+    updatedAt: Date.now(),
+    order,
+  })
+}
+
 /** A week and everything dropped into it: the pack lists, the ticks, the pictures. */
 export async function deleteWeek(startIso: string) {
   const [imports, packed, states, files] = await Promise.all([

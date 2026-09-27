@@ -443,6 +443,11 @@ export interface PackWeek {
   /** yyyy-mm-dd of the Saturday. */
   startDate: string
   label: string
+  /**
+   * The order he packs the events in, by event key — set by hand with the
+   * reorder arrows. Events not in it (new uploads) slot in by date and time.
+   */
+  order?: string[]
   createdAt: number
   updatedAt: number
 }

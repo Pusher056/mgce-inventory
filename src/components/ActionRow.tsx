@@ -1,5 +1,17 @@
 import { useRef, useState, type ReactNode } from 'react'
 
+/**
+ * On a phone only the strip with the circle ticks a line. Scrolling a long
+ * list with a thumb lands on rows all the time, and a line marked packed by
+ * accident is a line that never makes it onto the pallet. With a mouse the
+ * whole row still works.
+ */
+export function inTapZone(e: { target: EventTarget | null }): boolean {
+  const touch = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+  if (!touch) return true
+  return !!(e.target as Element | null)?.closest?.('.tap-zone')
+}
+
 export interface RowAction {
   label: string
   icon: string
@@ -96,10 +108,14 @@ export default function ActionRow({
       >
         <button
           className="arow-main"
-          onClick={() => {
+          onClick={(e) => {
             // With the actions showing, a tap closes them rather than ticking.
-            if (dx !== 0) close()
-            else onTap()
+            if (dx !== 0) {
+              close()
+              return
+            }
+            if (!inTapZone(e)) return
+            onTap()
           }}
         >
           {children}

@@ -259,7 +259,14 @@ const iso = (ms: number) => new Date(ms || Date.now()).toISOString()
 const ms = (s: string | null | undefined) => (s ? Date.parse(s) || Date.now() : Date.now())
 
 function packWeekToRow(w: PackWeek) {
-  return { id: w.id, start_date: w.startDate, label: w.label, created_at: iso(w.createdAt), updated_at: iso(w.updatedAt) }
+  return {
+    id: w.id,
+    start_date: w.startDate,
+    label: w.label,
+    event_order: w.order ?? [],
+    created_at: iso(w.createdAt),
+    updated_at: iso(w.updatedAt),
+  }
 }
 function packImportToRow(i: PackImport) {
   return {
@@ -1042,6 +1049,7 @@ export async function pullFromServer() {
           id: r.id,
           startDate: String(r.start_date),
           label: r.label ?? '',
+          order: Array.isArray(r.event_order) ? (r.event_order as string[]) : [],
           createdAt: ms(r.created_at),
           updatedAt: ms(r.updated_at),
         })),

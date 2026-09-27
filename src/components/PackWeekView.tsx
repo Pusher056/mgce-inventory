@@ -18,7 +18,16 @@ import {
   type LineMatch,
   type ShelfItem,
 } from '../packCatalog'
-import { fromIso, isoDate, parseWeekLabel, prettyDate, weekLabel, weekStartOf } from '../packWeeks'
+import {
+  fromIso,
+  isoDate,
+  parseWeekLabel,
+  prettyDate,
+  startMinutes,
+  weekIdOf,
+  weekLabel,
+  weekStartOf,
+} from '../packWeeks'
 import {
   decideDrink,
   decideOwner,
@@ -31,11 +40,12 @@ import {
   moveEvent,
   setLineState,
   setPacked,
+  setWeekOrder,
   undoPair,
   undoVersion,
 } from '../packStore'
 import { totalBottles, type PackFile, type PackImport, type Storage } from '../types'
-import ActionRow from './ActionRow'
+import ActionRow, { inTapZone } from './ActionRow'
 
 const ACCEPT_BOOK =
   '.xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -100,6 +110,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
   const entries = useLiveQuery(() => db.entries.toArray(), []) ?? []
   const aliases = useLiveQuery(() => db.itemAliases.toArray(), []) ?? []
+  const week = useLiveQuery(() => db.packWeeks.get(weekIdOf(weekStart)), [weekStart])
+  const [reordering, setReordering] = useState(false)
 
   const bookRef = useRef<HTMLInputElement>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
@@ -412,18 +424,43 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     )
   }
 
-  // Events still to pack first, by date; finished ones sink to the bottom.
+  /**
+   * The order he packs in. By date, and on the same day by the hour the event
+   * starts — the 10 am goes before the noon. Anything he moved by hand keeps
+   * the place he gave it; a pack list that arrives later slots in by its date
+   * and time among them. Finished events sink to the bottom.
+   */
   const ordered = useMemo(() => {
+    const when = (g: EventGroup) =>
+      `${g.latest.eventIso || '9999'}|${String(
+        startMinutes(g.latest.eventTime) ?? startMinutes(g.latest.kitchenPickup) ?? 9999,
+      ).padStart(4, '0')}`
+    const byClock = [...groups].sort((a, b) => when(a).localeCompare(when(b)))
+
+    const manual = (week?.order ?? []).filter((k) => groups.some((g) => g.latest.eventKey === k))
+    let list: EventGroup[] = manual.map((k) => groups.find((g) => g.latest.eventKey === k) as EventGroup)
+    for (const g of byClock) {
+      if (manual.includes(g.latest.eventKey)) continue
+      const at = list.findIndex((x) => when(x) > when(g))
+      list = at < 0 ? [...list, g] : [...list.slice(0, at), g, ...list.slice(at)]
+    }
+
     const done = (g: EventGroup) => {
       const { live } = linesOf(g)
       return live.length > 0 && live.every((l) => packedIds.has(lineId(weekStart, g.latest.eventKey, l.item)))
     }
-    return [...groups].sort(
-      (a, b) =>
-        Number(done(a)) - Number(done(b)) || (a.latest.eventIso || 'z').localeCompare(b.latest.eventIso || 'z'),
-    )
+    return [...list.filter((g) => !done(g)), ...list.filter(done)]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, packedIds, stateById, rules])
+  }, [groups, packedIds, stateById, rules, week])
+
+  async function move(eventKey: string, step: -1 | 1) {
+    const keys = ordered.map((g) => g.latest.eventKey)
+    const i = keys.indexOf(eventKey)
+    const j = i + step
+    if (i < 0 || j < 0 || j >= keys.length) return
+    ;[keys[i], keys[j]] = [keys[j], keys[i]]
+    await setWeekOrder(weekStart, keys)
+  }
 
   type TotalRow = (typeof totals)[number]
 
@@ -692,7 +729,28 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         </div>
       )}
 
-      {ordered.map((g) => {
+      {ordered.length > 1 && (
+        <div className="wk-order-bar">
+          <span className="muted small">
+            {reordering ? 'Move events with ▲ ▼ — the order is saved for every device.' : `${ordered.length} events`}
+          </span>
+          {!reordering && (week?.order?.length ?? 0) > 0 && (
+            <button
+              className="wk-link"
+              onClick={async () => {
+                if (window.confirm('Put the events back in date and time order?')) await setWeekOrder(weekStart, [])
+              }}
+            >
+              reset to date &amp; time
+            </button>
+          )}
+          <button className={`chip-btn${reordering ? ' on' : ''}`} onClick={() => setReordering(!reordering)}>
+            {reordering ? '✓ Done' : '↕ Reorder'}
+          </button>
+        </div>
+      )}
+
+      {ordered.map((g, index) => {
         const key = g.latest.eventKey
         const { live, aside, notYours, own } = linesOf(g)
         const isPacked = (l: Line) => packedIds.has(lineId(weekStart, key, l.item))
@@ -741,7 +799,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     : []),
                 ]}
               >
-                <span className="wk-tick" />
+                <span className="tap-zone">
+                  <span className="wk-tick" />
+                </span>
                 <span className="wk-item-main">
                   <span className="wk-item-name">{l.item}</span>
                   {(l.size || l.note) && (
@@ -823,6 +883,26 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         return (
           <div className={`lp-block${allDone ? ' wk-complete' : ''}`} key={key}>
             <div className="wk-ev">
+              {reordering && (
+                <div className="wk-order-btns">
+                  <button
+                    className="chip-btn"
+                    aria-label="Move up"
+                    disabled={index === 0}
+                    onClick={() => void move(key, -1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    className="chip-btn"
+                    aria-label="Move down"
+                    disabled={index === ordered.length - 1}
+                    onClick={() => void move(key, 1)}
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
               <button className="wk-ev-toggle" onClick={() => toggleOpen(key)}>
                 <span className="wk-caret">{isOpen ? '▾' : '▸'}</span>
                 <span className="wk-ev-main">
@@ -1016,10 +1096,14 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                         <button
                           className="wk-item done"
                           key={i}
-                          onClick={() => void setPacked(weekStart, key, l.item, false)}
+                          onClick={(e) => {
+                            if (inTapZone(e)) void setPacked(weekStart, key, l.item, false)
+                          }}
                           title="Tap to un-pack"
                         >
-                          <span className="wk-tick on">✓</span>
+                          <span className="tap-zone">
+                            <span className="wk-tick on">✓</span>
+                          </span>
                           <span className="wk-item-main">
                             <span className="wk-item-name">{l.item}</span>
                           </span>
