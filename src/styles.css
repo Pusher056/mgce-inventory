@@ -1539,3 +1539,5 @@ textarea {
 .wk-part-qty { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
 .wk-part-qty .muted { font-weight: 400; }
 .wk-part-total { font-weight: 800; background: rgba(255, 255, 255, 0.03); }
+
+.wk-row-btns { display: flex; gap: 6px; flex-wrap: wrap; }

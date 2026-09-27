@@ -6,9 +6,21 @@ import { diffPackLists } from '../packlistParse'
 import { describeIce, describeQty, parseIce, parseQty } from '../packUnits'
 import { findMaybeSame, itemKey } from '../packMatch'
 import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, type Ownership } from '../packOwner'
-import { buildShelf, canonicalizer, matchItem, onHand, sameKind, type LineMatch, type ShelfItem } from '../packCatalog'
+import {
+  bottleSwaps,
+  buildShelf,
+  canonicalizer,
+  isDrink,
+  matchItem,
+  onHand,
+  sameKind,
+  type DrinkRuling,
+  type LineMatch,
+  type ShelfItem,
+} from '../packCatalog'
 import { fromIso, isoDate, parseWeekLabel, prettyDate, weekLabel, weekStartOf } from '../packWeeks'
 import {
+  decideDrink,
   decideOwner,
   decidePair,
   decideUse,
@@ -114,6 +126,12 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const shelf = useMemo(() => buildShelf(products, stock), [products, stock])
   const canon = useMemo(() => canonicalizer(aliases), [aliases])
 
+  const drinkRulings = useMemo(() => {
+    const m = new Map<string, DrinkRuling>()
+    for (const a of aliases) if (a.kind === 'drink' || a.kind === 'notDrink') m.set(itemKey(a.alias), a.kind)
+    return m
+  }, [aliases])
+
   /** "When they write this, send that." */
   const useFor = useMemo(() => {
     const m = new Map<string, string>()
@@ -123,12 +141,15 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
   // Rebuilt whenever the shelf or the rulings change; lookups inside a render
   // are then cheap however many lines the week has.
-  const matchCache = useMemo(() => new Map<string, LineMatch>(), [shelf, useFor])
+  const swaps = useMemo(() => bottleSwaps(aliases, shelf), [aliases, shelf])
+  const matchCache = useMemo(() => new Map<string, LineMatch>(), [shelf, useFor, swaps])
   const match = (item: string): LineMatch => {
     const k = itemKey(item)
     let m = matchCache.get(k)
     if (!m) {
       m = matchItem(item, shelf, useFor.get(k) ?? useFor.get(canon(item)))
+      // Named a bottle he has said to swap for another: send the other.
+      if (m.kind === 'product' && swaps.has(m.product.id)) m = matchItem(item, shelf, swaps.get(m.product.id))
       matchCache.set(k, m)
     }
     return m
@@ -183,14 +204,24 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const totals = useMemo(() => {
     const map = new Map<
       string,
-      { item: string; base: number; unit: string; unclear: string[]; m: LineMatch; parts: Part[] }
+      { item: string; base: number; unit: string; unclear: string[]; m: LineMatch; parts: Part[]; drink: boolean }
     >()
     for (const g of groups) {
       for (const l of linesOf(g).live) {
         const key = canon(l.item)
         if (!key) continue
         const q = parseQty(l.qty, l.item, l.size)
-        const row = map.get(key) ?? { item: l.item, base: 0, unit: q.baseUnit, unclear: [], m: match(l.item), parts: [] }
+        const row = map.get(key) ?? {
+          item: l.item,
+          base: 0,
+          unit: q.baseUnit,
+          unclear: [],
+          m: match(l.item),
+          parts: [],
+          drink: false,
+        }
+        // One line of it looking like a drink is enough for the whole row.
+        row.drink = row.drink || isDrink(l, row.m, drinkRulings)
         // No number in it — "Yes - assortment" — cannot join a total; shown as written.
         if (q.base === null) row.unclear.push(`${g.latest.eventName}: ${q.raw}`)
         else row.base += q.base
@@ -218,11 +249,19 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       .map(([key, v]) => ({ key, ...v, have: onHand(v.m), known: v.m.kind !== 'none' }))
       .sort((a, b) => a.item.localeCompare(b.item))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, stateById, matchCache, canon, rules])
+  }, [groups, stateById, matchCache, canon, rules, drinkRulings])
+
+  /**
+   * The top of the week is drinks only, for now. The rest is what the
+   * warehouse always has; it stays one tap away so a drink the app missed can
+   * be put back, and the app learns from it.
+   */
+  const drinks = useMemo(() => totals.filter((t) => t.drink), [totals])
+  const notDrinks = useMemo(() => totals.filter((t) => !t.drink), [totals])
 
   // Worth ordering: something nobody stocks, or something counted and short.
   // Counted-never is neither — we do not know what is on that shelf.
-  const toOrder = useMemo(() => totals.filter((t) => !t.known || (t.have !== null && t.have < t.base)), [totals])
+  const toOrder = useMemo(() => drinks.filter((t) => !t.known || (t.have !== null && t.have < t.base)), [drinks])
 
   const decidedPairs = useMemo(() => {
     const s = new Set<string>()
@@ -471,15 +510,20 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
       {totals.length > 0 && (
         <div className="lp-block">
-          {foldHead('_totals', 'Everything they asked for', totals.length, 'ok')}
+          {foldHead('_totals', 'Everything they asked for · drinks', drinks.length, 'ok')}
           {open.has('_totals') &&
-            totals.map((t) => (
+            drinks.map((t) => (
               <div key={t.key}>
               <div className="lp-row">
                 <div className="lp-main">
                   <div className="lp-brand">{t.item}</div>
                   {t.unclear.length > 0 && <div className="lp-note warn">⚠ written as {t.unclear.join(' · ')}</div>}
-                  {eventsButton(t, 'tot')}
+                  <div className="wk-row-btns">
+                    {eventsButton(t, 'tot')}
+                    <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.item, 'notDrink')}>
+                      ✕ Not a drink
+                    </button>
+                  </div>
                 </div>
                 <div className="lp-right">
                   <div className="lp-price">
@@ -497,6 +541,26 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               {eventsPanel(t, 'tot')}
               </div>
             ))}
+          {open.has('_totals') && notDrinks.length > 0 && (
+            <>
+              <button className="wk-fold" onClick={() => toggleOpen('_others')}>
+                {open.has('_others') ? '▾' : '▸'} The other {notDrinks.length} items they asked for — not drinks
+              </button>
+              {open.has('_others') &&
+                notDrinks.map((t) => (
+                  <div className="lp-row" key={t.key}>
+                    <div className="lp-main">
+                      <div className="lp-brand muted">{t.item}</div>
+                    </div>
+                    <div className="lp-right">
+                      <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.item, 'drink')}>
+                        ＋ It&rsquo;s a drink
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </>
+          )}
         </div>
       )}
 
@@ -585,6 +649,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     {a.kind === 'use' ? (
                       <>
                         &ldquo;{a.alias}&rdquo; <span className="muted">→ send</span> {productLabel(a.canonical)}
+                      </>
+                    ) : a.kind === 'drink' || a.kind === 'notDrink' ? (
+                      <>
+                        {a.alias}{' '}
+                        <span className="muted">{a.kind === 'drink' ? '→ counts as a drink' : '→ not a drink'}</span>
                       </>
                     ) : a.kind === 'mine' || a.kind === 'notMine' || a.kind === 'ask' ? (
                       <>

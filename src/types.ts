@@ -498,7 +498,7 @@ export interface ItemAlias {
    * for an item, or for a whole section when `alias` starts with "§" — where
    * "ask" means the section goes either way and each line is asked about.
    */
-  kind: 'same' | 'different' | 'use' | 'mine' | 'notMine' | 'ask'
+  kind: 'same' | 'different' | 'use' | 'mine' | 'notMine' | 'ask' | 'drink' | 'notDrink'
   createdAt: number
   updatedAt: number
 }

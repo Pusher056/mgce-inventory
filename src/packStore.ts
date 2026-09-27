@@ -194,6 +194,16 @@ export async function decideOwner(key: string, kind: 'mine' | 'notMine' | 'ask')
   await putRow('itemAliases', { id: uuid(), alias: key, canonical: '', kind, createdAt: Date.now(), updatedAt: Date.now() })
 }
 
+/** "That's not a drink" / "that one is" — for the week's drink totals. */
+export async function decideDrink(item: string, kind: 'drink' | 'notDrink') {
+  const k = itemKey(item)
+  const old = await db.itemAliases
+    .filter((x) => (x.kind === 'drink' || x.kind === 'notDrink') && itemKey(x.alias) === k)
+    .toArray()
+  await removeRows('itemAliases', old.map((x) => x.id))
+  await putRow('itemAliases', { id: uuid(), alias: item, canonical: '', kind, createdAt: Date.now(), updatedAt: Date.now() })
+}
+
 export async function undoPair(id: string) {
   await removeRows('itemAliases', [id])
 }
