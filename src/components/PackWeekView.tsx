@@ -344,7 +344,18 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   function renderMatch(l: Line, id: string) {
     const m = match(l.item)
     const picking = pickFor === id
-    if (m.kind === 'none') return null
+    if (m.kind === 'none') {
+      // A drink we recognise but nobody counts — Saratoga, Coke, Fever Tree.
+      // It belongs on the list like anything else; the tag only says the
+      // shelf can't be checked from here.
+      return (
+        <div className="wk-match">
+          <div className="wk-match-line">
+            <span className="wk-have">not in inventory</span>
+          </div>
+        </div>
+      )
+    }
 
     const choices: ShelfItem[] =
       m.kind === 'options' ? m.options : picking ? [...m.alternatives, ...sameKind(m.product, shelf)] : m.alternatives
@@ -685,15 +696,20 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const key = g.latest.eventKey
         const { live, aside, notYours, own } = linesOf(g)
         const isPacked = (l: Line) => packedIds.has(lineId(weekStart, key, l.item))
-        const openKnown = live.filter((l) => !isPacked(l) && match(l.item).kind !== 'none')
-        const openUnknown = live.filter((l) => !isPacked(l) && match(l.item).kind === 'none')
+        // Every line of his stays in the one list, in the order they wrote it.
+        // Whether a line is in our inventory decides a tag beside it, never
+        // whether he sees it: folding away what the catalogue didn't know was
+        // how Saratoga, Coke and Lunch Napkins ended up out of sight.
+        const openKnown = live.filter((l) => !isPacked(l))
+        const notListed = (l: Line) => match(l.item).kind === 'none' && !isDrink(l, match(l.item), drinkRulings)
         const doneLines = live.filter(isPacked)
-        const allDone = live.length > 0 && openKnown.length === 0 && openUnknown.length === 0
+        const allDone = live.length > 0 && openKnown.length === 0
         const isOpen = open.has(key)
         const ice = parseIce(g.latest.iceNeeds)
         const changes = g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []
 
-        const lineRow = (l: Line, i: number, unknownRow = false) => {
+        const lineRow = (l: Line, i: number) => {
+          const unknownRow = notListed(l)
           const id = lineId(weekStart, key, l.item)
           const asking = own.get(l)?.whose === 'ask'
           return (
@@ -727,13 +743,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               >
                 <span className="wk-tick" />
                 <span className="wk-item-main">
-                  <span className={`wk-item-name${unknownRow ? ' mono' : ''}`}>
-                    {unknownRow ? `“${l.item}”` : l.item}
-                  </span>
-                  {(l.size || l.note || unknownRow) && (
-                    <span className="wk-item-sub">
-                      {[unknownRow && l.section, l.size, l.note].filter(Boolean).join(' · ')}
-                    </span>
+                  <span className="wk-item-name">{l.item}</span>
+                  {(l.size || l.note) && (
+                    <span className="wk-item-sub">{[l.size, l.note].filter(Boolean).join(' · ')}</span>
                   )}
                 </span>
                 <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
@@ -769,7 +781,18 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   )}
                 </div>
               )}
-              {!unknownRow && renderMatch(l, id)}
+              {unknownRow ? (
+                <div className="wk-match">
+                  <div className="wk-match-line">
+                    <span className="wk-have warn">⚠ not in our lists</span>
+                    <button className="wk-link" onClick={() => setAddFor(addFor === id ? null : id)}>
+                      add it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                renderMatch(l, id)
+              )}
               {unknownRow && addFor === id && (
                 <div className="wk-addto">
                   Add &ldquo;{l.item}&rdquo; to:
@@ -819,7 +842,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className={`wk-ev-prog${allDone ? ' ok' : ''}`}>
                     {allDone
                       ? '✓ everything packed'
-                      : `${doneLines.length} of ${live.length} packed${openUnknown.length ? ` · ⚠ ${openUnknown.length} unknown` : ''}`}
+                      : `${doneLines.length} of ${live.length} packed`}
                   </span>
                 </span>
               </button>
@@ -982,15 +1005,6 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
                 {allDone && <div className="wk-alldone">✓ {g.latest.eventName} — everything packed</div>}
                 {openKnown.map((l, i) => lineRow(l, i))}
-
-                {openUnknown.length > 0 && (
-                  <>
-                    <button className="wk-fold" onClick={() => toggleOpen(`${key}#unknown`)}>
-                      ⚠ Unknown — not in our lists ({openUnknown.length}) {open.has(`${key}#unknown`) ? '▾' : '▸'}
-                    </button>
-                    {open.has(`${key}#unknown`) && openUnknown.map((l, i) => lineRow(l, i, true))}
-                  </>
-                )}
 
                 {doneLines.length > 0 && (
                   <>
