@@ -127,3 +127,38 @@ export function describeIce(ice: IceNeed): string {
   if (ice.dryIce) parts.push('dry ice')
   return parts.length ? parts.join(' + ') : ice.raw
 }
+
+/**
+ * The presentation a size column names — the thing that makes "Coke" two
+ * different items: cans and 1.25L bottles are ordered, stored and packed
+ * apart. "1 L" and "1L" are one presentation; "CANS" and "cans" too.
+ *
+ * Counting words — each, case, quarts, bunches, lbs — only say how the
+ * number was counted, not what the thing is, and give back nothing.
+ */
+export function packageOf(size: string): string {
+  const s = String(size ?? '')
+    .toLowerCase()
+    .replace(/[()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!s) return ''
+  if (/\bcans?\b/.test(s)) return 'cans'
+  const vol = /(\d+(?:\.\d+)?)\s*(ml|l|lt|liters?|litres?|gal|gallons?|fl\.? ?oz|oz)\b/.exec(s)
+  if (vol) {
+    const n = vol[1]
+    const u = vol[2]
+    if (/^ml$/.test(u)) return `${n}ml`
+    if (/^(l|lt|liters?|litres?)$/.test(u)) return `${n}L`
+    if (/^(gal|gallons?)$/.test(u)) return `${n} gal`
+    return `${n}oz`
+  }
+  if (/small bottle|mini/.test(s)) return 'small bottles'
+  if (/large bottle/.test(s)) return 'large bottles'
+  if (/^(each|ea|case|cases|\d+-?ct case|bottles?|standard bottle|btl|quarts?|qt|pints?|gallons?|gal|bunch(es)?|lbs?|pounds?|\d+ ?ct|units?|pack|packs|dozen)$/.test(s)) {
+    return ''
+  }
+  // Anything else still tells two things apart: white napkins, 6" plates.
+  return s
+}
+

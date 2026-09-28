@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists } from '../packlistParse'
-import { describeIce, describeQty, parseIce, parseQty } from '../packUnits'
+import { describeIce, describeQty, packageOf, parseIce, parseQty } from '../packUnits'
 import { findMaybeSame, itemKey } from '../packMatch'
 import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, type Ownership } from '../packOwner'
 import {
@@ -227,15 +227,28 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const totals = useMemo(() => {
     const map = new Map<
       string,
-      { item: string; base: number; unit: string; unclear: string[]; m: LineMatch; parts: Part[]; drink: boolean }
+      {
+        item: string
+        /** The name alone, without the presentation — what rulings are kept against. */
+        name: string
+        base: number
+        unit: string
+        unclear: string[]
+        m: LineMatch
+        parts: Part[]
+        drink: boolean
+      }
     >()
     for (const g of groups) {
       for (const l of linesOf(g).live) {
-        const key = canon(l.item)
-        if (!key) continue
+        // Coke in cans and Coke in 1.25L bottles are two lines to order, not one.
+        const pkg = packageOf(l.size)
+        const key = pkg ? `${canon(l.item)}|${pkg}` : canon(l.item)
+        if (!canon(l.item)) continue
         const q = parseQty(l.qty, l.item, l.size)
         const row = map.get(key) ?? {
-          item: l.item,
+          item: pkg ? `${l.item} · ${pkg}` : l.item,
+          name: l.item,
           base: 0,
           unit: q.baseUnit,
           unclear: [],
@@ -640,7 +653,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   {t.unclear.length > 0 && <div className="lp-note warn">⚠ written as {t.unclear.join(' · ')}</div>}
                   <div className="wk-row-btns">
                     {eventsButton(t, 'tot')}
-                    <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.item, 'notDrink')}>
+                    <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.name, 'notDrink')}>
                       ✕ Not a drink
                     </button>
                   </div>
@@ -673,7 +686,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                       <div className="lp-brand muted">{t.item}</div>
                     </div>
                     <div className="lp-right">
-                      <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.item, 'drink')}>
+                      <button className="chip-btn wk-ev-chip" onClick={() => void decideDrink(t.name, 'drink')}>
                         ＋ It&rsquo;s a drink
                       </button>
                     </div>
