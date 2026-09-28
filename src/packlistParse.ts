@@ -14,6 +14,12 @@ export interface ParsedLine {
   size: string
   qty: string
   note: string
+  /**
+   * The highlight colours on the line's cells, RRGGBB. Blue means the venue
+   * brings it, orange the kitchen — the planner says so in colour, not words,
+   * and the file's own key says which colour is which.
+   */
+  fills?: string[]
 }
 
 export interface ParsedPackList {
@@ -85,7 +91,11 @@ const pick = (h: Record<string, string>, ...keys: string[]) => {
  * sheet can hold two blocks side by side. Only rows with a quantity count: the
  * rest of the catalogue is printed on every sheet whether it is wanted or not.
  */
-function readLines(rows: string[][], sheetName: string): ParsedLine[] {
+function readLines(
+  rows: string[][],
+  sheetName: string,
+  fillAt: (row: number, col: number) => string | null = () => null,
+): ParsedLine[] {
   const out: ParsedLine[] = []
   const width = Math.max(...rows.map((r) => r.length), 0)
   for (let c = 0; c + 2 < width; c += 4) {
@@ -99,6 +109,7 @@ function readLines(rows: string[][], sheetName: string): ParsedLine[] {
       }
       const qty = clean(rows[i]?.[c + 2])
       if (!qty || qty === '0') continue
+      const fills = [...new Set([0, 1, 2, 3].map((k) => fillAt(i, c + k)).filter((x): x is string => !!x))]
       out.push({
         section: section || sheetName,
         sheet: sheetName,
@@ -106,6 +117,7 @@ function readLines(rows: string[][], sheetName: string): ParsedLine[] {
         size: clean(rows[i]?.[c + 1]),
         qty,
         note: clean(rows[i]?.[c + 3]),
+        ...(fills.length ? { fills } : {}),
       })
     }
   }
@@ -147,14 +159,16 @@ function readLegend(wb: WorkBook, XLSX: typeof import('xlsx')): Record<string, s
     const sheet = wb.Sheets[name]
     if (!sheet?.['!ref']) continue
     const range = XLSX.utils.decode_range(sheet['!ref'] as string)
-    for (let r = range.s.r; r <= Math.min(range.s.r + 40, range.e.r); r++) {
+    // The key lives in the header block. Further down, a highlighted cell is a
+    // highlighted line — its "150" is a quantity, not the name of a colour.
+    for (let r = range.s.r; r <= Math.min(range.s.r + 8, range.e.r); r++) {
       for (let c = range.s.c; c <= range.e.c; c++) {
         const cell = sheet[XLSX.utils.encode_cell({ r, c })] as
           | { v?: unknown; s?: { fgColor?: { rgb?: string } } }
           | undefined
         const rgb = cell?.s?.fgColor?.rgb
         const text = clean(cell?.v)
-        if (!rgb || !text || text.length > 24) continue
+        if (!rgb || !text || text.length > 24 || /^[\d.,\s$%/-]+$/.test(text)) continue
         const key = String(rgb).replace(/^FF(?=[0-9A-F]{6}$)/i, '').toUpperCase()
         if (/^F{6}$/.test(key)) continue
         if (!legend[key]) legend[key] = text.replace(/[!:]+$/, '')
@@ -172,11 +186,23 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name]
     if (!sheet) continue
-    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', raw: false })
+    // blankrows keeps row i of this list on sheet row (first row + i), which
+    // is how a line finds its own cells again to read their colour.
+    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', raw: false, blankrows: true })
     Object.assign(header, { ...readHeader(rows), ...header })
     if (!specialNotes) specialNotes = readSpecialNotes(rows)
+    const top = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref'] as string).s : { r: 0, c: 0 }
+    const fillAt = (row: number, col: number): string | null => {
+      const cell = sheet[XLSX.utils.encode_cell({ r: top.r + row, c: top.c + col })] as
+        | { s?: { fgColor?: { rgb?: string }; patternType?: string } }
+        | undefined
+      const rgb = cell?.s?.fgColor?.rgb
+      if (!rgb || cell?.s?.patternType === 'none') return null
+      const key = String(rgb).replace(/^FF(?=[0-9A-F]{6}$)/i, '').toUpperCase()
+      return /^F{6}$/.test(key) ? null : key
+    }
     // The MO and STAFF sheets are the menu and the staffing plan, not packing.
-    if (/PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name)) lines.push(...readLines(rows, name))
+    if (/PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name)) lines.push(...readLines(rows, name, fillAt))
   }
 
   return {

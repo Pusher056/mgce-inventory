@@ -432,7 +432,7 @@ export interface PackImport {
   emailFrom: string
   /** What the planner actually typed — "Fabio, we also need…" */
   emailBody: string
-  lines: { section: string; sheet?: string; item: string; size: string; qty: string; note: string }[]
+  lines: { section: string; sheet?: string; item: string; size: string; qty: string; note: string; fills?: string[] }[]
   importedAt: number
   updatedAt: number
 }

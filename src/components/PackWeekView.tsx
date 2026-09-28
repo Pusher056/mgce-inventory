@@ -207,7 +207,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         continue
       }
       // Answered "mine" for this event: no rule gets to take it back off the list.
-      const o: Ownership = st === 'mine' ? { whose: 'mine', why: '', source: 'ruling' } : ownerOf(l, rules)
+      const o: Ownership =
+        st === 'mine' ? { whose: 'mine', why: '', source: 'ruling' } : ownerOf(l, rules, g.latest.legend ?? {})
       own.set(l, o)
       if (o.whose === 'notMine') notYours.push({ line: l, own: o })
       else live.push(l)
