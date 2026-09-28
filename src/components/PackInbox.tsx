@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { isoDate, parseWeekLabel, weekLabel, weekStartOf } from '../packWeeks'
+import { isoDate, parseWeekLabel, weekDistance, weekLabel, weeksFromNow, weekStartOf } from '../packWeeks'
 import { createWeek, deleteWeek } from '../packStore'
 
 /**
@@ -25,10 +25,14 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
     const starts = new Set<string>(weeks.map((w) => w.startDate))
     for (const i of imports) if (i.weekStart) starts.add(i.weekStart)
     for (const f of files) if (f.weekStart) starts.add(f.weekStart)
-    // This week is always on the board, even before anything lands in it.
-    starts.add(isoDate(weekStartOf(new Date())))
-
+    // This week and next are always on the board, even before anything lands
+    // in them — next week's pack lists start arriving while this one is packed.
     const thisWeek = isoDate(weekStartOf(new Date()))
+    const now = weekStartOf(new Date())
+    const nextWeek = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7))
+    starts.add(thisWeek)
+    starts.add(nextWeek)
+
     return [...starts]
       .sort()
       .map((start) => {
@@ -43,9 +47,18 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
           started: done.size,
           current: start === thisWeek,
           past: start < thisWeek,
+          distance: weekDistance(start),
+          ahead: weeksFromNow(start),
         }
       })
-      .filter((r) => r.events > 0 || r.pictures > 0 || r.current || weeks.some((w) => w.startDate === r.start))
+      .filter(
+        (r) =>
+          r.events > 0 ||
+          r.pictures > 0 ||
+          r.start === thisWeek ||
+          r.start === nextWeek ||
+          weeks.some((w) => w.startDate === r.start),
+      )
   }, [weeks, imports, files, packed])
 
   async function addWeek() {
@@ -76,8 +89,9 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
             <span className="wk-row-main">
               <span className="wk-row-label">
                 {r.label}
-                {r.current && <span className="badge" style={{ marginLeft: 8 }}>this week</span>}
-                {r.past && <span className="badge" style={{ marginLeft: 8 }}>past</span>}
+                <span className={`badge wk-when${r.current ? ' now' : r.past ? ' past' : ' soon'}`} style={{ marginLeft: 8 }}>
+                  {r.distance}
+                </span>
               </span>
               <span className="wk-row-sub">
                 {r.events > 0 ? `${r.events} event${r.events === 1 ? '' : 's'}` : 'empty'}

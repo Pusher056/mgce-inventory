@@ -1613,3 +1613,8 @@ textarea {
 }
 .wk-event .wk-caret { color: var(--ev); }
 .wk-event.wk-complete { border-left-color: #2e7d5b; }
+
+/* how far away a week is */
+.wk-when.now { background: rgba(110, 231, 160, 0.16); color: #6ee7a0; }
+.wk-when.soon { background: rgba(56, 189, 248, 0.14); color: var(--accent); }
+.wk-when.past { opacity: 0.6; }

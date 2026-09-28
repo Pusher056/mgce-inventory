@@ -154,3 +154,28 @@ export function startMinutes(raw: string): number | null {
   return h * 60 + min
 }
 
+/** Whole weeks from this week's Saturday to that one's: 0 now, 1 next, -1 last. */
+export function weeksFromNow(startIso: string, today = new Date()): number {
+  const here = weekStartOf(today)
+  const there = fromIso(startIso)
+  const ms = Date.UTC(there.getFullYear(), there.getMonth(), there.getDate()) -
+    Date.UTC(here.getFullYear(), here.getMonth(), here.getDate())
+  return Math.round(ms / (7 * 86400000))
+}
+
+/**
+ * How far a week is, the way he'd say it: this week, next week, in 3 weeks,
+ * in 1 month. Planners send events a month out; a week label alone doesn't
+ * say how soon that is.
+ */
+export function weekDistance(startIso: string, today = new Date()): string {
+  const n = weeksFromNow(startIso, today)
+  if (n === 0) return 'this week'
+  if (n === 1) return 'next week'
+  if (n === -1) return 'last week'
+  if (n < 0) return `${-n} weeks ago`
+  if (n === 4) return 'in 1 month'
+  if (n > 4 && n % 4 === 0) return `in ${n / 4} months`
+  return `in ${n} weeks`
+}
+
