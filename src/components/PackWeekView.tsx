@@ -22,7 +22,9 @@ import {
   fromIso,
   isoDate,
   parseWeekLabel,
+  parseEventDate,
   prettyDate,
+  shortDate,
   startMinutes,
   weekIdOf,
   weekLabel,
@@ -547,6 +549,12 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     await setWeekOrder(weekStart, keys)
   }
 
+  /** A day's date as a short label, from however the MO wrote it. */
+  const dayDate = (d: { date: string }) => {
+    const iso = parseEventDate(d.date)
+    return iso ? shortDate(iso) : d.date
+  }
+
   type TotalRow = (typeof totals)[number]
 
   /** The "Events" button on a total, and the little window it opens. */
@@ -870,6 +878,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const allDone = live.length > 0 && openKnown.length === 0
         const isOpen = open.has(key)
         const ice = parseIce(g.latest.iceNeeds)
+        const days = g.latest.days ?? []
+        const multiDay = days.length > 1
+        // A day with more than one trip needs the day layout even on its own.
+        const byDay = multiDay || (days[0]?.runs.length ?? 0) > 1
         const changes = g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []
 
         const lineRow = (l: Line, i: number) => {
@@ -1111,9 +1123,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 <span className="wk-ev-main">
                   <span className="wk-ev-name">{g.latest.eventName}</span>
                   <span className="wk-ev-when">
-                    {[g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate, g.latest.eventTime]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {multiDay
+                      ? `${dayDate(days[0])} – ${dayDate(days[days.length - 1])} · ${days.length} days`
+                      : [g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate, g.latest.eventTime]
+                          .filter(Boolean)
+                          .join(' · ')}
                   </span>
                   <span className="wk-ev-sub">
                     {[
@@ -1225,6 +1239,53 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
             {open.has(`${key}#delivery`) && (
               <div className="wk-delivery">
+                {byDay &&
+                  days.map((d, di) => (
+                    <div className="wk-day" key={di}>
+                      <div className="wk-day-t">
+                        {d.label}
+                        <span>{[dayDate(d), d.eventTime, /^\d/.test(d.guestCount) && `${d.guestCount} guests`].filter(Boolean).join(' · ')}</span>
+                      </div>
+                      {d.runs.length === 0 ? (
+                        <div className="muted small">No pickup or drop-off time on this day&rsquo;s MO.</div>
+                      ) : (
+                        <div className="wk-runs">
+                          {d.runs.map((r, ri) => (
+                            <div className="wk-run" key={ri}>
+                              {d.runs.length > 1 && <b>Trip {ri + 1}</b>}
+                              <span>
+                                Pickup <strong>{r.pickup || '—'}</strong>
+                              </span>
+                              <span className="muted">→</span>
+                              <span>
+                                Drop off <strong>{r.delivery || '—'}</strong>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="wk-dl" style={{ marginTop: 8 }}>
+                        <span>Ice needs</span>
+                        <span>{describeIce(parseIce(d.iceNeeds))}</span>
+                        <span>Est. ice delivery</span>
+                        <span>{d.iceDeliveryTime || '—'}</span>
+                      </div>
+                      {d.specialNotes && (
+                        <div className="wk-notes">
+                          <div className="wk-notes-t">Notes beside the ice · {d.label}</div>
+                          <div className="wk-notes-b">{d.specialNotes}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                {byDay ? (
+                  g.latest.planner && (
+                    <div className="wk-dl">
+                      <span>Planner</span>
+                      <span>{g.latest.planner}</span>
+                    </div>
+                  )
+                ) : (
                 <div className="wk-dl">
                   <span>Kitchen pickup</span>
                   <span>{g.latest.kitchenPickup || '—'}</span>
@@ -1247,11 +1308,14 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     </>
                   )}
                 </div>
-                {(g.latest.specialNotes || g.latest.additionalNotes) && (
+                )}
+                {(byDay ? g.latest.additionalNotes : g.latest.specialNotes || g.latest.additionalNotes) && (
                   <div className="wk-notes">
                     <div className="wk-notes-t">Notes beside the ice</div>
                     <div className="wk-notes-b">
-                      {[g.latest.specialNotes, g.latest.additionalNotes].filter(Boolean).join('\n')}
+                      {(byDay ? [g.latest.additionalNotes] : [g.latest.specialNotes, g.latest.additionalNotes])
+                        .filter(Boolean)
+                        .join('\n')}
                     </div>
                   </div>
                 )}

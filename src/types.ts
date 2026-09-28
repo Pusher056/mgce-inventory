@@ -428,6 +428,21 @@ export interface PackImport {
   specialNotes: string
   additionalNotes: string
   legend: Record<string, string>
+  /**
+   * One per day of the event, each with its own trips: a three-day event is
+   * three MO sheets, and a day can go out three times ("4am | 8am | 2pm").
+   * Older imports have none and fall back to the single fields above.
+   */
+  days?: {
+    label: string
+    date: string
+    eventTime: string
+    guestCount: string
+    iceNeeds: string
+    iceDeliveryTime: string
+    runs: { pickup: string; delivery: string }[]
+    specialNotes: string
+  }[]
   emailSubject: string
   emailFrom: string
   /** What the planner actually typed — "Fabio, we also need…" */

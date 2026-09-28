@@ -1618,3 +1618,23 @@ textarea {
 .wk-when.now { background: rgba(110, 231, 160, 0.16); color: #6ee7a0; }
 .wk-when.soon { background: rgba(56, 189, 248, 0.14); color: var(--accent); }
 .wk-when.past { opacity: 0.6; }
+
+/* a multi-day event: one block per day, each trip on its own line */
+.wk-day { padding: 10px 0 12px; border-bottom: 1px solid var(--bg3); }
+.wk-day:last-of-type { margin-bottom: 10px; }
+.wk-day-t { font-weight: 800; font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.wk-day-t span { font-weight: 500; font-size: 12.5px; color: var(--muted); }
+.wk-runs { display: grid; gap: 6px; margin-top: 8px; }
+.wk-run {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--bg3);
+}
+.wk-run b { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); min-width: 44px; }
+.wk-run strong { font-size: 14.5px; }

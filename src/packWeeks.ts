@@ -179,3 +179,8 @@ export function weekDistance(startIso: string, today = new Date()): string {
   return `in ${n} weeks`
 }
 
+/** "Tue Oct 6" — short enough for a chip or a day heading. */
+export function shortDate(iso: string): string {
+  return fromIso(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+

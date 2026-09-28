@@ -22,6 +22,28 @@ export interface ParsedLine {
   fills?: string[]
 }
 
+/** One trip out: leave the kitchen at `pickup`, be at the venue by `delivery`. */
+export interface Run {
+  pickup: string
+  delivery: string
+}
+
+/**
+ * One day of an event, off its own MO sheet. A three-day event has three —
+ * "MO-FOOD - DAY 1/2/3" — each with its own times, ice and notes, and a day
+ * can have several trips written in one cell: "4am | 8am | 2pm".
+ */
+export interface DayPlan {
+  label: string
+  date: string
+  eventTime: string
+  guestCount: string
+  iceNeeds: string
+  iceDeliveryTime: string
+  runs: Run[]
+  specialNotes: string
+}
+
 export interface ParsedPackList {
   eventName: string
   eventDate: string
@@ -41,6 +63,8 @@ export interface ParsedPackList {
   additionalNotes: string
   /** RRGGBB → what this file's own key says the colour means. */
   legend: Record<string, string>
+  /** One per MO sheet, in order. A one-day event has one. */
+  days: DayPlan[]
   lines: ParsedLine[]
   /** Sheets we read, so a file with an unexpected shape is obvious. */
   sheets: string[]
@@ -178,10 +202,44 @@ function readLegend(wb: WorkBook, XLSX: typeof import('xlsx')): Record<string, s
   return legend
 }
 
+/** "4am | 8am | 2pm" → three times. Their separator is the bar; a slash or a line break too. */
+const splitTimes = (s: string) =>
+  String(s ?? '')
+    .split(/\s*[|\n]\s*|\s+\/\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+/**
+ * Trips paired by position: the first pickup goes with the first delivery.
+ * If one list is shorter, the missing side is left blank rather than guessed.
+ */
+function pairRuns(pickup: string, delivery: string): Run[] {
+  const p = splitTimes(pickup)
+  const d = splitTimes(delivery)
+  const n = Math.max(p.length, d.length)
+  return Array.from({ length: n }, (_, i) => ({ pickup: p[i] ?? '', delivery: d[i] ?? '' }))
+}
+
+function dayPlan(sheetName: string, rows: string[][], index: number): DayPlan {
+  const h = readHeader(rows)
+  const label = /DAY\s*(\d+)/i.exec(sheetName)?.[0]?.replace(/\s+/g, ' ') ?? `Day ${index + 1}`
+  return {
+    label: label.replace(/^day/i, 'Day'),
+    date: pick(h, 'EVENT DAY/DATE', 'EVENT DATE'),
+    eventTime: pick(h, 'EVENT TIME'),
+    guestCount: pick(h, 'GUEST COUNT'),
+    iceNeeds: pick(h, 'ICE NEEDS'),
+    iceDeliveryTime: pick(h, 'ICE DELIVERY'),
+    runs: pairRuns(pick(h, 'KITCHEN PICKUP'), pick(h, 'KITCHEN DELIVERY')),
+    specialNotes: readSpecialNotes(rows),
+  }
+}
+
 export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): ParsedPackList {
   const header: Record<string, string> = {}
   const lines: ParsedLine[] = []
   let specialNotes = ''
+  const days: DayPlan[] = []
 
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name]
@@ -191,6 +249,9 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', raw: false, blankrows: true })
     Object.assign(header, { ...readHeader(rows), ...header })
     if (!specialNotes) specialNotes = readSpecialNotes(rows)
+    // Each food MO is a day: the one-day template has one, a three-day event
+    // three. The beverage MO shares the event's times and adds no day.
+    if (/^MO\b/i.test(name) && !/BEVERAGE/i.test(name)) days.push(dayPlan(name, rows, days.length))
     const top = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref'] as string).s : { r: 0, c: 0 }
     const fillAt = (row: number, col: number): string | null => {
       const cell = sheet[XLSX.utils.encode_cell({ r: top.r + row, c: top.c + col })] as
@@ -209,6 +270,7 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     specialNotes,
     additionalNotes: pick(header, 'ADDITIONAL NOTES'),
     legend: readLegend(wb, XLSX),
+    days,
     eventName: pick(header, 'EVENT NAME'),
     eventDate: pick(header, 'EVENT DAY/DATE', 'EVENT DATE'),
     venue: pick(header, 'LOCATION'),

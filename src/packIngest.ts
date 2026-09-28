@@ -63,6 +63,7 @@ function toImport(
     specialNotes: parsed.specialNotes,
     additionalNotes: parsed.additionalNotes,
     legend: parsed.legend,
+    days: parsed.days,
     emailSubject: meta.subject,
     emailFrom: meta.from,
     emailBody: meta.body,
