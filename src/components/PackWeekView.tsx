@@ -54,6 +54,9 @@ const ACCEPT_PHOTO = 'image/*'
 
 type Line = PackImport['lines'][number]
 
+/** Distinct on the dark background, and none of them the green of "packed". */
+const EVENT_COLOURS = ['#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#fb923c', '#2dd4bf', '#f87171', '#93c5fd']
+
 /** One event's share of a week total. */
 interface Part {
   eventKey: string
@@ -377,6 +380,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       )
     }
 
+    // "→ Production Kit · not counted" under "Production Kit" says nothing new.
+    // Which bottle, and how many are left, is what matters — and only drinks
+    // have that to tell.
+    if (m.kind === 'product' && m.product.storage !== 'beverage' && m.product.have === null) return null
+
     const choices: ShelfItem[] =
       m.kind === 'options' ? m.options : picking ? [...m.alternatives, ...sameKind(m.product, shelf)] : m.alternatives
     const unique = [...new Map(choices.map((c) => [c.id, c])).values()]
@@ -496,6 +504,26 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     }
     return out
   }, [groups, stateById, packedIds, weekStart])
+
+  /**
+   * A colour per event, so the stripe down its lines says which event they
+   * belong to at a glance. Picked from the event's name so it doesn't jump
+   * around when the order changes, and nudged when it would match the event
+   * right above it.
+   */
+  const colourOf = useMemo(() => {
+    const out = new Map<string, string>()
+    let prev = -1
+    for (const g of ordered) {
+      let h = 0
+      for (const ch of g.latest.eventKey) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+      let i = h % EVENT_COLOURS.length
+      if (i === prev) i = (i + 1) % EVENT_COLOURS.length
+      out.set(g.latest.eventKey, EVENT_COLOURS[i])
+      prev = i
+    }
+    return out
+  }, [ordered])
 
   async function move(eventKey: string, step: -1 | 1) {
     const keys = ordered.map((g) => g.latest.eventKey)
@@ -1008,9 +1036,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
         return (
           <div
-            className={`lp-block${allDone ? ' wk-complete' : ''}${dragKey === key ? ' wk-dragging' : ''}${
-              dropAt?.key === key ? (dropAt.after ? ' wk-drop-after' : ' wk-drop-before') : ''
-            }`}
+            className={`lp-block wk-event${isOpen ? ' is-open' : ''}${allDone ? ' wk-complete' : ''}${
+              dragKey === key ? ' wk-dragging' : ''
+            }${dropAt?.key === key ? (dropAt.after ? ' wk-drop-after' : ' wk-drop-before') : ''}`}
+            style={{ ['--ev' as string]: colourOf.get(key) ?? '#60a5fa' }}
             key={key}
             onDragOver={(e) => {
               if (!dragKey) return
@@ -1068,9 +1097,13 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 <span className="wk-caret">{isOpen ? '▾' : '▸'}</span>
                 <span className="wk-ev-main">
                   <span className="wk-ev-name">{g.latest.eventName}</span>
+                  <span className="wk-ev-when">
+                    {[g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate, g.latest.eventTime]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                   <span className="wk-ev-sub">
                     {[
-                      g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate,
                       g.latest.venue,
                       // "16 MEALS TOTAL" already says what it is; only a bare number needs the word.
                       g.latest.guestCount &&
