@@ -300,7 +300,7 @@ function packImportToRow(i: PackImport) {
 function packPackedToRow(p: PackPacked) {
   return {
     id: p.id, week_start: p.weekStart, event_key: p.eventKey, item_key: p.itemKey,
-    packed_at: iso(p.packedAt), updated_at: iso(p.updatedAt),
+    packed_at: iso(p.packedAt), qty: p.qty ?? null, updated_at: iso(p.updatedAt),
   }
 }
 function packLineStateToRow(x: PackLineState) {
@@ -1095,6 +1095,7 @@ export async function pullFromServer() {
           eventKey: r.event_key,
           itemKey: r.item_key,
           packedAt: ms(r.packed_at),
+          qty: r.qty === null || r.qty === undefined ? null : Number(r.qty),
           updatedAt: ms(r.updated_at),
         })),
       )

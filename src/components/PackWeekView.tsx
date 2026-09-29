@@ -5,7 +5,7 @@ import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists } from '../packlistParse'
 import { describeIce, describeQty, packageOf, parseIce, parseQty } from '../packUnits'
 import { findMaybeSame, itemKey } from '../packMatch'
-import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, type Ownership } from '../packOwner'
+import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, whereIs, type Ownership } from '../packOwner'
 import {
   bottleSwaps,
   buildShelf,
@@ -42,6 +42,7 @@ import {
   moveEvent,
   setLineState,
   setPacked,
+  removeRows,
   setWeekOrder,
   undoPair,
   undoVersion,
@@ -180,6 +181,29 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   }
 
   const packedIds = useMemo(() => new Set(packed.map((p) => p.id)), [packed])
+  const packedById = useMemo(() => new Map(packed.map((p) => [p.id, p])), [packed])
+
+  /**
+   * Where a line stands. Packed in full, or not at all — or, since the
+   * planner changed the number: some already packed with more to go
+   * ("partial"), or more packed than is now wanted ("over").
+   */
+  const packState = (eventKey: string, l: Line) => {
+    const need = parseQty(l.qty, l.item, l.size).base
+    const pk = packedById.get(lineId(weekStart, eventKey, l.item))
+    if (!pk) return { state: 'open' as const, need, packedQty: 0 }
+    let got = pk.qty ?? null
+    if (got === null) {
+      // Ticked before counts were kept: it went out against whatever version
+      // was current then, so that version's number is what is on the pallet.
+      const versions = (imports ?? []).filter((i) => i.eventKey === eventKey && i.importedAt <= pk.packedAt)
+      const then = versions.sort((a, b) => b.importedAt - a.importedAt)[0]
+      const was = then?.lines.find((x) => itemKey(x.item) === itemKey(l.item))
+      if (was) got = parseQty(was.qty, was.item, was.size).base
+    }
+    if (got === null || need === null || got === need) return { state: 'done' as const, need, packedQty: got ?? need ?? 0 }
+    return { state: got < need ? ('partial' as const) : ('over' as const), need, packedQty: got }
+  }
   const stateById = useMemo(() => new Map(states.map((s) => [s.id, s])), [states])
 
   const groups: EventGroup[] = useMemo(() => {
@@ -478,7 +502,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
     const done = (g: EventGroup) => {
       const { live } = linesOf(g)
-      return live.length > 0 && live.every((l) => packedIds.has(lineId(weekStart, g.latest.eventKey, l.item)))
+      return live.length > 0 && live.every((l) => packState(g.latest.eventKey, l).state === 'done')
     }
     return [...list.filter((g) => !done(g)), ...list.filter(done)]
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -505,7 +529,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       for (const l of g.latest.lines) {
         const id = lineId(weekStart, g.latest.eventKey, l.item)
         const st = stateById.get(id)
-        if (st?.onlyHave == null || st.status === 'notMine' || st.status === 'removed' || packedIds.has(id)) continue
+        if (st?.onlyHave == null || st.status === 'notMine' || st.status === 'removed') continue
+        if (packState(g.latest.eventKey, l).state === 'done') continue
         const q = parseQty(l.qty, l.item, l.size)
         out.push({
           key: id,
@@ -866,7 +891,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       {ordered.map((g, index) => {
         const key = g.latest.eventKey
         const { live, aside, notYours, own } = linesOf(g)
-        const isPacked = (l: Line) => packedIds.has(lineId(weekStart, key, l.item))
+        const isPacked = (l: Line) => packState(key, l).state === 'done'
         // Every line of his stays in the one list, in the order they wrote it.
         // Whether a line is in our inventory decides a tag beside it, never
         // whether he sees it: folding away what the catalogue didn't know was
@@ -882,18 +907,33 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const multiDay = days.length > 1
         // A day with more than one trip needs the day layout even on its own.
         const byDay = multiDay || (days[0]?.runs.length ?? 0) > 1
-        const changes = g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []
+        // Only what changed on his side of the list; kitchen changes are the kitchen's.
+        const changes = (g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []).filter((c) => {
+          const src = [...g.latest.lines, ...(g.previous?.lines ?? [])].find(
+            (x) => x.item === c.item && x.section === c.section,
+          )
+          return !src || ownerOf(src, rules, g.latest.legend ?? {}).whose !== 'notMine'
+        })
+        const changedItem = new Map(
+          changes.filter((c) => c.kind !== 'removed').map((c) => [itemKey(c.item), c] as const),
+        )
+        // Packed, then dropped from the list: it is on the pallet for nothing.
+        const liveKeys = new Set(live.map((l) => itemKey(l.item)))
+        const takeBack = packed.filter((p) => p.eventKey === key && !liveKeys.has(p.itemKey))
 
         const lineRow = (l: Line, i: number) => {
           const unknownRow = notListed(l)
           const id = lineId(weekStart, key, l.item)
           const asking = own.get(l)?.whose === 'ask'
           const onlyHave = stateById.get(id)?.onlyHave
+          const ps = packState(key, l)
+          const change = changedItem.get(itemKey(l.item))
           const needBase = parseQty(l.qty, l.item, l.size).base
           return (
             <div key={`${id}-${i}`}>
               <ActionRow
-                onTap={() => void setPacked(weekStart, key, l.item, true)}
+                onTap={() => void setPacked(weekStart, key, l.item, true, ps.need)}
+                className={changedItem.has(itemKey(l.item)) ? 'wk-new' : undefined}
                 actions={[
                   {
                     label: 'Not mine',
@@ -937,8 +977,27 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     <span className="wk-item-sub">{[l.size, l.note].filter(Boolean).join(' · ')}</span>
                   )}
                 </span>
-                <span className="wk-item-qty">{describeQty(parseQty(l.qty, l.item, l.size), l.item)}</span>
+                <span className="wk-item-qty">
+                  {ps.state === 'partial' && ps.need !== null
+                    ? `${ps.need - ps.packedQty} more`
+                    : describeQty(parseQty(l.qty, l.item, l.size), l.item)}
+                </span>
               </ActionRow>
+              {(change || ps.state === 'partial' || ps.state === 'over' || whereIs(l.note)) && (
+                <div className="wk-match">
+                  <div className="wk-match-line">
+                    {change?.kind === 'added' && <span className="wk-have ok">new</span>}
+                    {change?.kind === 'changed' && <span className="wk-have ok">was {change.from}</span>}
+                    {ps.state === 'partial' && <span className="wk-have">{ps.packedQty} already packed</span>}
+                    {ps.state === 'over' && ps.need !== null && (
+                      <span className="wk-have out">
+                        {ps.packedQty} packed, now {ps.need} — take {ps.packedQty - ps.need} back
+                      </span>
+                    )}
+                    {whereIs(l.note) && <span className="wk-have">📍 {whereIs(l.note)}</span>}
+                  </div>
+                </div>
+              )}
               {onlyHave != null && shortFor !== id && (
                 <div className="wk-match">
                   <div className="wk-match-line">
@@ -1336,8 +1395,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               <>
                 {changes.length > 0 && (
                   <div className="inbox-changes">
-                    <div className="inbox-changes-title">Changed in this version</div>
-                    {changes.map((c, i) => (
+                    <button className="inbox-changes-title wk-link-plain" onClick={() => toggleOpen(`${key}#changes`)}>
+                      {open.has(`${key}#changes`) ? '▾' : '▸'} Changed in this version ({changes.length})
+                    </button>
+                    {open.has(`${key}#changes`) && changes.map((c, i) => (
                       <div key={i} className={`inbox-change ${c.kind}`}>
                         {c.kind === 'added' && `＋ ${c.item} — ${c.to}`}
                         {c.kind === 'removed' && `− ${c.item} — no longer wanted`}
@@ -1380,9 +1441,37 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                           <span className="wk-item-main">
                             <span className="wk-item-name">{l.item}</span>
                           </span>
-                          <span className="wk-item-qty">{l.qty}</span>
+                          <span className="wk-item-qty">
+                            {packState(key, l).packedQty
+                              ? describeQty(
+                                  { raw: '', base: packState(key, l).packedQty, baseUnit: parseQty(l.qty, l.item, l.size).baseUnit, writtenUnit: '', unclear: false },
+                                  l.item,
+                                )
+                              : l.qty}
+                          </span>
                         </button>
                       ))}
+                  </>
+                )}
+
+                {takeBack.length > 0 && (
+                  <>
+                    <div className="wk-fold wk-takeback">
+                      ⚠ Packed but no longer on the list — take back ({takeBack.length})
+                    </div>
+                    {takeBack.map((p) => (
+                      <div className="wk-item aside" key={p.id}>
+                        <span className="wk-item-main">
+                          <span className="wk-item-name">
+                            {g.previous?.lines.find((x) => itemKey(x.item) === p.itemKey)?.item ?? p.itemKey}
+                          </span>
+                          <span className="wk-item-sub">removed in the new version</span>
+                        </span>
+                        <button className="chip-btn" onClick={() => void removeRows('packPacked', [p.id])}>
+                          Taken back
+                        </button>
+                      </div>
+                    ))}
                   </>
                 )}
 

@@ -478,6 +478,13 @@ export interface PackPacked {
   eventKey: string
   itemKey: string
   packedAt: number
+  /**
+   * How many were packed, in the line's base unit. When a new version asks
+   * for more, the ones already packed stay packed and only the difference is
+   * left to do; when it asks for fewer, the extra has to come back off.
+   * Null for ticks made before this was kept, and for lines with no number.
+   */
+  qty?: number | null
   updatedAt: number
 }
 

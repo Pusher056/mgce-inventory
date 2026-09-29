@@ -132,7 +132,11 @@ function readLines(
         continue
       }
       const qty = clean(rows[i]?.[c + 2])
-      if (!qty || qty === '0') continue
+      // No quantity usually means not wanted — the catalogue prints every row.
+      // But "At GJ's desk" with no number is still a thing waiting to go out.
+      const noteHere = clean(rows[i]?.[c + 3])
+      const placed = /\bat\s+(?:the\s+)?[a-z]+(?:'s|’s|s)?\s+(desk|office|table|station|cubicle)\b/i.test(noteHere)
+      if ((!qty || qty === '0') && !placed) continue
       const fills = [...new Set([0, 1, 2, 3].map((k) => fillAt(i, c + k)).filter((x): x is string => !!x))]
       out.push({
         section: section || sheetName,

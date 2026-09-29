@@ -73,6 +73,20 @@ export function colourSays(fills: string[] | undefined, legend: Record<string, s
 }
 const OPS_RX = /\b(ops|operations?|fabio)\b/i
 
+/**
+ * "At GJ's desk" says where the thing is, not who packs it: it is still his,
+ * he may just have to walk over and get it. Checked before the initials, or
+ * the "GJ" in it would hand the line to her.
+ */
+export const LOCATION_RX = /\bat\s+(?:the\s+)?([a-z]+(?:'s|’s|s)?)\s+(desk|office|table|station|cubicle)\b/i
+
+/** "at GJ's desk", tidied for a tag. */
+export function whereIs(note: string): string | null {
+  const m = LOCATION_RX.exec(note ?? '')
+  if (!m) return null
+  return `at ${m[1].replace(/’/g, "'")} ${m[2].toLowerCase()}`
+}
+
 /** Sections that belong to him on one event and not on the next. */
 const EITHER_WAY = /BAR NEEDS|PASSING TRAY|D[EÉ]COR/i
 const KITCHEN = /KITCHEN/i
@@ -119,6 +133,8 @@ export function ownerOf(
   if (OPS_RX.test(line.note ?? '') || OPS_RX.test(line.item)) {
     return { whose: 'mine', why: 'note says Ops', source: 'note' }
   }
+  const where = whereIs(line.note ?? '')
+  if (where) return { whose: 'mine', why: where, source: 'note' }
   const initials = INITIALS_RX.exec(text)
   if (initials) return { whose: 'notMine', why: `${initials[1]} handles it`, source: 'note' }
 

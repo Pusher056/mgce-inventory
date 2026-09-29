@@ -131,14 +131,21 @@ export async function moveEvent(fromWeek: string, eventKey: string, toWeek: stri
 
 export const lineId = (weekStart: string, eventKey: string, item: string) => `${weekStart}|${eventKey}|${itemKey(item)}`
 
-export async function setPacked(weekStart: string, eventKey: string, item: string, on: boolean) {
+export async function setPacked(
+  weekStart: string,
+  eventKey: string,
+  item: string,
+  on: boolean,
+  /** How many are now packed, in the line's base unit, when it has one. */
+  qty: number | null = null,
+) {
   const id = lineId(weekStart, eventKey, item)
   // Packed means the whole amount went out, so a shortage noted on it is over.
   if (on && (await db.packLineStates.get(id))?.onlyHave != null) {
     await setLineState(weekStart, eventKey, item, { onlyHave: null })
   }
   if (on) {
-    await putRow('packPacked', { id, weekStart, eventKey, itemKey: itemKey(item), packedAt: Date.now(), updatedAt: Date.now() })
+    await putRow('packPacked', { id, weekStart, eventKey, itemKey: itemKey(item), packedAt: Date.now(), qty, updatedAt: Date.now() })
   } else {
     await removeRows('packPacked', [id])
   }
