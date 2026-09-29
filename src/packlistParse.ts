@@ -20,6 +20,27 @@ export interface ParsedLine {
    * and the file's own key says which colour is which.
    */
   fills?: string[]
+  /**
+   * Which delivery it goes out with, when the event is split into several:
+   * the sheet it came off ("PL-BEVERAGE - Day 2 Media"). Coke on Day 2 and
+   * Coke on Day 3 go on different trucks and are packed separately.
+   */
+  drop?: string
+}
+
+/**
+ * One delivery of a split event — one pack list sheet. The planner writes
+ * when it goes in a red line under the header: "DELIVERED 10/06 - at 6:00am".
+ */
+export interface Drop {
+  key: string
+  label: string
+  /** The red line as written, or '' when there is none. */
+  delivered: string
+  date: string
+  eventTime: string
+  callTime: string
+  guestCount: string
 }
 
 /** One trip out: leave the kitchen at `pickup`, be at the venue by `delivery`. */
@@ -65,6 +86,8 @@ export interface ParsedPackList {
   legend: Record<string, string>
   /** One per MO sheet, in order. A one-day event has one. */
   days: DayPlan[]
+  /** One per delivery when the event is split into several; empty otherwise. */
+  drops: Drop[]
   lines: ParsedLine[]
   /** Sheets we read, so a file with an unexpected shape is obvious. */
   sheets: string[]
@@ -127,6 +150,8 @@ function readLines(
     for (let i = 6; i < rows.length; i++) {
       const item = clean(rows[i]?.[c])
       if (!item || item.startsWith('*')) continue
+      // The red "DELIVERED 10/06 - at 6:00am" line belongs to the sheet, not a section.
+      if (/^DELIVERED\b/i.test(item)) continue
       if (isHeading(item)) {
         section = item
         continue
@@ -226,7 +251,10 @@ function pairRuns(pickup: string, delivery: string): Run[] {
 
 function dayPlan(sheetName: string, rows: string[][], index: number): DayPlan {
   const h = readHeader(rows)
-  const label = /DAY\s*(\d+)/i.exec(sheetName)?.[0]?.replace(/\s+/g, ' ') ?? `Day ${index + 1}`
+  const numbered = /DAY\s*(\d+)/i.exec(sheetName)?.[0]?.replace(/\s+/g, ' ')
+  // "MO-FOOD - RECEPTION" is its own service, not the next day's number.
+  const named = sheetName.replace(/^MO[-\s]*(FOOD)?[\s-]*/i, '').trim()
+  const label = numbered ?? (named ? titleCase(named) : `Day ${index + 1}`)
   return {
     label: label.replace(/^day/i, 'Day'),
     date: pick(h, 'EVENT DAY/DATE', 'EVENT DATE'),
@@ -239,11 +267,47 @@ function dayPlan(sheetName: string, rows: string[][], index: number): DayPlan {
   }
 }
 
+const titleCase = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())
+
+/** Is this sheet a pack list? The 2026 template says PACKING; the split one says "PL-". */
+const isPackSheet = (name: string) => /PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name) || /^PL\b/i.test(name)
+
+/** "PL-BEVERAGE - Day 2 Media" → "Beverage · Day 2 Media"; "PACKING LIST-GOODS" → "General · goods". */
+function dropLabel(sheet: string): string {
+  const rest = sheet.replace(/^(PACKING LIST|PL)\s*[-–]\s*/i, '').trim()
+  if (/^GOODS$/i.test(rest)) return 'General · goods'
+  const [kind, ...tail] = rest.split(/\s+[-–]\s+/)
+  const k = titleCase(kind)
+  return tail.length ? `${k} · ${tail.join(' ')}` : k
+}
+
+function readDrop(sheet: string, rows: string[][]): Drop {
+  const h = readHeader(rows)
+  let delivered = ''
+  for (let r = 0; r < Math.min(12, rows.length); r++) {
+    for (const cell of rows[r] ?? []) {
+      const t = clean(cell)
+      if (/^DELIVERED\b/i.test(t)) delivered = t
+    }
+    if (delivered) break
+  }
+  return {
+    key: sheet,
+    label: dropLabel(sheet),
+    delivered,
+    date: pick(h, 'EVENT DAY/DATE', 'EVENT DATE'),
+    eventTime: pick(h, 'EVENT TIME'),
+    callTime: pick(h, 'CALL TIME'),
+    guestCount: pick(h, 'GUEST COUNT'),
+  }
+}
+
 export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): ParsedPackList {
   const header: Record<string, string> = {}
   const lines: ParsedLine[] = []
   let specialNotes = ''
   const days: DayPlan[] = []
+  const drops: Drop[] = []
 
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name]
@@ -267,7 +331,12 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
       return /^F{6}$/.test(key) ? null : key
     }
     // The MO and STAFF sheets are the menu and the staffing plan, not packing.
-    if (/PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name)) lines.push(...readLines(rows, name, fillAt))
+    if (isPackSheet(name)) {
+      const got = readLines(rows, name, fillAt)
+      drops.push(readDrop(name, rows))
+      for (const l of got) l.drop = name
+      lines.push(...got)
+    }
   }
 
   return {
@@ -275,6 +344,10 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     additionalNotes: pick(header, 'ADDITIONAL NOTES'),
     legend: readLegend(wb, XLSX),
     days,
+    // Split into deliveries only when the file says so — a "PL-" sheet or a
+    // red DELIVERED line. The everyday goods + beverage pair is one delivery,
+    // and its lines keep no drop so nothing about them changes.
+    drops: splitIntoDrops(drops) ? drops : [],
     eventName: pick(header, 'EVENT NAME'),
     eventDate: pick(header, 'EVENT DAY/DATE', 'EVENT DATE'),
     venue: pick(header, 'LOCATION'),
@@ -288,34 +361,40 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     iceDeliveryTime: pick(header, 'ICE DELIVERY'),
     kitchenPickup: pick(header, 'KITCHEN PICKUP'),
     kitchenDelivery: pick(header, 'KITCHEN DELIVERY'),
-    lines,
+    lines: splitIntoDrops(drops) ? lines : lines.map(({ drop: _drop, ...l }) => l),
     sheets: wb.SheetNames,
   }
+}
+
+function splitIntoDrops(drops: Drop[]): boolean {
+  return drops.length > 1 && drops.some((d) => /^PL\b/i.test(d.key) || d.delivered)
 }
 
 export interface LineChange {
   kind: 'added' | 'removed' | 'changed'
   item: string
   section: string
+  drop?: string
   from?: string
   to?: string
 }
 
 /** What moved between the version he already has and the one that just arrived. */
 export function diffPackLists(before: ParsedLine[], after: ParsedLine[]): LineChange[] {
-  const key = (l: ParsedLine) => `${l.section}|${l.item}`.toLowerCase()
+  // The delivery is part of a line's identity: Coke on Day 2 and Coke on Day 3 are two lines.
+  const key = (l: ParsedLine) => `${l.drop ?? ''}|${l.section}|${l.item}`.toLowerCase()
   const b = new Map(before.map((l) => [key(l), l]))
   const a = new Map(after.map((l) => [key(l), l]))
   const changes: LineChange[] = []
 
   for (const [k, line] of a) {
     const old = b.get(k)
-    if (!old) changes.push({ kind: 'added', item: line.item, section: line.section, to: line.qty })
+    if (!old) changes.push({ kind: 'added', item: line.item, section: line.section, drop: line.drop, to: line.qty })
     else if (old.qty !== line.qty)
-      changes.push({ kind: 'changed', item: line.item, section: line.section, from: old.qty, to: line.qty })
+      changes.push({ kind: 'changed', item: line.item, section: line.section, drop: line.drop, from: old.qty, to: line.qty })
   }
   for (const [k, line] of b) {
-    if (!a.has(k)) changes.push({ kind: 'removed', item: line.item, section: line.section, from: line.qty })
+    if (!a.has(k)) changes.push({ kind: 'removed', item: line.item, section: line.section, drop: line.drop, from: line.qty })
   }
   return changes
 }

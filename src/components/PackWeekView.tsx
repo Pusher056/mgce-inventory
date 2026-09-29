@@ -39,6 +39,7 @@ import {
   deleteFiles,
   fileBlob,
   lineId,
+  lineKey,
   moveEvent,
   setLineState,
   setPacked,
@@ -190,7 +191,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
    */
   const packState = (eventKey: string, l: Line) => {
     const need = parseQty(l.qty, l.item, l.size).base
-    const pk = packedById.get(lineId(weekStart, eventKey, l.item))
+    const pk = packedById.get(lineId(weekStart, eventKey, l))
     if (!pk) return { state: 'open' as const, need, packedQty: 0 }
     let got = pk.qty ?? null
     if (got === null) {
@@ -198,7 +199,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       // was current then, so that version's number is what is on the pallet.
       const versions = (imports ?? []).filter((i) => i.eventKey === eventKey && i.importedAt <= pk.packedAt)
       const then = versions.sort((a, b) => b.importedAt - a.importedAt)[0]
-      const was = then?.lines.find((x) => itemKey(x.item) === itemKey(l.item))
+      const was = then?.lines.find((x) => lineKey(x) === lineKey(l))
       if (was) got = parseQty(was.qty, was.item, was.size).base
     }
     if (got === null || need === null || got === need) return { state: 'done' as const, need, packedQty: got ?? need ?? 0 }
@@ -230,7 +231,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     const live: Line[] = []
     const own = new Map<Line, Ownership>()
     for (const l of g.latest.lines) {
-      const st = stateById.get(lineId(weekStart, g.latest.eventKey, l.item))?.status
+      const st = stateById.get(lineId(weekStart, g.latest.eventKey, l))?.status
       if (st && st !== 'mine') {
         aside.push({ line: l, status: st })
         continue
@@ -291,15 +292,20 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         // "2" in the quantity and "(case)" beside it reads as "2 case".
         const written = q.writtenUnit && !/[a-z]/i.test(l.qty) ? `${l.qty} ${q.writtenUnit}` : l.qty
         // The same event can ask twice (two sections); it is one line here.
-        const mine = row.parts.find((p) => p.eventKey === g.latest.eventKey)
+        // One part per event and delivery: Imagination's Day 2 and Day 3 are two trucks.
+        const partKey = l.drop ? `${g.latest.eventKey}|${l.drop}` : g.latest.eventKey
+        const dropInfo = l.drop ? g.latest.drops?.find((d) => d.key === l.drop) : undefined
+        const dropName = dropInfo?.label
+        const dropIso = dropInfo ? parseEventDate(dropInfo.delivered.replace(/^DELIVERED\s*/i, '')) ?? parseEventDate(dropInfo.date) : null
+        const mine = row.parts.find((p) => p.eventKey === partKey)
         if (mine) {
           mine.written.push(written)
           if (q.base !== null) mine.base = (mine.base ?? 0) + q.base
         } else {
           row.parts.push({
-            eventKey: g.latest.eventKey,
-            event: g.latest.eventName,
-            iso: g.latest.eventIso,
+            eventKey: partKey,
+            event: dropName ? `${g.latest.eventName} · ${dropName}` : g.latest.eventName,
+            iso: dropIso ?? g.latest.eventIso,
             written: [written],
             base: q.base,
           })
@@ -527,7 +533,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     const out: { key: string; event: string; item: string; need: string; have: number; missing: number | null }[] = []
     for (const g of groups) {
       for (const l of g.latest.lines) {
-        const id = lineId(weekStart, g.latest.eventKey, l.item)
+        const id = lineId(weekStart, g.latest.eventKey, l)
         const st = stateById.get(id)
         if (st?.onlyHave == null || st.status === 'notMine' || st.status === 'removed') continue
         if (packState(g.latest.eventKey, l).state === 'done') continue
@@ -578,6 +584,15 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const dayDate = (d: { date: string }) => {
     const iso = parseEventDate(d.date)
     return iso ? shortDate(iso) : d.date
+  }
+
+  /** When a delivery goes, as a sortable string. */
+  const whenDrop = (d: { delivered: string; date: string; callTime: string }) => {
+    const written = d.delivered.replace(/^DELIVERED\s*/i, '')
+    const iso = parseEventDate(written) ?? parseEventDate(d.date) ?? '9999-12-31'
+    const at = /\bat\b(.*)$/i.exec(written)?.[1]
+    const mins = at ? startMinutes(at) : d.delivered ? 0 : (startMinutes(d.callTime) ?? 9999)
+    return `${iso}|${String(mins ?? 0).padStart(4, '0')}`
   }
 
   type TotalRow = (typeof totals)[number]
@@ -904,6 +919,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const isOpen = open.has(key)
         const ice = parseIce(g.latest.iceNeeds)
         const days = g.latest.days ?? []
+        const drops = g.latest.drops ?? []
+        // Deliveries in the order they go out: the red line's date and time,
+        // then — when a sheet has none — its date and call time.
+        const sortedDrops = [...drops].sort((a, b) => whenDrop(a).localeCompare(whenDrop(b)))
         const multiDay = days.length > 1
         // A day with more than one trip needs the day layout even on its own.
         const byDay = multiDay || (days[0]?.runs.length ?? 0) > 1
@@ -915,31 +934,57 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           return !src || ownerOf(src, rules, g.latest.legend ?? {}).whose !== 'notMine'
         })
         const changedItem = new Map(
-          changes.filter((c) => c.kind !== 'removed').map((c) => [itemKey(c.item), c] as const),
+          changes.filter((c) => c.kind !== 'removed').map((c) => [lineKey(c), c] as const),
         )
         // Packed, then dropped from the list: it is on the pallet for nothing.
-        const liveKeys = new Set(live.map((l) => itemKey(l.item)))
+        const liveKeys = new Set(live.map((l) => lineKey(l)))
         const takeBack = packed.filter((p) => p.eventKey === key && !liveKeys.has(p.itemKey))
+
+        const doneRow = (l: Line, i: number) => (
+                        <button
+                          className="wk-item done"
+                          key={i}
+                          onClick={(e) => {
+                            if (inTapZone(e)) void setPacked(weekStart, key, l, false)
+                          }}
+                          title="Tap to un-pack"
+                        >
+                          <span className="tap-zone">
+                            <span className="wk-tick on">✓</span>
+                          </span>
+                          <span className="wk-item-main">
+                            <span className="wk-item-name">{l.item}</span>
+                          </span>
+                          <span className="wk-item-qty">
+                            {packState(key, l).packedQty
+                              ? describeQty(
+                                  { raw: '', base: packState(key, l).packedQty, baseUnit: parseQty(l.qty, l.item, l.size).baseUnit, writtenUnit: '', unclear: false },
+                                  l.item,
+                                )
+                              : l.qty}
+                          </span>
+                        </button>
+        )
 
         const lineRow = (l: Line, i: number) => {
           const unknownRow = notListed(l)
-          const id = lineId(weekStart, key, l.item)
+          const id = lineId(weekStart, key, l)
           const asking = own.get(l)?.whose === 'ask'
           const onlyHave = stateById.get(id)?.onlyHave
           const ps = packState(key, l)
-          const change = changedItem.get(itemKey(l.item))
+          const change = changedItem.get(lineKey(l))
           const needBase = parseQty(l.qty, l.item, l.size).base
           return (
             <div key={`${id}-${i}`}>
               <ActionRow
-                onTap={() => void setPacked(weekStart, key, l.item, true, ps.need)}
-                className={changedItem.has(itemKey(l.item)) ? 'wk-new' : undefined}
+                onTap={() => void setPacked(weekStart, key, l, true, ps.need)}
+                className={changedItem.has(lineKey(l)) ? 'wk-new' : undefined}
                 actions={[
                   {
                     label: 'Not mine',
                     icon: '🙅',
                     tone: 'accent',
-                    onClick: () => void setLineState(weekStart, key, l.item, { status: 'notMine' }),
+                    onClick: () => void setLineState(weekStart, key, l, { status: 'notMine' }),
                   },
                   {
                     label: 'Only have',
@@ -954,7 +999,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     label: 'Remove',
                     icon: '🗑',
                     tone: 'danger',
-                    onClick: () => void setLineState(weekStart, key, l.item, { status: 'removed' }),
+                    onClick: () => void setLineState(weekStart, key, l, { status: 'removed' }),
                   },
                   ...(unknownRow
                     ? [
@@ -1014,7 +1059,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     >
                       change
                     </button>
-                    <button className="wk-link" onClick={() => void setLineState(weekStart, key, l.item, { onlyHave: null })}>
+                    <button className="wk-link" onClick={() => void setLineState(weekStart, key, l, { onlyHave: null })}>
                       clear
                     </button>
                   </div>
@@ -1027,7 +1072,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     e.preventDefault()
                     const n = Number(shortDraft.replace(',', '.'))
                     if (shortDraft.trim() === '' || !Number.isFinite(n) || n < 0) return
-                    await setLineState(weekStart, key, l.item, { onlyHave: n })
+                    await setLineState(weekStart, key, l, { onlyHave: n })
                     setShortFor(null)
                   }}
                 >
@@ -1057,12 +1102,12 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     // These sections change hands from one event to the next,
                     // so the answer holds for this event and is asked again next time.
                     <>
-                      <button className="chip-btn" onClick={() => void setLineState(weekStart, key, l.item, { status: 'mine' })}>
+                      <button className="chip-btn" onClick={() => void setLineState(weekStart, key, l, { status: 'mine' })}>
                         Mine
                       </button>
                       <button
                         className="chip-btn"
-                        onClick={() => void setLineState(weekStart, key, l.item, { status: 'notMine' })}
+                        onClick={() => void setLineState(weekStart, key, l, { status: 'notMine' })}
                       >
                         Not mine
                       </button>
@@ -1183,7 +1228,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className="wk-ev-name">{g.latest.eventName}</span>
                   <span className="wk-ev-when">
                     {multiDay
-                      ? `${dayDate(days[0])} – ${dayDate(days[days.length - 1])} · ${days.length} days`
+                      ? `${dayDate(days[0])} – ${dayDate(days[days.length - 1])} · ${
+                          new Set(days.map((d) => parseEventDate(d.date) ?? d.date)).size
+                        } days`
                       : [g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate, g.latest.eventTime]
                           .filter(Boolean)
                           .join(' · ')}
@@ -1193,8 +1240,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                       g.latest.venue,
                       // "16 MEALS TOTAL" already says what it is; only a bare number needs the word.
                       g.latest.guestCount &&
+                        !/^n\/?a$/i.test(g.latest.guestCount.trim()) &&
                         (/^[\d,]+$/.test(g.latest.guestCount) ? `${g.latest.guestCount} guests` : g.latest.guestCount),
                       g.versions > 1 && `v${g.versions}`,
+                      (g.latest.drops?.length ?? 0) > 1 && `${g.latest.drops!.length} deliveries`,
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -1418,39 +1467,59 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 )}
 
                 {allDone && <div className="wk-alldone">✓ {g.latest.eventName} — everything packed</div>}
-                {openKnown.map((l, i) => lineRow(l, i))}
+                {drops.length > 1
+                  ? sortedDrops.map((d) => {
+                      const dl = live.filter((l) => l.drop === d.key)
+                      if (dl.length === 0) return null
+                      const dOpen = dl.filter((l) => !isPacked(l))
+                      const dDone = dl.filter(isPacked)
+                      const id = `${key}#drop:${d.key}`
+                      const isDropOpen = open.has(id)
+                      return (
+                        <div className={`wk-drop${dOpen.length === 0 ? ' done' : ''}`} key={d.key}>
+                          <button className="wk-drop-h" onClick={() => toggleOpen(id)}>
+                            <span className="wk-caret">{isDropOpen ? '▾' : '▸'}</span>
+                            <span className="wk-drop-main">
+                              <span className="wk-drop-name">{d.label}</span>
+                              {d.delivered ? (
+                                <span className="wk-delivered">{d.delivered}</span>
+                              ) : (
+                                <span className="wk-delivered missing">
+                                  no delivery time written{d.callTime ? ` · call ${d.callTime}` : ''}
+                                </span>
+                              )}
+                              <span className="wk-drop-sub">
+                                {[d.eventTime, /^\d/.test(d.guestCount) && `${d.guestCount} guests`].filter(Boolean).join(' · ')}
+                              </span>
+                            </span>
+                            <span className={`wk-drop-prog${dOpen.length === 0 ? ' ok' : ''}`}>
+                              {dOpen.length === 0 ? '✓ packed' : `${dDone.length} of ${dl.length}`}
+                            </span>
+                          </button>
+                          {isDropOpen && (
+                            <>
+                              {dOpen.map((l, i) => lineRow(l, i))}
+                              {dDone.length > 0 && (
+                                <>
+                                  <button className="wk-fold" onClick={() => toggleOpen(`${id}#done`)}>
+                                    ✓ Already packed ({dDone.length}) {open.has(`${id}#done`) ? '▾' : '▸'}
+                                  </button>
+                                  {open.has(`${id}#done`) && dDone.map((l, i) => doneRow(l, i))}
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )
+                    })
+                  : openKnown.map((l, i) => lineRow(l, i))}
 
-                {doneLines.length > 0 && (
+                {drops.length <= 1 && doneLines.length > 0 && (
                   <>
                     <button className="wk-fold" onClick={() => toggleOpen(`${key}#done`)}>
                       ✓ Already packed ({doneLines.length}) {open.has(`${key}#done`) ? '▾' : '▸'}
                     </button>
-                    {open.has(`${key}#done`) &&
-                      doneLines.map((l, i) => (
-                        <button
-                          className="wk-item done"
-                          key={i}
-                          onClick={(e) => {
-                            if (inTapZone(e)) void setPacked(weekStart, key, l.item, false)
-                          }}
-                          title="Tap to un-pack"
-                        >
-                          <span className="tap-zone">
-                            <span className="wk-tick on">✓</span>
-                          </span>
-                          <span className="wk-item-main">
-                            <span className="wk-item-name">{l.item}</span>
-                          </span>
-                          <span className="wk-item-qty">
-                            {packState(key, l).packedQty
-                              ? describeQty(
-                                  { raw: '', base: packState(key, l).packedQty, baseUnit: parseQty(l.qty, l.item, l.size).baseUnit, writtenUnit: '', unclear: false },
-                                  l.item,
-                                )
-                              : l.qty}
-                          </span>
-                        </button>
-                      ))}
+                    {open.has(`${key}#done`) && doneLines.map((l, i) => doneRow(l, i))}
                   </>
                 )}
 
@@ -1463,7 +1532,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                       <div className="wk-item aside" key={p.id}>
                         <span className="wk-item-main">
                           <span className="wk-item-name">
-                            {g.previous?.lines.find((x) => itemKey(x.item) === p.itemKey)?.item ?? p.itemKey}
+                            {g.previous?.lines.find((x) => lineKey(x) === p.itemKey)?.item ?? p.itemKey}
                           </span>
                           <span className="wk-item-sub">removed in the new version</span>
                         </span>
@@ -1515,7 +1584,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                               title="Remember it for every event from now on"
                               onClick={async () => {
                                 await decideOwner(l.item, 'notMine')
-                                await setLineState(weekStart, key, l.item, { status: '' })
+                                await setLineState(weekStart, key, l, { status: '' })
                               }}
                             >
                               Never mine
@@ -1523,7 +1592,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                           )}
                           <button
                             className="chip-btn"
-                            onClick={() => void setLineState(weekStart, key, l.item, { status: '' })}
+                            onClick={() => void setLineState(weekStart, key, l, { status: '' })}
                           >
                             Put back
                           </button>

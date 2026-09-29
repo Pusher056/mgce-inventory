@@ -1644,3 +1644,37 @@ textarea {
 .arow.wk-new { box-shadow: inset 3px 0 0 #6ee7a0; }
 .wk-link-plain { background: none; border: none; padding: 0; font: inherit; cursor: pointer; text-align: left; }
 .wk-takeback { color: #f8a0a0; cursor: default; }
+
+/* ---------- a split event: one section per delivery ---------- */
+.wk-drop { border-top: 1px solid var(--bg3); }
+.wk-drop-h {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  background: var(--bg2);
+  border: none;
+  padding: 11px 16px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+.wk-drop-h .wk-caret { padding-top: 2px; }
+.wk-drop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-drop-name { font-size: 15px; font-weight: 800; }
+.wk-delivered {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fecaca;
+  background: rgba(221, 8, 6, 0.28);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.wk-delivered.missing { color: var(--amber, #fbbf24); background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.35); }
+.wk-drop-sub { font-size: 12px; color: var(--muted); }
+.wk-drop-prog { font-size: 12px; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+.wk-drop-prog.ok { color: #6ee7a0; }
+.wk-drop.done .wk-drop-name { color: var(--muted); }

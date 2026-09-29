@@ -93,7 +93,8 @@ const KITCHEN = /KITCHEN/i
 /** "PAIGE TO ORDER": somebody's name on the section — probably theirs, so ask. */
 const SOMEONE_ORDERS = /\bTO ORDER\b/i
 const HIS_SECTION = /OFFICE|GENERAL|DISPOSABLE|STORAGE|BEVERAGE|SPECIALTY|COCKTAIL/i
-const HIS_SHEET = /PACKING LIST|OFFICE|DISPOSABLE|STORAGE/i
+// "PL-BEVERAGE - Day 2 Media": the split template's pack lists are his like any other.
+const HIS_SHEET = /PACKING LIST|OFFICE|DISPOSABLE|STORAGE|^PL/i
 
 /** A section heading as a ruling key, kept apart from item names. */
 export const sectionRuleKey = (section: string) => `§${section.trim().toUpperCase()}`

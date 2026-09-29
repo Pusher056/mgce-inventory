@@ -129,12 +129,26 @@ export async function moveEvent(fromWeek: string, eventKey: string, toWeek: stri
 
 /* ---------- lines ---------- */
 
-export const lineId = (weekStart: string, eventKey: string, item: string) => `${weekStart}|${eventKey}|${itemKey(item)}`
+/** A line by name, or with the delivery it goes out with. */
+export type LineRef = string | { item: string; drop?: string }
+
+/**
+ * What identifies a line within its event. Just the item for an everyday
+ * event — so ticks made before deliveries existed still line up — and the
+ * item plus its delivery for a split one: Coke on Day 2 and Coke on Day 3
+ * are packed separately.
+ */
+export function lineKey(r: LineRef): string {
+  if (typeof r === 'string') return itemKey(r)
+  if (!r.drop) return itemKey(r.item)
+  return `${itemKey(r.item)}|${itemKey(r.drop)}`
+}
+export const lineId = (weekStart: string, eventKey: string, r: LineRef) => `${weekStart}|${eventKey}|${lineKey(r)}`
 
 export async function setPacked(
   weekStart: string,
   eventKey: string,
-  item: string,
+  item: LineRef,
   on: boolean,
   /** How many are now packed, in the line's base unit, when it has one. */
   qty: number | null = null,
@@ -145,7 +159,7 @@ export async function setPacked(
     await setLineState(weekStart, eventKey, item, { onlyHave: null })
   }
   if (on) {
-    await putRow('packPacked', { id, weekStart, eventKey, itemKey: itemKey(item), packedAt: Date.now(), qty, updatedAt: Date.now() })
+    await putRow('packPacked', { id, weekStart, eventKey, itemKey: lineKey(item), packedAt: Date.now(), qty, updatedAt: Date.now() })
   } else {
     await removeRows('packPacked', [id])
   }
@@ -155,7 +169,7 @@ export async function setPacked(
 export async function setLineState(
   weekStart: string,
   eventKey: string,
-  item: string,
+  item: LineRef,
   patch: Partial<Pick<PackLineState, 'status' | 'productId' | 'onlyHave'>>,
 ) {
   const id = lineId(weekStart, eventKey, item)
@@ -164,7 +178,7 @@ export async function setLineState(
     id,
     weekStart,
     eventKey,
-    itemKey: itemKey(item),
+    itemKey: lineKey(item),
     status: prev?.status ?? '',
     productId: prev?.productId ?? null,
     onlyHave: prev?.onlyHave ?? null,
@@ -273,7 +287,11 @@ export async function fileBlob(f: PackFile): Promise<Blob | null> {
 
 /** New version of an event, or its first. */
 export async function saveImport(rec: PackImport): Promise<'added' | 'updated'> {
-  const existing = await db.packImports.where('eventKey').equals(rec.eventKey).count()
+  const existing = await db.packImports
+    .where('eventKey')
+    .equals(rec.eventKey)
+    .filter((i) => i.weekStart === rec.weekStart)
+    .count()
   await putRow('packImports', rec)
   return existing > 0 ? 'updated' : 'added'
 }

@@ -447,7 +447,31 @@ export interface PackImport {
   emailFrom: string
   /** What the planner actually typed — "Fabio, we also need…" */
   emailBody: string
-  lines: { section: string; sheet?: string; item: string; size: string; qty: string; note: string; fills?: string[] }[]
+  lines: {
+    section: string
+    sheet?: string
+    item: string
+    size: string
+    qty: string
+    note: string
+    fills?: string[]
+    /** The delivery it goes out with, when the event is split into several. */
+    drop?: string
+  }[]
+  /**
+   * The deliveries of a split event — one per pack list sheet, each with the
+   * red "DELIVERED 10/06 - at 6:00am" line the planner wrote. Empty for an
+   * everyday event.
+   */
+  drops?: {
+    key: string
+    label: string
+    delivered: string
+    date: string
+    eventTime: string
+    callTime: string
+    guestCount: string
+  }[]
   importedAt: number
   updatedAt: number
 }

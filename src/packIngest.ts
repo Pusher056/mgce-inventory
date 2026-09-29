@@ -4,7 +4,7 @@
 // all and is kept beside the event so he can open it and work from it — which
 // is the honest version of "upload a photo", not a promise the app can't keep.
 
-import { uuid } from './db'
+import { db, uuid } from './db'
 import { addFile, saveImport } from './packStore'
 import { parseEml, isSpreadsheet } from './emailParse'
 import { parseMsg } from './msgParse'
@@ -29,6 +29,16 @@ const isMail = (n: string) => /\.(eml|msg)$/i.test(n)
  * second is a new version — he can drop updates in all week without the board
  * growing a duplicate every time a planner changes her mind.
  */
+/** A file's name without its version: "…Pack List V2.xls" and "…Pack List V3.xls" match. */
+export function fileStem(name: string): string {
+  return plain(name)
+    .replace(/\.[a-z0-9]+$/, '')
+    .replace(/\b(v|ver|version)\s*\d+\b/g, ' ')
+    .replace(/\b(updated?|final|revised|rev)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
 export function eventKeyOf(name: string, iso: string): string {
   const n = plain(name)
     .replace(/^\d{6}\s*[-–]?\s*/, '')
@@ -64,6 +74,7 @@ function toImport(
     additionalNotes: parsed.additionalNotes,
     legend: parsed.legend,
     days: parsed.days,
+    drops: parsed.drops,
     emailSubject: meta.subject,
     emailFrom: meta.from,
     emailBody: meta.body,
@@ -83,6 +94,18 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
   const XLSX = await import('xlsx')
 
   async function store(rec: PackImport) {
+    // Planners rename events between versions ("Imagination Day 1" became
+    // "Imagination Day 1 - SET-UP"). The file keeps its name except the
+    // version number, so when the name finds nothing, the file finds its
+    // earlier version in the same week.
+    const sameWeek = (i: PackImport) => i.weekStart === rec.weekStart
+    if (rec.weekStart && !(await db.packImports.where('eventKey').equals(rec.eventKey).filter(sameWeek).count())) {
+      const stem = fileStem(rec.filename)
+      const earlier = stem
+        ? (await db.packImports.where('weekStart').equals(rec.weekStart).toArray()).find((i) => fileStem(i.filename) === stem)
+        : undefined
+      if (earlier) rec.eventKey = earlier.eventKey
+    }
     if ((await saveImport(rec)) === 'updated') report.updated++
     else report.added++
   }
