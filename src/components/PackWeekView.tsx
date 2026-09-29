@@ -973,12 +973,16 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           const onlyHave = stateById.get(id)?.onlyHave
           const ps = packState(key, l)
           const change = changedItem.get(lineKey(l))
+          // A new line, or a number that moved: the row keeps its look and the
+          // text changes colour — name green, number green if more, red if less.
+          const was = change?.kind === 'changed' ? parseQty(change.from ?? '', l.item, l.size).base : null
+          const now = parseQty(l.qty, l.item, l.size).base
+          const moved = !change ? '' : change.kind === 'added' ? 'up' : was !== null && now !== null && now < was ? 'down' : 'up'
           const needBase = parseQty(l.qty, l.item, l.size).base
           return (
             <div key={`${id}-${i}`}>
               <ActionRow
                 onTap={() => void setPacked(weekStart, key, l, true, ps.need)}
-                className={changedItem.has(lineKey(l)) ? 'wk-new' : undefined}
                 actions={[
                   {
                     label: 'Not mine',
@@ -1017,22 +1021,23 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className="wk-tick" />
                 </span>
                 <span className="wk-item-main">
-                  <span className="wk-item-name">{l.item}</span>
+                  <span className={`wk-item-name${moved ? ' chg' : ''}`}>{l.item}</span>
                   {(l.size || l.note) && (
                     <span className="wk-item-sub">{[l.size, l.note].filter(Boolean).join(' · ')}</span>
                   )}
                 </span>
-                <span className="wk-item-qty">
+                <span
+                  className={`wk-item-qty${moved ? ` ${moved}` : ''}`}
+                  title={change?.kind === 'changed' ? `was ${change.from}` : change?.kind === 'added' ? 'new in this version' : undefined}
+                >
                   {ps.state === 'partial' && ps.need !== null
                     ? `${ps.need - ps.packedQty} more`
                     : describeQty(parseQty(l.qty, l.item, l.size), l.item)}
                 </span>
               </ActionRow>
-              {(change || ps.state === 'partial' || ps.state === 'over' || whereIs(l.note)) && (
+              {(ps.state === 'partial' || ps.state === 'over' || whereIs(l.note)) && (
                 <div className="wk-match">
                   <div className="wk-match-line">
-                    {change?.kind === 'added' && <span className="wk-have ok">new</span>}
-                    {change?.kind === 'changed' && <span className="wk-have ok">was {change.from}</span>}
                     {ps.state === 'partial' && <span className="wk-have">{ps.packedQty} already packed</span>}
                     {ps.state === 'over' && ps.need !== null && (
                       <span className="wk-have out">

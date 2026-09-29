@@ -1640,8 +1640,10 @@ textarea {
 .wk-run strong { font-size: 14.5px; }
 
 /* new or changed in the latest version of the pack list */
-.arow.wk-new .arow-content { background: rgba(110, 231, 160, 0.09); }
-.arow.wk-new { box-shadow: inset 3px 0 0 #6ee7a0; }
+/* new or changed: same row, the text changes colour */
+.wk-item-name.chg { color: #6ee7a0; }
+.wk-item-qty.up { color: #6ee7a0; font-weight: 800; }
+.wk-item-qty.down { color: #f87171; font-weight: 800; }
 .wk-link-plain { background: none; border: none; padding: 0; font: inherit; cursor: pointer; text-align: left; }
 .wk-takeback { color: #f8a0a0; cursor: default; }
 
