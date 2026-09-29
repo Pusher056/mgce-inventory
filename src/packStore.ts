@@ -130,7 +130,7 @@ export async function moveEvent(fromWeek: string, eventKey: string, toWeek: stri
 /* ---------- lines ---------- */
 
 /** A line by name, or with the delivery it goes out with. */
-export type LineRef = string | { item: string; drop?: string }
+export type LineRef = string | { item: string; drop?: string; variant?: string }
 
 /**
  * What identifies a line within its event. Just the item for an everyday
@@ -140,8 +140,13 @@ export type LineRef = string | { item: string; drop?: string }
  */
 export function lineKey(r: LineRef): string {
   if (typeof r === 'string') return itemKey(r)
-  if (!r.drop) return itemKey(r.item)
-  return `${itemKey(r.item)}|${itemKey(r.drop)}`
+  let k = itemKey(r.item)
+  if (r.drop) k += `|${itemKey(r.drop)}`
+  // Coke in cans and Coke in 1.25L on the same list are two lines to pack.
+  // Only set when the event really has both — a lone "Coke / cans" keeps the
+  // plain key, so every tick made before this still finds its line.
+  if (r.variant) k += `#${r.variant}`
+  return k
 }
 export const lineId = (weekStart: string, eventKey: string, r: LineRef) => `${weekStart}|${eventKey}|${lineKey(r)}`
 

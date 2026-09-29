@@ -457,6 +457,8 @@ export interface PackImport {
     fills?: string[]
     /** The delivery it goes out with, when the event is split into several. */
     drop?: string
+    /** Set on screen when the same item comes in two presentations in one delivery. */
+    variant?: string
   }[]
   /**
    * The deliveries of a split event — one per pack list sheet, each with the

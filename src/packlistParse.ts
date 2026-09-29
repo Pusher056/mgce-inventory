@@ -26,6 +26,11 @@ export interface ParsedLine {
    * Coke on Day 3 go on different trucks and are packed separately.
    */
   drop?: string
+  /**
+   * Set by the packing screen, not the parser: the presentation ("cans",
+   * "1.25L") when the same item appears in two within one delivery.
+   */
+  variant?: string
 }
 
 /**
@@ -375,6 +380,7 @@ export interface LineChange {
   item: string
   section: string
   drop?: string
+  variant?: string
   from?: string
   to?: string
 }
@@ -382,19 +388,20 @@ export interface LineChange {
 /** What moved between the version he already has and the one that just arrived. */
 export function diffPackLists(before: ParsedLine[], after: ParsedLine[]): LineChange[] {
   // The delivery is part of a line's identity: Coke on Day 2 and Coke on Day 3 are two lines.
-  const key = (l: ParsedLine) => `${l.drop ?? ''}|${l.section}|${l.item}`.toLowerCase()
+  // Size too: "Coke / cans" and "Coke / 1.25L" in one section are two lines.
+  const key = (l: ParsedLine) => `${l.drop ?? ''}|${l.section}|${l.item}|${l.size ?? ''}`.toLowerCase()
   const b = new Map(before.map((l) => [key(l), l]))
   const a = new Map(after.map((l) => [key(l), l]))
   const changes: LineChange[] = []
 
   for (const [k, line] of a) {
     const old = b.get(k)
-    if (!old) changes.push({ kind: 'added', item: line.item, section: line.section, drop: line.drop, to: line.qty })
+    if (!old) changes.push({ kind: 'added', item: line.item, section: line.section, drop: line.drop, variant: line.variant, to: line.qty })
     else if (old.qty !== line.qty)
-      changes.push({ kind: 'changed', item: line.item, section: line.section, drop: line.drop, from: old.qty, to: line.qty })
+      changes.push({ kind: 'changed', item: line.item, section: line.section, drop: line.drop, variant: line.variant, from: old.qty, to: line.qty })
   }
   for (const [k, line] of b) {
-    if (!a.has(k)) changes.push({ kind: 'removed', item: line.item, section: line.section, drop: line.drop, from: line.qty })
+    if (!a.has(k)) changes.push({ kind: 'removed', item: line.item, section: line.section, drop: line.drop, variant: line.variant, from: line.qty })
   }
   return changes
 }

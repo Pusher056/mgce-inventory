@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists } from '../packlistParse'
 import { describeIce, describeQty, packageOf, parseIce, parseQty } from '../packUnits'
+import type { LineRef } from '../packStore'
 import { findMaybeSame, itemKey } from '../packMatch'
 import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, whereIs, type Ownership } from '../packOwner'
 import {
@@ -214,10 +215,66 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
       list.push(imp)
       map.set(imp.eventKey, list)
     }
-    return [...map.values()].map((list) => ({ latest: list[0], previous: list[1], versions: list.length }))
+    // Coke in cans and Coke in 1.25L within one delivery are two lines; mark
+    // each with its presentation so ticking one never ticks the other.
+    const withVariants = (imp: PackImport | undefined): PackImport | undefined => {
+      if (!imp) return imp
+      const count = new Map<string, Set<string>>()
+      for (const l of imp.lines) {
+        const k = lineKey({ item: l.item, drop: l.drop })
+        const set = count.get(k) ?? new Set<string>()
+        set.add(packageOf(l.size) || l.size.trim().toLowerCase())
+        count.set(k, set)
+      }
+      const shared = new Set([...count].filter(([, set]) => set.size > 1).map(([k]) => k))
+      if (shared.size === 0) return imp
+      return {
+        ...imp,
+        lines: imp.lines.map((l) =>
+          shared.has(lineKey({ item: l.item, drop: l.drop }))
+            ? { ...l, variant: packageOf(l.size) || l.size.trim().toLowerCase() || 'plain' }
+            : l,
+        ),
+      }
+    }
+    return [...map.values()].map((list) => ({
+      latest: withVariants(list[0]) as PackImport,
+      previous: withVariants(list[1]),
+      versions: list.length,
+    }))
   }, [imports])
 
   const rules = useMemo(() => ownerRules(aliases), [aliases])
+
+  /**
+   * Before presentations counted, Coke cans and Coke 1.25L shared one tick.
+   * That tick records how many went out, so it belongs to whichever of the
+   * two asks for exactly that many; if neither does, it is dropped — it was
+   * flipping between them and can't be trusted.
+   */
+  const migrated = useRef(new Set<string>())
+  useEffect(() => {
+    for (const g of groups) {
+      const byBase = new Map<string, Line[]>()
+      for (const l of g.latest.lines) {
+        if (!l.variant) continue
+        const base = lineId(weekStart, g.latest.eventKey, { item: l.item, drop: l.drop } as LineRef)
+        byBase.set(base, [...(byBase.get(base) ?? []), l])
+      }
+      for (const [base, siblings] of byBase) {
+        const old = packedById.get(base)
+        if (!old || migrated.current.has(base)) continue
+        migrated.current.add(base)
+        const owner = siblings.find((l) => parseQty(l.qty, l.item, l.size).base === old.qty)
+        void (async () => {
+          if (owner && !packedById.has(lineId(weekStart, g.latest.eventKey, owner))) {
+            await setPacked(weekStart, g.latest.eventKey, owner, true, old.qty ?? null)
+          }
+          await removeRows('packPacked', [base])
+        })()
+      }
+    }
+  }, [groups, packedById, weekStart])
 
   /**
    * Split an event's lines by whose they are. Not his by rule (kitchen, a
