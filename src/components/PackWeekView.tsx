@@ -643,6 +643,13 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     return iso ? shortDate(iso) : d.date
   }
 
+  /** "Beverage · 10-05" reads as a code; "Beverage · Mon, Oct 5" reads as a day. */
+  const dropTitle = (label: string) =>
+    label.replace(/(\d{1,2})[-/.](\d{1,2})$/, (m) => {
+      const iso = parseEventDate(m)
+      return iso ? shortDate(iso) : m
+    })
+
   /** When a delivery goes, as a sortable string. */
   const whenDrop = (d: { delivered: string; date: string; callTime: string }) => {
     const written = d.delivered.replace(/^DELIVERED\s*/i, '')
@@ -1542,7 +1549,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                           <button className="wk-drop-h" onClick={() => toggleOpen(id)}>
                             <span className="wk-caret">{isDropOpen ? '▾' : '▸'}</span>
                             <span className="wk-drop-main">
-                              <span className="wk-drop-name">{d.label}</span>
+                              <span className="wk-drop-name">{dropTitle(d.label)}</span>
                               {d.delivered ? (
                                 <span className="wk-delivered">{d.delivered}</span>
                               ) : (
