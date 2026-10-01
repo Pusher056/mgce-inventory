@@ -278,7 +278,7 @@ const titleCase = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.to
 const isPackSheet = (name: string) => /PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name) || /^PL\b/i.test(name)
 
 /** "PL-BEVERAGE - Day 2 Media" → "Beverage · Day 2 Media"; "PACKING LIST-GOODS" → "General · goods". */
-function dropLabel(sheet: string): string {
+export function dropLabel(sheet: string): string {
   const rest = sheet.replace(/^(PACKING LIST|PL)\s*[-–]\s*/i, '').trim()
   if (/^GOODS$/i.test(rest)) return 'General · goods'
   const [kind, ...tail] = rest.split(/\s+[-–]\s+/)

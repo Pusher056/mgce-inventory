@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
-import { diffPackLists } from '../packlistParse'
+import { diffPackLists, dropLabel } from '../packlistParse'
 import { describeIce, describeQty, packageOf, parseIce, parseQty } from '../packUnits'
 import type { LineRef } from '../packStore'
 import { findMaybeSame, itemKey } from '../packMatch'
@@ -987,6 +987,23 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         // Deliveries in the order they go out: the red line's date and time,
         // then — when a sheet has none — its date and call time.
         const sortedDrops = [...drops].sort((a, b) => whenDrop(a).localeCompare(whenDrop(b)))
+        // Every event is shown in sections. A split event has its deliveries;
+        // any other has the sheets of its pack list — General · goods,
+        // Beverage — in the order the file has them.
+        const split = drops.length > 1
+        const sectionOf = (l: Line) => (split ? (l.drop ?? '') : (l.sheet ?? ''))
+        const sheetOrder = [...new Set(g.latest.lines.map((l) => l.sheet ?? ''))]
+        const sections = split
+          ? sortedDrops
+          : sheetOrder.map((sh) => ({
+              key: sh,
+              label: sh ? dropLabel(sh) : 'Pack list',
+              delivered: '',
+              date: '',
+              eventTime: '',
+              callTime: '',
+              guestCount: '',
+            }))
         const multiDay = days.length > 1
         // A day with more than one trip needs the day layout even on its own.
         const byDay = multiDay || (days[0]?.runs.length ?? 0) > 1
@@ -1536,9 +1553,16 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 )}
 
                 {allDone && <div className="wk-alldone">✓ {g.latest.eventName} — everything packed</div>}
-                {drops.length > 1
-                  ? sortedDrops.map((d) => {
-                      const dl = live.filter((l) => l.drop === d.key)
+                {g.latest.lines.length === 0 && (
+                  // An early version with the item list printed but no numbers
+                  // in it yet — say so, or an empty event reads as a failed read.
+                  <div className="wk-empty-ev">
+                    No quantities filled in yet ({g.latest.filename}). Nothing to pack until the planner
+                    sends a version with numbers.
+                  </div>
+                )}
+                {sections.map((d) => {
+                      const dl = live.filter((l) => sectionOf(l) === d.key)
                       if (dl.length === 0) return null
                       const dOpen = dl.filter((l) => !isPacked(l))
                       const dDone = dl.filter(isPacked)
@@ -1553,9 +1577,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                               {d.delivered ? (
                                 <span className="wk-delivered">{d.delivered}</span>
                               ) : (
-                                <span className="wk-delivered missing">
-                                  no delivery time written{d.callTime ? ` · call ${d.callTime}` : ''}
-                                </span>
+                                split && (
+                                  <span className="wk-delivered missing">
+                                    no delivery time written{d.callTime ? ` · call ${d.callTime}` : ''}
+                                  </span>
+                                )
                               )}
                               <span className="wk-drop-sub">
                                 {[d.eventTime, /^\d/.test(d.guestCount) && `${d.guestCount} guests`].filter(Boolean).join(' · ')}
@@ -1580,10 +1606,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                           )}
                         </div>
                       )
-                    })
-                  : openKnown.map((l, i) => lineRow(l, i))}
+                    })}
 
-                {drops.length <= 1 && doneLines.length > 0 && (
+                {sections.length === 0 && doneLines.length > 0 && (
                   <>
                     <button className="wk-fold" onClick={() => toggleOpen(`${key}#done`)}>
                       ✓ Already packed ({doneLines.length}) {open.has(`${key}#done`) ? '▾' : '▸'}

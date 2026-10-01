@@ -832,6 +832,9 @@ const PULL_LIMIT = 5000
  */
 const LATER_PRODUCT_FIELDS = ['storage', 'contents'] as const satisfies readonly (keyof Product)[]
 
+/** Same, for pack lists: every field added to them after the first version goes here. */
+const LATER_IMPORT_FIELDS = ['days', 'drops', 'legend', 'updatedAt'] as const satisfies readonly (keyof PackImport)[]
+
 /** Deletes made with no signal: keep retrying until the server confirms them. */
 async function retryPendingDeletes() {
   const all = await db.tombstones.toArray()
@@ -1058,8 +1061,18 @@ export async function pullFromServer() {
       )
     }
     if (pImports.data?.length) {
+      // A phone that pulled a pack list before it knew about days or
+      // deliveries holds a copy without them, and the copy is not older than
+      // the server's — just incomplete. Take the server's again whenever a
+      // field added later is missing here, or it stays one flat list forever.
+      const localImports = await held<PackImport>(db.packImports, pImports.data)
+      const incomplete = (r: { id: string }) => {
+        const mine = localImports.get(r.id)
+        return !!mine && LATER_IMPORT_FIELDS.some((f) => mine[f] === undefined)
+      }
+      const fresh = new Set(newer(pImports.data, localImports).map((r) => r.id))
       await db.packImports.bulkPut(
-        newer(pImports.data, await held<PackImport>(db.packImports, pImports.data)).map((r) => ({
+        pImports.data.filter((r) => !skip(r.id) && (fresh.has(r.id) || incomplete(r))).map((r) => ({
           id: r.id,
           eventKey: r.event_key,
           weekStart: r.week_start ?? '',
