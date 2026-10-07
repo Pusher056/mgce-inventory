@@ -74,6 +74,10 @@ export function parseQty(raw: string, item: string, size = ''): Qty {
   // bottles, not 48 cases, because that is how they write it when they mean it.
   if (rule && !written) return { raw: text, base: n, baseUnit, writtenUnit: '', unclear: false }
 
+  // "96 (4 cases)": the number in front is the count, the brackets explain it.
+  if (written && /^\s*\d[\d,]*(?:\.\d+)?\s*\(/.test(text)) {
+    return { raw: text, base: n, baseUnit, writtenUnit: '', unclear: false }
+  }
   return { raw: text, base: written ? null : n, baseUnit: written ? '' : baseUnit, writtenUnit: written, unclear: false }
 }
 

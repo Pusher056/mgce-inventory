@@ -244,37 +244,67 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     }))
   }, [imports])
 
-  const rules = useMemo(() => ownerRules(aliases), [aliases])
+  const rules = useMemo(
+    () => ownerRules(aliases, (imports ?? []).map((i) => i.planner)),
+    [aliases, imports],
+  )
 
   /**
-   * Before presentations counted, Coke cans and Coke 1.25L shared one tick.
-   * That tick records how many went out, so it belongs to whichever of the
-   * two asks for exactly that many; if neither does, it is dropped — it was
-   * flipping between them and can't be trusted.
+   * A line's identity grows when the app learns more about its file: the
+   * delivery once an event is split by day, the presentation once Coke comes
+   * in cans and 1.25L. Ticks and decisions made under the old, shorter
+   * identity are carried over instead of being left behind:
+   *  - "not mine", "removed", "only have" apply to the item, so every line
+   *    that shared the old identity gets them;
+   *  - a tick records how many went out, so it goes to the one line that asks
+   *    for exactly that many — or is dropped when none does, because it was
+   *    flipping between them and can't be trusted.
    */
   const migrated = useRef(new Set<string>())
   useEffect(() => {
     for (const g of groups) {
-      const byBase = new Map<string, Line[]>()
+      const ev = g.latest.eventKey
+      const byOld = new Map<string, Line[]>()
       for (const l of g.latest.lines) {
-        if (!l.variant) continue
-        const base = lineId(weekStart, g.latest.eventKey, { item: l.item, drop: l.drop } as LineRef)
-        byBase.set(base, [...(byBase.get(base) ?? []), l])
+        const now = lineId(weekStart, ev, l)
+        const older = [
+          lineId(weekStart, ev, { item: l.item } as LineRef),
+          lineId(weekStart, ev, { item: l.item, drop: l.drop } as LineRef),
+        ]
+        for (const old of new Set(older)) {
+          if (old === now) continue
+          byOld.set(old, [...(byOld.get(old) ?? []), l])
+        }
       }
-      for (const [base, siblings] of byBase) {
-        const old = packedById.get(base)
-        if (!old || migrated.current.has(base)) continue
-        migrated.current.add(base)
-        const owner = siblings.find((l) => parseQty(l.qty, l.item, l.size).base === old.qty)
+      for (const [old, heirs] of byOld) {
+        if (migrated.current.has(old)) continue
+        const tick = packedById.get(old)
+        const state = stateById.get(old)
+        if (!tick && !state) continue
+        migrated.current.add(old)
         void (async () => {
-          if (owner && !packedById.has(lineId(weekStart, g.latest.eventKey, owner))) {
-            await setPacked(weekStart, g.latest.eventKey, owner, true, old.qty ?? null)
+          if (state) {
+            for (const l of heirs) {
+              if (stateById.has(lineId(weekStart, ev, l))) continue
+              await setLineState(weekStart, ev, l, {
+                status: state.status,
+                productId: state.productId,
+                onlyHave: state.onlyHave ?? null,
+              })
+            }
+            await removeRows('packLineStates', [old])
           }
-          await removeRows('packPacked', [base])
+          if (tick) {
+            const owner = heirs.find((l) => parseQty(l.qty, l.item, l.size).base === tick.qty)
+            if (owner && !packedById.has(lineId(weekStart, ev, owner))) {
+              await setPacked(weekStart, ev, owner, true, tick.qty ?? null)
+            }
+            await removeRows('packPacked', [old])
+          }
         })()
       }
     }
-  }, [groups, packedById, weekStart])
+  }, [groups, packedById, stateById, weekStart])
 
   /**
    * Split an event's lines by whose they are. Not his by rule (kitchen, a
@@ -645,10 +675,21 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
   /** "Beverage · 10-05" reads as a code; "Beverage · Mon, Oct 5" reads as a day. */
   const dropTitle = (label: string) =>
-    label.replace(/(\d{1,2})[-/.](\d{1,2})$/, (m) => {
+    label.replace(/^(\d{1,2})[-/.](\d{1,2})(?=\s·)|(\d{1,2})[-/.](\d{1,2})$/, (m) => {
       const iso = parseEventDate(m)
       return iso ? shortDate(iso) : m
     })
+
+  /**
+   * Ice by the delivery: "6 tins | 6 tins" at "6-7am | 10-11am" is two drops
+   * of ice, paired like the kitchen trips. One drop stays one line.
+   */
+  const iceText = (needs: string, time: string) => {
+    const n = needs.split(/\s*\|\s*/).filter(Boolean)
+    const t = time.split(/\s*\|\s*/).filter(Boolean)
+    if (n.length < 2 && t.length < 2) return describeIce(parseIce(needs))
+    return n.map((x, i) => `${describeIce(parseIce(x))}${t[i] ? ` at ${t[i]}` : ''}`).join(' · ')
+  }
 
   /** When a delivery goes, as a sortable string. */
   const whenDrop = (d: { delivered: string; date: string; callTime: string }) => {
@@ -981,7 +1022,6 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         const shortHere = shorts.filter((s) => s.key.startsWith(`${weekStart}|${key}|`)).length
         const allDone = live.length > 0 && openKnown.length === 0
         const isOpen = open.has(key)
-        const ice = parseIce(g.latest.iceNeeds)
         const days = g.latest.days ?? []
         const drops = g.latest.drops ?? []
         // Deliveries in the order they go out: the red line's date and time,
@@ -1004,9 +1044,18 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
               callTime: '',
               guestCount: '',
             }))
-        const multiDay = days.length > 1
+        // The event's span: MO days and dated pack lists together — Amazon's
+        // set-up day has a pack list but no MO.
+        const spanDates = [
+          ...new Set(
+            [...days.map((d) => d.date), ...drops.map((d) => d.date)]
+              .map((x) => parseEventDate(x))
+              .filter((x): x is string => !!x),
+          ),
+        ].sort()
+        const multiDay = spanDates.length > 1
         // A day with more than one trip needs the day layout even on its own.
-        const byDay = multiDay || (days[0]?.runs.length ?? 0) > 1
+        const byDay = days.length > 1 || (days[0]?.runs.length ?? 0) > 1
         // Only what changed on his side of the list; kitchen changes are the kitchen's.
         const changes = (g.previous ? diffPackLists(g.previous.lines, g.latest.lines) : []).filter((c) => {
           const src = [...g.latest.lines, ...(g.previous?.lines ?? [])].find(
@@ -1314,9 +1363,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span className="wk-ev-name">{g.latest.eventName}</span>
                   <span className="wk-ev-when">
                     {multiDay
-                      ? `${dayDate(days[0])} – ${dayDate(days[days.length - 1])} · ${
-                          new Set(days.map((d) => parseEventDate(d.date) ?? d.date)).size
-                        } days`
+                      ? `${shortDate(spanDates[0])} – ${shortDate(spanDates[spanDates.length - 1])} · ${spanDates.length} days`
                       : [g.latest.eventIso ? prettyDate(g.latest.eventIso) : g.latest.eventDate, g.latest.eventTime]
                           .filter(Boolean)
                           .join(' · ')}
@@ -1459,10 +1506,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                         </div>
                       )}
                       <div className="wk-dl" style={{ marginTop: 8 }}>
-                        <span>Ice needs</span>
-                        <span>{describeIce(parseIce(d.iceNeeds))}</span>
-                        <span>Est. ice delivery</span>
-                        <span>{d.iceDeliveryTime || '—'}</span>
+                        <span>Ice</span>
+                        <span>{d.iceNeeds ? iceText(d.iceNeeds, d.iceDeliveryTime) : '—'}</span>
                       </div>
                       {d.specialNotes && (
                         <div className="wk-notes">
@@ -1485,10 +1530,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span>{g.latest.kitchenPickup || '—'}</span>
                   <span>Est. drop off</span>
                   <span>{g.latest.kitchenDelivery || '—'}</span>
-                  <span>Ice needs</span>
-                  <span>{describeIce(ice)}</span>
-                  <span>Est. ice delivery</span>
-                  <span>{g.latest.iceDeliveryTime || '—'}</span>
+                  <span>Ice</span>
+                  <span>{g.latest.iceNeeds ? iceText(g.latest.iceNeeds, g.latest.iceDeliveryTime) : '—'}</span>
                   {g.latest.eventTime && (
                     <>
                       <span>Event time</span>
@@ -1579,7 +1622,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                               ) : (
                                 split && (
                                   <span className="wk-delivered missing">
-                                    no delivery time written{d.callTime ? ` · call ${d.callTime}` : ''}
+                                    no delivery time written
+                                    {/\d\s*(am|pm|a|p)|\d:\d\d/i.test(d.callTime) ? ` · call ${d.callTime}` : ''}
                                   </span>
                                 )
                               )}

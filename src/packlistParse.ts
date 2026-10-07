@@ -120,6 +120,8 @@ function readHeader(rows: string[][]): Record<string, string> {
       // the value is the next non-empty cell to the right
       for (let k = c + 1; k < Math.min(c + 4, row.length); k++) {
         const v = clean(row[k])
+        // Reached the next label ("ADDITIONAL NOTES:") — this one was left blank.
+        if (v.endsWith(':')) break
         if (v && v !== '0') {
           if (!found[key]) found[key] = v
           break
@@ -258,7 +260,7 @@ function dayPlan(sheetName: string, rows: string[][], index: number): DayPlan {
   const h = readHeader(rows)
   const numbered = /DAY\s*(\d+)/i.exec(sheetName)?.[0]?.replace(/\s+/g, ' ')
   // "MO-FOOD - RECEPTION" is its own service, not the next day's number.
-  const named = sheetName.replace(/^MO[-\s]*(FOOD)?[\s-]*/i, '').trim()
+  const named = withoutDate(sheetName).replace(/^MO[-\s]*(FOOD)?[\s-]*/i, '').trim()
   const label = numbered ?? (named ? titleCase(named) : `Day ${index + 1}`)
   return {
     label: label.replace(/^day/i, 'Day'),
@@ -278,8 +280,17 @@ const titleCase = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.to
 const isPackSheet = (name: string) => /PACKING|OFFICE|KITCHEN|DISPOSABLE|STORAGE/i.test(name) || /^PL\b/i.test(name)
 
 /** "PL-BEVERAGE - Day 2 Media" → "Beverage · Day 2 Media"; "PACKING LIST-GOODS" → "General · goods". */
+/** "10.13 PACKING LIST-GOODS" → "10.13"; no date in front → ''. */
+export function sheetDate(sheet: string): string {
+  return /^(\d{1,2}[./-]\d{1,2})\s+/.exec(sheet.trim())?.[1] ?? ''
+}
+const withoutDate = (sheet: string) => sheet.trim().replace(/^\d{1,2}[./-]\d{1,2}\s+/, '')
+
 export function dropLabel(sheet: string): string {
-  const rest = sheet.replace(/^(PACKING LIST|PL)\s*[-–]\s*/i, '').trim()
+  // Kept on the label so the screen can turn it into a day ("Tue, Oct 13").
+  const date = sheetDate(sheet)
+  const rest = withoutDate(sheet).replace(/^(PACKING LIST|PL)\s*[-–]\s*/i, '').trim()
+  if (date) return `${date} · ${/^GOODS$/i.test(rest) ? 'General · goods' : titleCase(rest)}`
   if (/^GOODS$/i.test(rest)) return 'General · goods'
   const [kind, ...tail] = rest.split(/\s+[-–]\s+/)
   const k = titleCase(kind)
@@ -324,7 +335,7 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     if (!specialNotes) specialNotes = readSpecialNotes(rows)
     // Each food MO is a day: the one-day template has one, a three-day event
     // three. The beverage MO shares the event's times and adds no day.
-    if (/^MO\b/i.test(name) && !/BEVERAGE/i.test(name)) days.push(dayPlan(name, rows, days.length))
+    if (/^MO\b/i.test(withoutDate(name)) && !/BEVERAGE/i.test(name)) days.push(dayPlan(name, rows, days.length))
     const top = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref'] as string).s : { r: 0, c: 0 }
     const fillAt = (row: number, col: number): string | null => {
       const cell = sheet[XLSX.utils.encode_cell({ r: top.r + row, c: top.c + col })] as
@@ -372,7 +383,11 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
 }
 
 function splitIntoDrops(drops: Drop[]): boolean {
-  return drops.length > 1 && drops.some((d) => /^PL\b/i.test(d.key) || d.delivered)
+  if (drops.length < 2) return false
+  if (drops.some((d) => /^PL\b/i.test(d.key) || d.delivered)) return true
+  // "10.13 PACKING LIST-GOODS", "10.14 PACKING LIST-BEVERAGE": a pack list
+  // per day is a multi-day event, and is packed day by day.
+  return new Set(drops.map((d) => sheetDate(d.key)).filter(Boolean)).size > 1
 }
 
 export interface LineChange {

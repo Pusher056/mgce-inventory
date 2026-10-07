@@ -102,9 +102,25 @@ export const sectionRuleKey = (section: string) => `§${section.trim().toUpperCa
 export interface OwnerRules {
   items: Map<string, 'mine' | 'notMine'>
   sections: Map<string, Whose>
+  /** Planner and creative initials: the known ones plus every planner named on a file. */
+  initials: RegExp
 }
 
-export function ownerRules(aliases: ItemAlias[]): OwnerRules {
+/**
+ * "Brette Wayne 516-459-1252" → BW. Every pack list names its planner, so the
+ * initials she signs lines with are learned from the files themselves — a new
+ * planner doesn't need anyone to tell the app about her.
+ */
+export function initialsOf(planner: string): string[] {
+  return String(planner ?? '')
+    .replace(/[\d()+.-]{4,}.*$/, '')
+    .split(/\s*(?:&|\/|,|\band\b)\s*/i)
+    .map((p) => p.trim().split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)))
+    .filter((w) => w.length >= 2)
+    .map((w) => (w[0][0] + w[w.length - 1][0]).toUpperCase())
+}
+
+export function ownerRules(aliases: ItemAlias[], planners: string[] = []): OwnerRules {
   const items = new Map<string, 'mine' | 'notMine'>()
   const sections = new Map<string, Whose>()
   for (const a of aliases) {
@@ -112,8 +128,29 @@ export function ownerRules(aliases: ItemAlias[]): OwnerRules {
     if (a.alias.startsWith('§')) sections.set(a.alias, a.kind)
     else if (a.kind !== 'ask') items.set(itemKey(a.alias), a.kind)
   }
-  return { items, sections }
+  // A planner field that holds a label ("ADDITIONAL NOTES:") is a misread, not a person.
+  const all = new Set([...PLANNER_INITIALS, ...planners.filter((p) => !p.includes(':')).flatMap(initialsOf)])
+  // Never his own: Fabio Gonzalez would be FG.
+  all.delete('FG')
+  // Ilana Schackman signs IS — also a word, and notes are often in capitals
+  // ("THIS IS FOR THE GREENROOM"). Initials that spell a word only count when
+  // they sign something: "IS to pack", "IS ordered", "(IS)", or on their own.
+  const plain = [...all].filter((x) => !WORDLIKE.has(x))
+  const wordy = [...all].filter((x) => WORDLIKE.has(x))
+  const parts = [`\\b(${plain.join('|')})\\b`]
+  if (wordy.length) {
+    const w = wordy.join('|')
+    parts.push(
+      `\\b(${w})(?=\\s+(?:to|will|ordered|bought|has|handles|packs|is bringing)\\b)`,
+      `\\((${w})\\)`,
+      `^\\s*(${w})\\s*$`,
+    )
+  }
+  return { items, sections, initials: new RegExp(parts.join('|')) }
 }
+
+/** Two-letter words that are also somebody's initials. */
+const WORDLIKE = new Set(['IS', 'AN', 'AS', 'AT', 'IN', 'IT', 'ON', 'OR', 'TO', 'NO', 'OF', 'BY', 'IF', 'ME', 'MY', 'UP', 'US', 'WE', 'BE', 'DO', 'GO', 'HE', 'SO', 'AM', 'PM', 'NA', 'OK'])
 
 /** Would the built-in rules know this section without asking him? */
 export function sectionIsKnown(section: string, sheet = ''): boolean {
@@ -136,8 +173,19 @@ export function ownerOf(
   }
   const where = whereIs(line.note ?? '')
   if (where) return { whose: 'mine', why: where, source: 'note' }
-  const initials = INITIALS_RX.exec(text)
-  if (initials) return { whose: 'notMine', why: `${initials[1]} handles it`, source: 'note' }
+  // The regex has a group per way of signing; whichever matched holds the initials.
+  const rx = rules.initials ?? INITIALS_RX
+  // The note on its own as well: "IS" alone in the notes column is a signature.
+  const hit = rx.exec(text) ?? rx.exec((line.note ?? '').trim())
+  const initials = hit ? [hit[0], hit.slice(1).find(Boolean) ?? hit[0]] : null
+  if (initials) {
+    // "BW ordered": she bought it and it is hers to bring. He marked Amazon's
+    // "BW ordered" lines not-his by hand, so that is the rule.
+    if (/\b(ordered|ordering|bought|purchased)\b/i.test(line.note ?? '')) {
+      return { whose: 'notMine', why: `${initials[1]} ordered it`, source: 'note' }
+    }
+    return { whose: 'notMine', why: `${initials[1]} handles it`, source: 'note' }
+  }
 
   const doer = SOMEONE_DOES_IT.exec(`${line.note ?? ''} ${line.item}`)
   if (doer && !NOT_A_PERSON.has(doer[1].toLowerCase())) {
