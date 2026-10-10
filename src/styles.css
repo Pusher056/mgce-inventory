@@ -1682,3 +1682,30 @@ textarea {
 .wk-drop.done .wk-drop-name { color: var(--muted); }
 
 .wk-empty-ev { padding: 14px 16px; border-top: 1px solid var(--bg3); color: var(--amber, #fbbf24); font-size: 13px; line-height: 1.5; }
+
+/* where the event is */
+.wk-where { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--bg3); }
+.wk-addr { color: var(--accent); text-decoration: none; }
+.wk-addr:hover { text-decoration: underline; }
+
+/* the original workbook, as sent */
+.sheet.sv { max-width: 1100px; height: 92dvh; display: flex; flex-direction: column; gap: 10px; }
+.sv-head { display: flex; gap: 8px; align-items: center; }
+.sv-title { flex: 1; min-width: 0; font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; flex: none; }
+.sv-tab {
+  flex: none;
+  border: 1px solid var(--bg3);
+  background: none;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sv-tab.on { border-color: var(--accent); color: var(--accent); }
+.sv-grid { flex: 1; overflow: auto; border: 1px solid var(--bg3); border-radius: 10px; background: #fff; }
+.sv-grid table { border-collapse: collapse; font-size: 12px; color: #111; }
+.sv-grid td { border: 1px solid #d4d4d8; padding: 3px 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }

@@ -279,6 +279,9 @@ function packImportToRow(i: PackImport) {
     event_iso: i.eventIso,
     event_time: i.eventTime,
     venue: i.venue,
+    address: i.address ?? '',
+    service_entrance: i.serviceEntrance ?? '',
+    onsite_contact: i.onsiteContact ?? '',
     planner: i.planner,
     guest_count: i.guestCount,
     ice_needs: i.iceNeeds,
@@ -319,7 +322,7 @@ function itemAliasToRow(a: ItemAlias) {
 function packFileToRow(f: PackFile) {
   return {
     id: f.id, week_start: f.weekStart, event_key: f.eventKey, filename: f.filename, kind: f.kind,
-    path: f.path, added_at: iso(f.addedAt), updated_at: iso(f.updatedAt),
+    import_id: f.importId ?? null, path: f.path, added_at: iso(f.addedAt), updated_at: iso(f.updatedAt),
   }
 }
 
@@ -833,7 +836,15 @@ const PULL_LIMIT = 5000
 const LATER_PRODUCT_FIELDS = ['storage', 'contents'] as const satisfies readonly (keyof Product)[]
 
 /** Same, for pack lists: every field added to them after the first version goes here. */
-const LATER_IMPORT_FIELDS = ['days', 'drops', 'legend', 'updatedAt'] as const satisfies readonly (keyof PackImport)[]
+const LATER_IMPORT_FIELDS = [
+  'days',
+  'drops',
+  'legend',
+  'updatedAt',
+  'address',
+  'serviceEntrance',
+  'onsiteContact',
+] as const satisfies readonly (keyof PackImport)[]
 
 /** Deletes made with no signal: keep retrying until the server confirms them. */
 async function retryPendingDeletes() {
@@ -1082,6 +1093,9 @@ export async function pullFromServer() {
           eventIso: r.event_iso ?? '',
           eventTime: r.event_time ?? '',
           venue: r.venue ?? '',
+          address: r.address ?? '',
+          serviceEntrance: r.service_entrance ?? '',
+          onsiteContact: r.onsite_contact ?? '',
           planner: r.planner ?? '',
           guestCount: r.guest_count ?? '',
           iceNeeds: r.ice_needs ?? '',
@@ -1151,7 +1165,8 @@ export async function pullFromServer() {
             weekStart: r.week_start ?? '',
             eventKey: r.event_key ?? '',
             filename: r.filename ?? '',
-            kind: (r.kind === 'pdf' ? 'pdf' : 'photo') as PackFile['kind'],
+            kind: (r.kind === 'pdf' || r.kind === 'sheet' ? r.kind : 'photo') as PackFile['kind'],
+            importId: r.import_id ?? undefined,
             // The bytes never come down with the row; keep them if we have them.
             blob: mine?.blob,
             path: r.path ?? null,

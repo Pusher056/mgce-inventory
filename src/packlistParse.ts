@@ -75,6 +75,7 @@ export interface ParsedPackList {
   eventDate: string
   venue: string
   address: string
+  serviceEntrance: string
   guestCount: string
   onsiteContact: string
   planner: string
@@ -320,6 +321,10 @@ function readDrop(sheet: string, rows: string[][]): Drop {
 
 export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): ParsedPackList {
   const header: Record<string, string> = {}
+  // The MO header carries two places side by side — their kitchen (Storied,
+  // 547 W 26th St) and then the event's. The pack list's header has only the
+  // event's, so the place comes from there.
+  let packHeader: Record<string, string> | null = null
   const lines: ParsedLine[] = []
   let specialNotes = ''
   const days: DayPlan[] = []
@@ -348,6 +353,7 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     }
     // The MO and STAFF sheets are the menu and the staffing plan, not packing.
     if (isPackSheet(name)) {
+      if (!packHeader) packHeader = readHeader(rows)
       const got = readLines(rows, name, fillAt)
       drops.push(readDrop(name, rows))
       for (const l of got) l.drop = name
@@ -366,10 +372,11 @@ export function parsePackList(wb: WorkBook, XLSX: typeof import('xlsx')): Parsed
     drops: splitIntoDrops(drops) ? drops : [],
     eventName: pick(header, 'EVENT NAME'),
     eventDate: pick(header, 'EVENT DAY/DATE', 'EVENT DATE'),
-    venue: pick(header, 'LOCATION'),
-    address: pick(header, 'ADDRESS'),
+    venue: pick(packHeader ?? {}, 'LOCATION') || pick(header, 'LOCATION'),
+    address: pick(packHeader ?? {}, 'ADDRESS') || pick(header, 'ADDRESS'),
+    serviceEntrance: pick(packHeader ?? {}, 'SERVICE ENTRANCE') || pick(header, 'SERVICE ENTRANCE'),
     guestCount: pick(header, 'GUEST COUNT'),
-    onsiteContact: pick(header, 'ONSITE CONTACT'),
+    onsiteContact: pick(packHeader ?? {}, 'ONSITE CONTACT') || pick(header, 'ONSITE CONTACT'),
     planner: pick(header, 'PLANNER'),
     callTime: pick(header, 'CALL TIME'),
     eventTime: pick(header, 'EVENT TIME'),

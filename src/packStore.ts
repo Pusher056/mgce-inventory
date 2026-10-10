@@ -98,6 +98,11 @@ async function eventRows(weekStart: string, eventKey: string) {
 /** Every version of an event, and what was packed or decided for it. */
 export async function deleteEvent(weekStart: string, eventKey: string) {
   const { imports, packed, states } = await eventRows(weekStart, eventKey)
+  // The kept workbooks go with the event they belong to.
+  const ids = new Set(imports.map((i) => i.id))
+  await deleteFiles(
+    await db.packFiles.filter((f) => f.kind === 'sheet' && (ids.has(f.importId ?? '') || (f.weekStart === weekStart && f.eventKey === eventKey))).toArray(),
+  )
   await removeRows('packImports', imports.map((i) => i.id))
   await removeRows('packPacked', packed.map((p) => p.id))
   await removeRows('packLineStates', states.map((s) => s.id))
@@ -105,6 +110,7 @@ export async function deleteEvent(weekStart: string, eventKey: string) {
 
 /** Drop the newest version only — the one before it becomes current again. */
 export async function undoVersion(importId: string) {
+  await deleteFiles(await db.packFiles.filter((f) => f.kind === 'sheet' && f.importId === importId).toArray())
   await removeRows('packImports', [importId])
 }
 
@@ -256,11 +262,18 @@ export async function undoPair(id: string) {
 
 /* ---------- files ---------- */
 
-export async function addFile(file: File, kind: PackFile['kind'], weekStart: string) {
+export async function addFile(
+  file: File,
+  kind: PackFile['kind'],
+  weekStart: string,
+  eventKey = '',
+  importId?: string,
+) {
   await putRow('packFiles', {
     id: uuid(),
     weekStart,
-    eventKey: '',
+    eventKey,
+    importId,
     filename: file.name,
     kind,
     blob: file,

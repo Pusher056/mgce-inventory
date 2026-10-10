@@ -419,6 +419,10 @@ export interface PackImport {
   eventIso: string
   eventTime: string
   venue: string
+  /** Where the event is — off the pack list header, not the MO's kitchen column. */
+  address?: string
+  serviceEntrance?: string
+  onsiteContact?: string
   planner: string
   guestCount: string
   iceNeeds: string
@@ -524,7 +528,10 @@ export interface PackFile {
   weekStart: string
   eventKey: string
   filename: string
-  kind: 'photo' | 'pdf'
+  /** 'sheet': the pack list workbook itself, kept so it can be opened again. */
+  kind: 'photo' | 'pdf' | 'sheet'
+  /** The pack list version a kept workbook belongs to. */
+  importId?: string
   /** Here on the device that added it, or after the first open elsewhere. */
   blob?: Blob
   /** Where it sits in storage once uploaded. */

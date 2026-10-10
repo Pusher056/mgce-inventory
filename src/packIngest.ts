@@ -64,6 +64,9 @@ function toImport(
     eventIso: iso,
     eventTime: parsed.eventTime,
     venue: parsed.venue,
+    address: parsed.address,
+    serviceEntrance: parsed.serviceEntrance,
+    onsiteContact: parsed.onsiteContact,
     planner: parsed.planner,
     guestCount: parsed.guestCount,
     iceNeeds: parsed.iceNeeds,
@@ -117,7 +120,10 @@ export async function ingestFiles(files: File[], weekStart: string): Promise<Ing
       report.problems.push(`${meta.filename}: no event and no items found`)
       return
     }
-    await store(toImport(parsed, meta))
+    const rec = toImport(parsed, meta)
+    await store(rec)
+    // The workbook itself, so "View pack list" can open exactly what was sent.
+    await addFile(new File([new Uint8Array(bytes)], meta.filename), 'sheet', rec.weekStart, rec.eventKey, rec.id)
   }
 
   for (const file of files) {

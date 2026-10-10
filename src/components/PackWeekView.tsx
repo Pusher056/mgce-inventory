@@ -51,6 +51,7 @@ import {
 } from '../packStore'
 import { totalBottles, type PackFile, type PackImport, type Storage } from '../types'
 import ActionRow, { inTapZone } from './ActionRow'
+import SheetViewer from './SheetViewer'
 
 const ACCEPT_BOOK =
   '.xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -115,6 +116,10 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   const packed = useLiveQuery(() => db.packPacked.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const states = useLiveQuery(() => db.packLineStates.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const files = useLiveQuery(() => db.packFiles.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
+  // The workbooks themselves are kept for "View pack list", not listed with the photos.
+  const pictures = files.filter((f) => f.kind !== 'sheet')
+  const [viewing, setViewing] = useState<{ blob: Blob; filename: string } | null>(null)
+  const [viewError, setViewError] = useState<string | null>(null)
   const products = useLiveQuery(() => db.products.toArray(), []) ?? []
   const entries = useLiveQuery(() => db.entries.toArray(), []) ?? []
   const aliases = useLiveQuery(() => db.itemAliases.toArray(), []) ?? []
@@ -684,11 +689,98 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
    * Ice by the delivery: "6 tins | 6 tins" at "6-7am | 10-11am" is two drops
    * of ice, paired like the kitchen trips. One drop stays one line.
    */
-  const iceText = (needs: string, time: string) => {
+  const iceRows = (needs: string, time: string) => {
     const n = needs.split(/\s*\|\s*/).filter(Boolean)
     const t = time.split(/\s*\|\s*/).filter(Boolean)
-    if (n.length < 2 && t.length < 2) return describeIce(parseIce(needs))
-    return n.map((x, i) => `${describeIce(parseIce(x))}${t[i] ? ` at ${t[i]}` : ''}`).join(' · ')
+    if (n.length > 1 || t.length > 1) {
+      return (
+        <>
+          <span>Ice</span>
+          <span>{n.map((x, i) => `${describeIce(parseIce(x))}${t[i] ? ` at ${t[i]}` : ''}`).join(' · ')}</span>
+        </>
+      )
+    }
+    // One drop of ice: what and when, each on its own line, as on the MO.
+    return (
+      <>
+        <span>Ice needs</span>
+        <span>{needs ? describeIce(parseIce(needs)) : '—'}</span>
+        <span>Est. ice delivery</span>
+        <span>{time || '—'}</span>
+      </>
+    )
+  }
+
+  /** Where the event is: venue, address (opens maps), entrance and who to ask for. */
+  const whereRows = (imp: PackImport) => {
+    const phone = /(\+?1?[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/.exec(imp.onsiteContact ?? '')?.[1]
+    return (
+      <>
+        {imp.venue && (
+          <>
+            <span>Venue</span>
+            <span>{imp.venue}</span>
+          </>
+        )}
+        {imp.address && (
+          <>
+            <span>Address</span>
+            <span>
+              <a
+                className="wk-addr"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(imp.address)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                📍 {imp.address}
+              </a>
+            </span>
+          </>
+        )}
+        {imp.serviceEntrance && (
+          <>
+            <span>Service entrance</span>
+            <span>{imp.serviceEntrance}</span>
+          </>
+        )}
+        {imp.onsiteContact && (
+          <>
+            <span>Onsite contact</span>
+            <span>
+              {imp.onsiteContact}
+              {phone && (
+                <>
+                  {' '}
+                  <a className="wk-link" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+                    call
+                  </a>
+                </>
+              )}
+            </span>
+          </>
+        )}
+      </>
+    )
+  }
+
+  /** The workbook this version came from, if it was kept. */
+  const originalOf = (imp: PackImport) =>
+    files.find((f) => f.kind === 'sheet' && f.importId === imp.id) ??
+    files.find((f) => f.kind === 'sheet' && f.eventKey === imp.eventKey && f.filename === imp.filename)
+
+  async function viewOriginal(imp: PackImport) {
+    setViewError(null)
+    const f = originalOf(imp)
+    if (!f) {
+      setViewError(imp.eventKey)
+      return
+    }
+    const blob = await fileBlob(f)
+    if (!blob) {
+      setViewError(imp.eventKey)
+      return
+    }
+    setViewing({ blob, filename: f.filename })
   }
 
   /** When a delivery goes, as a sortable string. */
@@ -1409,6 +1501,15 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
             {menuFor === key && (
               <div className="wk-menu">
+                <button className="chip-btn" onClick={() => void viewOriginal(g.latest)}>
+                  📄 View pack list ({g.latest.filename})
+                </button>
+                {viewError === key && (
+                  <div className="wk-err">
+                    This version was uploaded before the app kept the original file. Upload it once more and it will be
+                    here.
+                  </div>
+                )}
                 {g.versions > 1 && (
                   <button
                     className="chip-btn"
@@ -1480,6 +1581,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
             {open.has(`${key}#delivery`) && (
               <div className="wk-delivery">
+                {(g.latest.venue || g.latest.address || g.latest.serviceEntrance || g.latest.onsiteContact) && (
+                  <div className="wk-dl wk-where">{whereRows(g.latest)}</div>
+                )}
                 {byDay &&
                   days.map((d, di) => (
                     <div className="wk-day" key={di}>
@@ -1506,8 +1610,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                         </div>
                       )}
                       <div className="wk-dl" style={{ marginTop: 8 }}>
-                        <span>Ice</span>
-                        <span>{d.iceNeeds ? iceText(d.iceNeeds, d.iceDeliveryTime) : '—'}</span>
+                        {iceRows(d.iceNeeds, d.iceDeliveryTime)}
                       </div>
                       {d.specialNotes && (
                         <div className="wk-notes">
@@ -1530,8 +1633,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span>{g.latest.kitchenPickup || '—'}</span>
                   <span>Est. drop off</span>
                   <span>{g.latest.kitchenDelivery || '—'}</span>
-                  <span>Ice</span>
-                  <span>{g.latest.iceNeeds ? iceText(g.latest.iceNeeds, g.latest.iceDeliveryTime) : '—'}</span>
+                  {iceRows(g.latest.iceNeeds, g.latest.iceDeliveryTime)}
                   {g.latest.eventTime && (
                     <>
                       <span>Event time</span>
@@ -1744,11 +1846,11 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         )
       })}
 
-      {files.length > 0 && (
+      {pictures.length > 0 && (
         <div className="lp-block">
-          {foldHead('_files', 'Pictures and PDFs you dropped in', files.length)}
+          {foldHead('_files', 'Pictures and PDFs you dropped in', pictures.length)}
           {open.has('_files') &&
-            files.map((f) => (
+            pictures.map((f) => (
               <div className="lp-row" key={f.id}>
                 <div className="lp-main">
                   <div className="lp-brand">{f.filename}</div>
@@ -1772,13 +1874,15 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         </div>
       )}
 
-      {imports !== undefined && imports.length === 0 && files.length === 0 && !busy && (
+      {imports !== undefined && imports.length === 0 && pictures.length === 0 && !busy && (
         <div className="muted" style={{ textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
           Nothing in this week yet.
           <br />
           Drop in the pack lists 👆
         </div>
       )}
+
+      {viewing && <SheetViewer blob={viewing.blob} filename={viewing.filename} onClose={() => setViewing(null)} />}
 
       {groups.length > 0 && (
         <p className="lp-foot">
