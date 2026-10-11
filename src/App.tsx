@@ -10,7 +10,6 @@ import EventsView from './components/EventsView'
 import EventDetail from './components/EventDetail'
 import PackList from './components/PackList'
 import VnoView from './components/VnoView'
-import LiquorProgram from './components/LiquorProgram'
 import RoutesView from './components/RoutesView'
 import PackInbox from './components/PackInbox'
 import PackWeekView from './components/PackWeekView'
@@ -72,9 +71,7 @@ export default function App() {
                       ? 'Driver Routes'
                       : module === 'vno'
                         ? 'VNO Coffee'
-                        : module === 'liquor'
-                          ? 'Liquor Program'
-                          : 'MGCE Operations'}
+                        : 'MGCE Operations'}
         </h1>
         <button
           className="sync-pill"
@@ -121,8 +118,6 @@ export default function App() {
         <RoutesView />
       ) : module === 'vno' ? (
         <VnoView />
-      ) : module === 'liquor' ? (
-        <LiquorProgram />
       ) : module === 'events' ? (
         <EventsView
           onOpen={(e) => {

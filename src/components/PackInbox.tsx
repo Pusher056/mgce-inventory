@@ -43,7 +43,8 @@ export default function PackInbox({ onOpen }: { onOpen: (weekStart: string, labe
           start,
           label: weekLabel(start),
           events: events.size,
-          pictures: files.filter((f) => f.weekStart === start).length,
+          // The kept workbooks belong to their events, they aren't pictures.
+          pictures: files.filter((f) => f.weekStart === start && f.kind !== 'sheet').length,
           started: done.size,
           current: start === thisWeek,
           past: start < thisWeek,
