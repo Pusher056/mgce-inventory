@@ -147,6 +147,9 @@ function eventToRow(e: EventRec) {
     kitchen_delivery: e.kitchenDelivery,
     notes: e.notes,
     pack_sections: e.packSections ?? [],
+    status: e.status ?? 'draft',
+    sent_at: e.sentAt ? new Date(e.sentAt).toISOString() : null,
+    shares: e.shares ?? {},
     created_at: new Date(e.createdAt).toISOString(),
     updated_at: new Date(e.updatedAt).toISOString(),
   }
@@ -166,6 +169,10 @@ function packLineToRow(l: PackLine) {
     qty_bought: l.qtyBought,
     note: l.note,
     packed: l.packed === 1,
+    item_type: l.itemType ?? '',
+    choice: l.choice ?? '',
+    who: l.who ?? '',
+    qty_tbd: !!l.qtyTbd,
     updated_at: new Date(l.updatedAt).toISOString(),
   }
 }
@@ -1354,6 +1361,9 @@ export async function pullFromServer() {
           kitchenDelivery: r.kitchen_delivery ?? '',
           notes: r.notes ?? '',
           packSections: r.pack_sections ?? [],
+          status: r.status === 'sent' ? ('sent' as const) : ('draft' as const),
+          sentAt: r.sent_at ? Date.parse(r.sent_at) : null,
+          shares: r.shares ?? {},
           createdAt: Date.parse(r.created_at) || Date.now(),
           updatedAt: Date.parse(r.updated_at) || Date.now(),
         })),
@@ -1383,6 +1393,10 @@ export async function pullFromServer() {
           qtyBought: r.qty_bought === null ? null : Number(r.qty_bought),
           note: r.note ?? '',
           packed: r.packed ? (1 as const) : (0 as const),
+          itemType: r.item_type ?? '',
+          choice: (r.choice ?? '') as PackLine['choice'],
+          who: (r.who ?? '') as PackLine['who'],
+          qtyTbd: !!r.qty_tbd,
           updatedAt: Date.parse(r.updated_at) || Date.now(),
         })),
       )

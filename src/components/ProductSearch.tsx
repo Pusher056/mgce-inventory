@@ -25,7 +25,9 @@ const AREA_BY_SECTION: Record<string, Area> = {
   'STORAGE BEVERAGE': { storage: 'beverage' },
   'OFFICE ITEMS/EQUIPMENT': { storage: 'office' },
   'DISPOSABLES/MISC': { storage: 'dry' },
+  'DRY STORAGE': { storage: 'dry' },
   'KITCHEN BEVERAGE/GARNISH': { storage: 'kitchen' },
+  'KITCHEN EQUIPMENT': { storage: 'kitchen' },
 }
 
 /**

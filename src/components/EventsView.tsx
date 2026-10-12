@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createEvent, deleteEvent, restoreEvent, type DeletedEvent } from '../db'
 import { syncNow } from '../sync'
+import { stillTbd } from '../packBuilder'
 import type { EventRec } from '../types'
 import SwipeRow from './SwipeRow'
 
@@ -26,6 +27,10 @@ function dayLabel(ms: number): string {
 
 export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }) {
   const events = useLiveQuery(() => db.events.orderBy('date').reverse().toArray(), []) ?? []
+  const lines = useLiveQuery(() => db.packLines.toArray(), []) ?? []
+  // Lines still waiting on the client, per event — the planner fills them in when she hears back.
+  const tbdBy = new Map<string, number>()
+  for (const l of lines) if (stillTbd(l).length) tbdBy.set(l.eventId, (tbdBy.get(l.eventId) ?? 0) + 1)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [day, setDay] = useState(toInputDay(Date.now()))
@@ -67,7 +72,13 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
             <button className="session-row" style={{ marginBottom: 0 }} onClick={() => onOpen(e)}>
               <div style={{ fontSize: 26 }}>📋</div>
               <div className="info">
-                <div className="name">{e.name}</div>
+                <div className="name">
+                  {e.name}{' '}
+                  <span className={`pl-status ${e.status === 'sent' ? 'sent' : e.sentAt ? 'editing' : 'draft'}`}>
+                    {e.status === 'sent' ? 'Sent' : e.sentAt ? 'Editing' : 'Draft'}
+                  </span>
+                  {(tbdBy.get(e.id) ?? 0) > 0 && <span className="pl-status tbd">{tbdBy.get(e.id)} TBD</span>}
+                </div>
                 <div className="muted small">
                   {dayLabel(e.date)}
                   {e.location && ` · ${e.location}`}

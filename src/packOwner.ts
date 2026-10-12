@@ -160,12 +160,28 @@ export function sectionIsKnown(section: string, sheet = ''): boolean {
 }
 
 export function ownerOf(
-  line: { section: string; sheet?: string; item: string; size?: string; note?: string; fills?: string[] },
+  line: {
+    section: string
+    sheet?: string
+    item: string
+    size?: string
+    note?: string
+    fills?: string[]
+    who?: string
+    whoLabel?: string
+  },
   rules: OwnerRules,
   legend: Record<string, string> = {},
 ): Ownership {
   const said = rules.items.get(itemKey(line.item))
   if (said) return { whose: said, why: said === 'mine' ? 'you said it’s yours' : 'you said it’s not yours', source: 'ruling' }
+
+  // Built in the app: the planner said who brings it, nothing to work out.
+  if (line.who) {
+    return line.who === 'ops'
+      ? { whose: 'mine', why: '', source: 'section' }
+      : { whose: 'notMine', why: line.whoLabel || line.who, source: 'note' }
+  }
 
   const text = `${line.item} ${line.size ?? ''} ${line.note ?? ''}`
   if (OPS_RX.test(line.note ?? '') || OPS_RX.test(line.item)) {

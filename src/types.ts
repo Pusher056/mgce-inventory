@@ -164,9 +164,25 @@ export interface EventRec {
    * opened but have not filled yet is still there when you come back.
    */
   packSections: string[]
+  /**
+   * 'sent' once the planner taps Done: each department has its copy and the
+   * list is read-only until she taps Edit again. Editing after a send leaves
+   * `sentAt` set, so the screen can say the departments still hold the old one.
+   */
+  status?: 'draft' | 'sent'
+  sentAt?: number | null
+  /** The permanent link per department that gets one (kitchen, storied) → share id. */
+  shares?: Record<string, string>
   createdAt: number
   updatedAt: number
 }
+
+/**
+ * Who brings a pack list line. The section gives the default; the planner
+ * changes it per line ("Storied provides", "PJ to order"). It is what decides
+ * which department the line goes to when she sends.
+ */
+export type LineWho = 'ops' | 'kitchen' | 'planner' | 'storied' | 'client'
 
 /**
  * One line of a pack list. Two kinds share this shape:
@@ -193,6 +209,17 @@ export interface PackLine {
   note: string
   /** The user ticked it off while packing in the warehouse */
   packed: 0 | 1
+  /**
+   * What kind of thing this line asks for ("Gin"), when the brand is a choice:
+   * the picker then offers only the gins on the shelf, plus TBD / In house.
+   */
+  itemType?: string
+  /** No brand on purpose: still to be decided, or any one will do. */
+  choice?: '' | 'tbd' | 'inHouse'
+  /** Empty means the section's default. */
+  who?: LineWho | ''
+  /** The quantity isn't known yet — sent as "TBD", flagged until it is. */
+  qtyTbd?: boolean
   updatedAt: number
 }
 
@@ -463,6 +490,13 @@ export interface PackImport {
     drop?: string
     /** Set on screen when the same item comes in two presentations in one delivery. */
     variant?: string
+    /**
+     * Pack lists built in the app say outright who brings each line, so there
+     * is nothing to guess from colours or initials. Absent on uploaded files.
+     */
+    who?: LineWho
+    /** "PJ to order", "Storied provides" — shown as the reason. */
+    whoLabel?: string
   }[]
   /**
    * The deliveries of a split event — one per pack list sheet, each with the
@@ -593,11 +627,13 @@ export const PACK_SECTIONS = [
   // just friction — one section holds the whole beverage storage, and the
   // picker still groups what is inside it by type.
   'STORAGE BEVERAGE',
-  'KITCHEN BEVERAGE/GARNISH',
-  'OFFICE ITEMS/EQUIPMENT',
+  'DRY STORAGE',
   'DISPOSABLES/MISC',
+  'OFFICE ITEMS/EQUIPMENT',
   'SPECIALTY/MISC. (EQUIP + BEVERAGE)',
   'RENTALS',
+  'KITCHEN BEVERAGE/GARNISH',
+  'KITCHEN EQUIPMENT',
 ] as const
 
 export function totalBottles(e: { bottles: number; cases: number }, unitsPerCase: number): number {

@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, updateEvent } from '../db'
 import type { EventRec } from '../types'
+import { PLANNERS, plannerInitials } from '../packBuilder'
 
 /**
  * Name and number share one field, the way the template writes it
@@ -52,7 +53,7 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
           ? '＋ Build pack list'
           : lineCount === 0
             ? 'Go to the pack list'
-            : `Go to the pack list · ${lineCount} line${lineCount === 1 ? '' : 's'}`}
+            : `Go to the pack list · ${lineCount} line${lineCount === 1 ? '' : 's'}${ev.status === 'sent' ? ' · sent' : ''}`}
       </button>
 
       <div className="ev-section-title" style={{ marginTop: 26 }}>
@@ -94,6 +95,23 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
             value={ev.planner}
             onChange={(e) => void updateEvent(eventId, { planner: formatPlannerLine(e.target.value) })}
           />
+          {/* One tap for who it is; the cell can be typed after the name. */}
+          <div className="pl-usual" style={{ marginTop: 6 }}>
+            {PLANNERS.map((p) => (
+              <button
+                key={p.initials}
+                className={`chip-btn${plannerInitials(ev.planner) === p.initials ? ' on' : ''}`}
+                onClick={() =>
+                  void updateEvent(eventId, {
+                    planner: plannerInitials(ev.planner) === p.initials ? ev.planner : p.name,
+                    plannerInitials: p.initials,
+                  })
+                }
+              >
+                {p.initials}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

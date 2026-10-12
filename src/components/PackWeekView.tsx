@@ -447,7 +447,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     const count = new Map<string, number>()
     for (const g of groups) {
       for (const l of g.latest.lines) {
-        if (!l.section || sectionIsKnown(l.section, l.sheet)) continue
+        if (!l.section || l.who || sectionIsKnown(l.section, l.sheet)) continue
         if (rules.sections.has(sectionRuleKey(l.section))) continue
         count.set(l.section, (count.get(l.section) ?? 0) + 1)
       }
@@ -1558,9 +1558,12 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
 
             {menuFor === key && (
               <div className="wk-menu">
-                <button className="chip-btn" onClick={() => void viewOriginal(g.latest)}>
-                  📄 View pack list ({g.latest.filename})
-                </button>
+                {/* Built in the app: there is no file behind it to open. */}
+                {!key.startsWith('app:') && (
+                  <button className="chip-btn" onClick={() => void viewOriginal(g.latest)}>
+                    📄 View pack list ({g.latest.filename})
+                  </button>
+                )}
                 {viewError === key && (
                   <div className="wk-err">
                     This version was uploaded before the app kept the original file. Upload it once more and it will be

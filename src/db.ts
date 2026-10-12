@@ -319,6 +319,9 @@ export async function createEvent(partial: Partial<EventRec>): Promise<EventRec>
     kitchenDelivery: '',
     notes: '',
     packSections: [],
+    status: 'draft',
+    sentAt: null,
+    shares: {},
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...partial,
@@ -395,6 +398,13 @@ export async function addPackLine(partial: Partial<PackLine> & { eventId: string
 export async function updatePackLine(id: string, changes: Partial<PackLine>) {
   await db.packLines.update(id, { ...changes, updatedAt: Date.now() })
   await queueSync('pack_lines', id)
+}
+
+/** Put a removed line back — every removal on the pack list offers Undo. */
+export async function restorePackLine(line: PackLine) {
+  await db.tombstones.delete(line.id)
+  await db.packLines.put({ ...line, updatedAt: Date.now() })
+  await queueSync('pack_lines', line.id)
 }
 
 export async function deletePackLine(id: string) {
