@@ -2389,3 +2389,23 @@ textarea {
 .ev-multi-opts { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .ev-multi-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
 .ev-multi-row input[type='checkbox'] { width: 20px; height: 20px; }
+
+/* notes look like every other field, not a white box */
+textarea { color: var(--text); background: var(--bg3); border: 1px solid #475569; }
+textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.ev-multi-link {
+  align-self: flex-start;
+  margin-top: 22px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(148, 163, 184, 0.4);
+  text-underline-offset: 3px;
+}
+.ev-multi-link:hover { color: var(--accent); }
+.ev-days-head { margin-top: 26px; margin-bottom: 10px; }

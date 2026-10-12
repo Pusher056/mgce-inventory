@@ -123,12 +123,65 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
     for (const l of u.lines) await restorePackLine(l)
   }
 
-  const dayField = (d: EventDay, label: string, k: keyof EventDay, eg = '') => (
-    <div className="ev-field">
-      <label className="field-label">{label}</label>
-      <input value={(d[k] as string) ?? ''} placeholder={eg} onChange={(e) => updateDay(d.id, { [k]: e.target.value } as Partial<EventDay>)} />
-    </div>
-  )
+  /**
+   * The MO block — ice, kitchen runs, times, guests, notes — written once and
+   * used for a one-day event and for every day of a multi-day one, so both
+   * read exactly the same.
+   */
+  type Mo = Pick<
+    EventRec & EventDay,
+    'iceNeeds' | 'iceDeliveryTime' | 'kitchenPickup' | 'kitchenDelivery' | 'eventTime' | 'callTime' | 'guestCount' | 'notes'
+  >
+  const moBlock = (v: Mo, save: (changes: Partial<Mo>) => void, notesLabel: string) => {
+    const text = (label: string, k: keyof Mo, opts: { hint?: string; eg?: string } = {}) => (
+      <div className="ev-field">
+        <label className="field-label">{label}</label>
+        <input
+          value={(v[k] as string) ?? ''}
+          placeholder={opts.eg}
+          onChange={(e) => save({ [k]: e.target.value } as Partial<Mo>)}
+        />
+        {opts.hint && <div className="field-hint">{opts.hint}</div>}
+      </div>
+    )
+    return (
+      <>
+        <div className="ev-section-title" style={{ marginTop: 18 }}>
+          Operations
+        </div>
+        <div className="ev-grid">
+          {text('Ice needs', 'iceNeeds')}
+          {text('Ice delivery time', 'iceDeliveryTime')}
+          {text('Requested kitchen pickup', 'kitchenPickup')}
+          {text('Est. kitchen delivery to location', 'kitchenDelivery', {
+            hint: 'Please allow 2h between kitchen pickup and est. delivery.',
+          })}
+        </div>
+        <div className="ev-section-title" style={{ marginTop: 22 }}>
+          Times and guests
+        </div>
+        <div className="ev-grid">
+          {text('Event time', 'eventTime', { eg: '6-9PM' })}
+          {text('Call time', 'callTime')}
+          <div className="ev-field">
+            <label className="field-label">Guest count</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={v.guestCount ?? ''}
+              onChange={(e) => save({ guestCount: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+        </div>
+        {/* No length limit on purpose — the planners write long special notes
+            here, including ice instructions. */}
+        <label className="field-label" style={{ marginTop: 14 }}>
+          {notesLabel}
+        </label>
+        <textarea rows={4} value={v.notes} onChange={(e) => save({ notes: e.target.value })} />
+      </>
+    )
+  }
 
   return (
     <div className="screen">
@@ -142,27 +195,13 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
       </button>
 
       {days.length === 0 ? (
-        <>
-          <div className="ev-section-title" style={{ marginTop: 26 }}>
-            Operations
-          </div>
-          <div className="ev-grid">
-            {field('Ice needs', 'iceNeeds')}
-            {field('Ice delivery time', 'iceDeliveryTime')}
-            {field('Requested kitchen pickup', 'kitchenPickup')}
-            {field('Est. kitchen delivery to location', 'kitchenDelivery', {
-              hint: 'Please allow 2h between kitchen pickup and est. delivery.',
-            })}
-          </div>
-          <button className="ev-multi" onClick={() => void makeMulti()}>
-            <b>Is it a multi-day event?</b>
-            <span>Split it into days — set-up day too — each with its own times, ice, kitchen runs and pack list.</span>
-          </button>
-        </>
+        moBlock(ev, (c) => void updateEvent(eventId, c), 'Special notes')
       ) : (
         <>
-          <div className="ev-section-title" style={{ marginTop: 26 }}>
-            Days · {days.length}
+          <div className="ev-days-head">
+            <div className="ev-section-title" style={{ margin: 0 }}>
+              Multi-day event · {days.length} days
+            </div>
           </div>
           <div className="ev-days">
             {days.map((d) => (
@@ -184,27 +223,7 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
                     Remove
                   </button>
                 </div>
-                <div className="ev-grid">
-                  {dayField(d, 'Event time', 'eventTime', '6-9PM')}
-                  {dayField(d, 'Call time', 'callTime')}
-                  <div className="ev-field">
-                    <label className="field-label">Guest count</label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={d.guestCount ?? ''}
-                      onChange={(e) => updateDay(d.id, { guestCount: e.target.value === '' ? null : Number(e.target.value) })}
-                    />
-                  </div>
-                  {dayField(d, 'Ice needs', 'iceNeeds', '3 tins + 5 bags')}
-                  {dayField(d, 'Ice delivery time', 'iceDeliveryTime')}
-                  {dayField(d, 'Requested kitchen pickup', 'kitchenPickup', 'none on a set-up day? leave it empty')}
-                  {dayField(d, 'Est. kitchen delivery to location', 'kitchenDelivery')}
-                </div>
-                <label className="field-label" style={{ marginTop: 10 }}>
-                  Notes for {d.label || 'this day'}
-                </label>
-                <textarea rows={2} value={d.notes} onChange={(e) => updateDay(d.id, { notes: e.target.value })} />
+                {moBlock(d, (c) => updateDay(d.id, c), `Special notes · ${d.label || 'this day'}`)}
               </div>
             ))}
           </div>
@@ -228,21 +247,6 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
         {field('Venue', 'location', { eg: 'Storied' })}
         {field('Address', 'address')}
         {field('Service entrance', 'serviceEntrance')}
-        {days.length === 0 && field('Event time', 'eventTime', { eg: '6-9PM' })}
-        {days.length === 0 && field('Call time', 'callTime')}
-        {days.length === 0 && (
-          <div className="ev-field">
-            <label className="field-label">Guest count</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={ev.guestCount ?? ''}
-              onChange={(e) =>
-                void updateEvent(eventId, { guestCount: e.target.value === '' ? null : Number(e.target.value) })
-              }
-            />
-          </div>
-        )}
         {field('Onsite contact', 'onsiteContact')}
         <div className="ev-field">
           <label className="field-label">Planner / cell</label>
@@ -270,12 +274,21 @@ export default function EventDetail({ eventId, onOpenPackList }: { eventId: stri
         </div>
       </div>
 
-      {/* No length limit on purpose — the planners write long special notes here,
-          including ice instructions. */}
-      <label className="field-label" style={{ marginTop: 14 }}>
-        {days.length ? 'Notes for the whole event' : 'Special notes'}
-      </label>
-      <textarea rows={5} value={ev.notes} onChange={set('notes')} />
+      {days.length > 0 && (
+        <>
+          <label className="field-label" style={{ marginTop: 14 }}>
+            Notes for the whole event
+          </label>
+          <textarea rows={4} value={ev.notes} onChange={set('notes')} />
+        </>
+      )}
+
+      {/* Out of the way: most events are one day. */}
+      {days.length === 0 && (
+        <button className="ev-multi-link" onClick={() => void makeMulti()}>
+          Multi-day event? Split it into days
+        </button>
+      )}
 
       {undo && (
         <div className="undo-bar">
