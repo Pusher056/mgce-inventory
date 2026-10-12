@@ -214,8 +214,12 @@ export interface PackLine {
    * the picker then offers only the gins on the shelf, plus TBD / In house.
    */
   itemType?: string
-  /** No brand on purpose: still to be decided, or any one will do. */
-  choice?: '' | 'tbd' | 'inHouse'
+  /**
+   * No brand from the shelf: still to be decided, any one will do, or one she
+   * typed because we don't have it ('custom', spelled out in choiceText).
+   */
+  choice?: '' | 'tbd' | 'inHouse' | 'custom'
+  choiceText?: string
   /** Empty means the section's default. */
   who?: LineWho | ''
   /** The quantity isn't known yet — sent as "TBD", flagged until it is. */

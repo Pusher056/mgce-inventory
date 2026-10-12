@@ -155,6 +155,7 @@ export function lineName(l: PackLine, product?: Product): string {
     return brand.toLowerCase().includes(type.toLowerCase()) ? brand : `${name}: ${brand}`
   }
   if (type && l.choice === 'inHouse') return `${name}: In house`
+  if (l.choice === 'custom' && l.choiceText?.trim()) return `${name}: ${l.choiceText.trim()}`
   return name
 }
 

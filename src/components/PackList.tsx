@@ -124,6 +124,7 @@ function LinePicker({
     [kind, products, stock, inInventory],
   )
   const who = whoOf(line)
+  const [own, setOwn] = useState(line.choice === 'custom' ? (line.choiceText ?? '') : '')
   const set = (changes: Partial<PackLine>) => {
     // A line picked straight from the shelf learns its kind here, so it keeps
     // reading "Vodka" whatever is chosen next.
@@ -153,6 +154,20 @@ function LinePicker({
               )}
               {opt(!line.productId && !line.choice, 'Leave blank', `just “${item}”`, () => set({ productId: null, choice: '' }))}
             </div>
+            {/* Something we don't have: she names it, and it goes out as written. */}
+            <div className="pb-sheet-sub">Not on our shelf? Write it</div>
+            <form
+              className={`pb-own${line.choice === 'custom' ? ' on' : ''}`}
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (own.trim()) set({ productId: null, choice: 'custom', choiceText: own.trim() })
+              }}
+            >
+              <input value={own} onChange={(e) => setOwn(e.target.value)} placeholder={`e.g. a ${kind.toLowerCase() || 'brand'} we don’t carry`} />
+              <button className="pb-btn primary" type="submit" disabled={!own.trim()}>
+                Use this
+              </button>
+            </form>
             <div className="pb-sheet-sub">On the shelf</div>
             <div className="pb-opt-group">
               {brands.map((p) =>
@@ -457,9 +472,18 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     const who = whoOf(l)
     const open = stillTbd(l)
     const dragging = drag?.id === l.id
-    const choiceText = p ? displayName(p) || p.name : l.choice === 'tbd' ? 'TBD' : l.choice === 'inHouse' ? 'In house' : ''
-    const choiceTone = p ? 'picked' : l.choice === 'tbd' ? 'tbd' : l.choice === 'inHouse' ? 'house' : 'empty'
-    const stockNote = p && p.storage === 'beverage' ? `${stock.get(p.id) ?? 0} in stock` : p?.location ?? ''
+    const custom = l.choice === 'custom' && l.choiceText?.trim()
+    const choiceText = p
+      ? displayName(p) || p.name
+      : custom
+        ? l.choiceText!.trim()
+        : l.choice === 'tbd'
+          ? 'TBD'
+          : l.choice === 'inHouse'
+            ? 'In house'
+            : ''
+    const choiceTone = p ? 'picked' : custom ? 'custom' : l.choice === 'tbd' ? 'tbd' : l.choice === 'inHouse' ? 'house' : 'empty'
+    const stockNote = p && p.storage === 'beverage' ? `${stock.get(p.id) ?? 0} in stock` : custom ? 'not on our shelf' : p?.location ?? ''
     return (
       <div
         key={l.id}
@@ -607,10 +631,13 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         const usual = (PRESETS[section] ?? []).filter((p) => !have.has(p.label.toLowerCase()))
         const dept = defaultWho(section)
         const included = rows.filter(isAsked).length
+        // Office, disposables…: nothing to choose between, so no column for it —
+        // and the names get the room.
+        const withChoice = rows.some((l) => partsOf(l, l.productId ? productMap.get(l.productId) : undefined).hasChoice)
         const draggingHere = drag?.axis === 'y' && drag.section === section ? drag : null
         let other = 0
         return (
-          <section key={section} className={`pb-section dept-${dept}`}>
+          <section key={section} className={`pb-section dept-${dept}${withChoice ? '' : ' no-choice'}`}>
             <header className="pb-section-head">
               <div className="pb-section-title">{titled(section)}</div>
               <span className={`pb-dept who-${dept}`}>
@@ -631,7 +658,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
               <div className="pb-cols" aria-hidden="true">
                 <span />
                 <span>Item</span>
-                <span>Brand / choice</span>
+                {withChoice && <span>Brand / choice</span>}
                 <span>Who brings it</span>
                 <span>Note</span>
                 <span>Qty</span>
@@ -668,11 +695,11 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
               <div className="pb-section-foot">
                 {!isCustom(section) && (
                   <button className="pb-btn" onClick={() => setPicking(section)}>
-                    Search inventory
+                    {section === 'STORAGE BEVERAGE' ? 'Search inventory' : 'Search items'}
                   </button>
                 )}
                 <button className="pb-btn" onClick={() => setSpecial(section)}>
-                  Add something we don&rsquo;t keep
+                  Add something not on the item list
                 </button>
               </div>
             )}
@@ -739,7 +766,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         <div className="sheet-backdrop" onClick={() => setSpecial(null)}>
           <div className="sheet pb-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="pb-sheet-kicker">{titled(special)}</div>
-            <h2>Something we don&rsquo;t keep</h2>
+            <h2>Not on the item list</h2>
             <div className="pb-hint" style={{ marginBottom: 12 }}>
               Goes down as yours to order — tap who brings it on the line to change that.
             </div>

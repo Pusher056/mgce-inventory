@@ -2247,3 +2247,26 @@ textarea {
   .pb-send-text { font-size: 13px; }
   .pb-btn.send { padding: 12px; }
 }
+
+/* sections with nothing to choose (office, disposables): no brand column, more room for names */
+.pb-item-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+.pb-section.no-choice .pb-cols,
+.pb-section.no-choice .pb-row {
+  grid-template-columns: 18px minmax(220px, 1.7fr) 168px minmax(180px, 1.4fr) 150px 26px;
+  grid-template-areas: "grip item who note qty del";
+}
+.pb-section.no-choice .pb-choice-cell { display: none; }
+.pb-choice.custom { border-color: rgba(167, 139, 250, 0.45); }
+.pb-own { display: flex; gap: 8px; align-items: center; }
+.pb-own input { flex: 1; margin: 0; }
+.pb-own .pb-btn.primary { margin-top: 0; }
+.pb-own.on input { border-color: var(--accent); }
+@media (max-width: 860px) {
+  .pb-section.no-choice .pb-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "grip item qty"
+      "grip meta meta"
+      "grip note note";
+  }
+}
