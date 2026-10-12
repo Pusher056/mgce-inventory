@@ -2409,3 +2409,81 @@ textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 }
 .ev-multi-link:hover { color: var(--accent); }
 .ev-days-head { margin-top: 26px; margin-bottom: 10px; }
+
+/* ==========================================================================
+   The event page — same design language as the pack list builder: cards,
+   a two-column form, quiet labels, compact fields.
+   ========================================================================== */
+.ed { max-width: 980px; }
+.ed-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 14px 0 18px; }
+.ed-pack { margin-top: 0 !important; padding: 11px 18px; font-size: 14px; }
+.ed-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px 20px;
+  margin-bottom: 16px;
+}
+.ed-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ed-card-head .ed-card-title { margin: 0; }
+.ed-card-title { font-size: 15px; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.005em; }
+.ed-sub {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 22px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ed-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; align-items: start; }
+.ed-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ed-label { font-size: 12.5px; font-weight: 600; color: #b6c2d3; }
+.ed-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.ed input,
+.ed textarea {
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+}
+.ed input::placeholder,
+.ed textarea::placeholder { color: rgba(148, 163, 184, 0.5); }
+.ed input:focus,
+.ed textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15); }
+.ed textarea { min-height: 96px; line-height: 1.5; }
+.ed-planners { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.ed-planner {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.ed-planner:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.4); }
+.ed-planner.on { color: var(--accent); border-color: var(--accent); background: rgba(56, 189, 248, 0.1); }
+.ed-day-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.ed-daycard .pb-days { margin-bottom: 4px; }
+.ed-day { margin-top: 12px; }
+.ed-day-head { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto; gap: 14px 18px; align-items: end; }
+.ed-day-del { align-self: end; padding: 10px 8px; }
+.ed .ev-multi-link { margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .ed-top { flex-direction: column; align-items: stretch; }
+  .ed-pack { width: 100%; }
+  .ed-grid { grid-template-columns: minmax(0, 1fr); }
+  .ed-card { padding: 16px 14px 18px; }
+  .ed-day-head { grid-template-columns: minmax(0, 1fr) 150px; }
+  .ed-day-del { grid-column: 1 / -1; justify-self: start; padding-left: 0; }
+}
