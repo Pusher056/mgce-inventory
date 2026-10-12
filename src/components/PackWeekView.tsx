@@ -482,6 +482,53 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     void drop(picked)
   }
 
+  /**
+   * Files dragged in from anywhere — the desktop, Finder, or straight out of
+   * the email — land in this week, same as picking them. Listened for on the
+   * whole window: a drop that misses a target would otherwise make the browser
+   * open the file in place of the app. Dragging an event to reorder carries no
+   * files, so it never trips this.
+   */
+  const [fileOver, setFileOver] = useState(false)
+  const dropRef = useRef(drop)
+  dropRef.current = drop
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
+    let depth = 0
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      depth++
+      setFileOver(true)
+    }
+    const over = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    }
+    const leave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) setFileOver(false)
+    }
+    const dropped = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      depth = 0
+      setFileOver(false)
+      void dropRef.current(Array.from(e.dataTransfer?.files ?? []))
+    }
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragover', over)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('drop', dropped)
+    return () => {
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('drop', dropped)
+    }
+  }, [])
+
   async function openFile(f: PackFile) {
     const blob = await fileBlob(f)
     if (!blob) {
@@ -862,7 +909,17 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
           📷 Photos
         </button>
         {busy && <span className="muted small">Reading…</span>}
+        {!busy && <span className="wk-drag-hint">or drag files here</span>}
       </div>
+
+      {fileOver && (
+        <div className="wk-filedrop">
+          <div>
+            Drop to add to <b>{label}</b>
+            <span>Excel, PDF, photos or the whole email</span>
+          </div>
+        </div>
+      )}
 
       {report && (
         <div className="inbox-report">
