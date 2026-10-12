@@ -173,6 +173,12 @@ export interface EventRec {
   sentAt?: number | null
   /** The permanent link per department that gets one (kitchen, storied) → share id. */
   shares?: Record<string, string>
+  /**
+   * A multi-day event (Imagination, Alpha Summit): one entry per day, set-up
+   * day included, each with its own times, ice, kitchen runs and pack list.
+   * Empty for an ordinary one-day event, which keeps using the fields above.
+   */
+  days?: EventDay[]
   createdAt: number
   updatedAt: number
 }
@@ -183,6 +189,25 @@ export interface EventRec {
  * which department the line goes to when she sends.
  */
 export type LineWho = 'ops' | 'kitchen' | 'planner' | 'storied' | 'client'
+
+/** One day of a multi-day event: its own MO and its own pack list. */
+export interface EventDay {
+  id: string
+  /** "Set-up day", "Day 1", "Reception"… */
+  label: string
+  /** Midnight local. */
+  date: number
+  eventTime: string
+  callTime: string
+  guestCount: number | null
+  iceNeeds: string
+  iceDeliveryTime: string
+  kitchenPickup: string
+  kitchenDelivery: string
+  notes: string
+  /** This day's pack list sections, in her order. */
+  sections: string[]
+}
 
 /**
  * One line of a pack list. Two kinds share this shape:
@@ -220,6 +245,8 @@ export interface PackLine {
    */
   choice?: '' | 'tbd' | 'inHouse' | 'custom'
   choiceText?: string
+  /** Which day of a multi-day event the line goes out on; empty on a one-day event. */
+  dayId?: string
   /** Empty means the section's default. */
   who?: LineWho | ''
   /** The quantity isn't known yet — sent as "TBD", flagged until it is. */

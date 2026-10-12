@@ -1855,7 +1855,14 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                           <span className="wk-item-main">
                             <span className="wk-item-name">{l.item}</span>
                             <span className="wk-item-sub">
-                              {[o.why, l.section, l.note].filter(Boolean).join(' · ')}
+                              {[
+                                o.why,
+                                l.drop && drops.length > 1 ? dropTitle(drops.find((d) => d.key === l.drop)?.label ?? '') : '',
+                                l.section,
+                                l.note,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </span>
                           </span>
                           <button className="chip-btn" onClick={() => void decideOwner(l.item, 'mine')}>

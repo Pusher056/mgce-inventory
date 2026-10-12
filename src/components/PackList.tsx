@@ -5,6 +5,8 @@ import { syncNow } from '../sync'
 import { weekLabel, weekStartIso, isoDate } from '../packWeeks'
 import {
   PRESETS,
+  dayTitle,
+  daysOf,
   defaultWho,
   deptTitle,
   isAsked,
@@ -14,6 +16,7 @@ import {
   stillTbd,
   whoOf,
   whoText,
+  titled,
   type SendResult,
 } from '../packBuilder'
 import { PACK_SECTIONS, displayName, totalBottles, type LineWho, type PackLine, type Product } from '../types'
@@ -24,9 +27,6 @@ const WHO_ORDER: LineWho[] = ['ops', 'kitchen', 'planner', 'storied', 'client']
 function when(ms: number): string {
   return new Date(ms).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
-
-/** "STORAGE BEVERAGE" → "Storage Beverage": their template shouts; the screen doesn't need to. */
-const titled = (s: string) => s.toLowerCase().replace(/(^|[\s/(-])([a-z])/g, (_, a, b) => a + b.toUpperCase())
 
 /** Beverage products have a kind ("Gin") the line is named after; office trays don't. */
 const kindOfProduct = (p?: Product) => (p && p.storage === 'beverage' && p.subcategory && p.subcategory !== 'Unknown' ? p.subcategory : '')
@@ -40,8 +40,11 @@ function partsOf(l: PackLine, p?: Product): { item: string; hasChoice: boolean }
   if (l.itemType) return { item: l.label || l.itemType, hasChoice: true }
   const kind = kindOfProduct(p)
   if (kind) return { item: kind, hasChoice: true }
-  if (p) return { item: displayName(p) || p.name, hasChoice: false }
-  return { item: l.label, hasChoice: false }
+  // Anything on the beverage list can be specified — bitters come in a dozen
+  // kinds, Heineken in Silver and Light, and none of it is on our shelf.
+  const bev = /BEVERAGE/i.test(l.section) && !/KITCHEN/i.test(l.section)
+  if (p) return { item: displayName(p) || p.name, hasChoice: bev }
+  return { item: l.label, hasChoice: bev }
 }
 
 function Qty({ line }: { line: PackLine }) {
@@ -149,13 +152,14 @@ function LinePicker({
               {opt(!line.productId && line.choice === 'tbd', 'TBD', 'decide later — stays flagged until it’s picked', () =>
                 set({ productId: null, choice: 'tbd' }),
               'tbd')}
-              {opt(!line.productId && line.choice === 'inHouse', 'In house', `any ${kind.toLowerCase()} we have`, () =>
-                set({ productId: null, choice: 'inHouse' }),
-              )}
+              {kind &&
+                opt(!line.productId && line.choice === 'inHouse', 'In house', `any ${kind.toLowerCase()} we have`, () =>
+                  set({ productId: null, choice: 'inHouse' }),
+                )}
               {opt(!line.productId && !line.choice, 'Leave blank', `just “${item}”`, () => set({ productId: null, choice: '' }))}
             </div>
             {/* Something we don't have: she names it, and it goes out as written. */}
-            <div className="pb-sheet-sub">Not on our shelf? Write it</div>
+            <div className="pb-sheet-sub">{kind ? 'Not on our shelf? Write it' : 'Write what you want'}</div>
             <form
               className={`pb-own${line.choice === 'custom' ? ' on' : ''}`}
               onSubmit={(e) => {
@@ -163,13 +167,13 @@ function LinePicker({
                 if (own.trim()) set({ productId: null, choice: 'custom', choiceText: own.trim() })
               }}
             >
-              <input value={own} onChange={(e) => setOwn(e.target.value)} placeholder={`e.g. a ${kind.toLowerCase() || 'brand'} we don’t carry`} />
+              <input value={own} onChange={(e) => setOwn(e.target.value)} placeholder={kind ? `e.g. a ${kind.toLowerCase()} we don’t carry` : `e.g. ${/bitter/i.test(item) ? 'Walnut bitters' : /heineken/i.test(item) ? 'Heineken Light' : 'brand, size, flavour'}`} />
               <button className="pb-btn primary" type="submit" disabled={!own.trim()}>
                 Use this
               </button>
             </form>
-            <div className="pb-sheet-sub">On the shelf</div>
-            <div className="pb-opt-group">
+            {kind && <div className="pb-sheet-sub">On the shelf</div>}
+            {kind && <div className="pb-opt-group">
               {brands.map((p) =>
                 opt(
                   line.productId === p.id,
@@ -179,7 +183,7 @@ function LinePicker({
                 ),
               )}
               {brands.length === 0 && <div className="pb-empty">No {kind.toLowerCase()} on the shelf right now.</div>}
-            </div>
+            </div>}
           </>
         )}
         {focus === 'who' && (
@@ -233,26 +237,50 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   const [startFor, setStartFor] = useState<string | null>(null)
   const [customSection, setCustomSection] = useState('')
   const [editing, setEditing] = useState<{ id: string; focus: 'choice' | 'who' } | null>(null)
-  const [undo, setUndo] = useState<{ lines: PackLine[]; section?: { name: string; at: number }; label: string } | null>(null)
+  const [undo, setUndo] = useState<{
+    lines: PackLine[]
+    section?: { name: string; at: number; dayId: string }
+    label: string
+  } | null>(null)
   const undoTimer = useRef<number | undefined>(undefined)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState<SendResult | null>(null)
   const [sendError, setSendError] = useState('')
   const [copied, setCopied] = useState('')
   const [drag, setDrag] = useState<Drag | null>(null)
+  const [dayPick, setDayPick] = useState<string | null>(null)
 
   useEffect(() => () => window.clearTimeout(undoTimer.current), [])
 
   const initials = plannerInitials(ev?.planner ?? '')
   const locked = ev?.status === 'sent'
 
-  /** Sections live on the event, so an empty one survives leaving the screen. */
+  /**
+   * A multi-day event has a pack list per day; she works on one at a time.
+   * A one-day event is the same screen with no days.
+   */
+  const days = useMemo(() => (ev ? daysOf(ev) : []), [ev])
+  const day = days.find((d) => d.id === dayPick) ?? days[0]
+  const dayId = day?.id ?? ''
+  // Lines from before the event had days belong to its first one.
+  const lineDay = (l: PackLine) => (days.length ? (days.some((d) => d.id === l.dayId) ? l.dayId! : days[0].id) : '')
+  const dayLines = useMemo(() => lines.filter((l) => lineDay(l) === dayId), [lines, dayId, days]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Sections live on the event (or its day), so an empty one survives leaving the screen. */
   const sections = useMemo(() => {
-    const stored = ev?.packSections ?? []
+    const stored = (day ? day.sections : ev?.packSections) ?? []
     // any section that somehow has lines but is not listed still gets shown
-    const orphans = [...new Set(lines.map((l) => l.section))].filter((s) => !stored.includes(s))
+    const orphans = [...new Set(dayLines.map((l) => l.section))].filter((s) => !stored.includes(s))
     return [...stored, ...orphans]
-  }, [ev?.packSections, lines])
+  }, [ev?.packSections, day, dayLines])
+
+  async function setSections(next: string[], forDay = dayId) {
+    if (days.length) {
+      await updateEvent(eventId, { days: (ev?.days ?? []).map((d) => (d.id === forDay ? { ...d, sections: next } : d)) })
+    } else {
+      await updateEvent(eventId, { packSections: next })
+    }
+  }
 
   const unusedSections = PACK_SECTIONS.filter((s) => !sections.includes(s))
 
@@ -263,13 +291,17 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   const isCustom = (section: string) => !PACK_SECTIONS.includes(section as (typeof PACK_SECTIONS)[number])
 
   const sorted = (section: string) =>
-    lines
+    dayLines
       .filter((l) => l.section === section && (!locked || isAsked(l)))
       .sort((a, b) => a.sortIndex - b.sortIndex)
 
   const tbd = lines.flatMap((l) => {
     const what = stillTbd(l)
-    return what.length ? [`${partsOf(l, l.productId ? productMap.get(l.productId) : undefined).item} (${what.join(' and ')})`] : []
+    if (!what.length) return []
+    const d = days.find((x) => x.id === lineDay(l))
+    return [
+      `${partsOf(l, l.productId ? productMap.get(l.productId) : undefined).item} (${what.join(' and ')})${d ? ` — ${d.label}` : ''}`,
+    ]
   })
   const asked = lines.filter(isAsked)
   const empty = lines.length - asked.length
@@ -286,10 +318,10 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     setAddingSection(false)
     setStartFor(null)
     setCustomSection('')
-    if (!sections.includes(clean)) await updateEvent(eventId, { packSections: [...sections, clean] })
+    if (!sections.includes(clean)) await setSections([...sections, clean])
     if (start === 'usual') {
       for (const p of PRESETS[clean] ?? []) {
-        await addPackLine({ eventId, section: clean, label: p.label, itemType: p.kind ?? '', qtyRequested: 0 })
+        await addPackLine({ eventId, dayId, section: clean, label: p.label, itemType: p.kind ?? '', qtyRequested: 0 })
       }
     }
     void syncNow()
@@ -302,11 +334,11 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   }
 
   async function removeSection(section: string) {
-    const rows = lines.filter((l) => l.section === section)
+    const rows = dayLines.filter((l) => l.section === section)
     const at = sections.indexOf(section)
     for (const l of rows) await deletePackLine(l.id)
-    await updateEvent(eventId, { packSections: sections.filter((s) => s !== section) })
-    offerUndo({ lines: rows, section: { name: section, at }, label: `Removed ${titled(section)}` })
+    await setSections(sections.filter((s) => s !== section))
+    offerUndo({ lines: rows, section: { name: section, at, dayId }, label: `Removed ${titled(section)}` })
     void syncNow()
   }
 
@@ -320,10 +352,15 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     window.clearTimeout(undoTimer.current)
     const u = undo
     setUndo(null)
-    if (u.section && !sections.includes(u.section.name)) {
-      const next = [...sections]
-      next.splice(Math.min(u.section.at, next.length), 0, u.section.name)
-      await updateEvent(eventId, { packSections: next })
+    if (u.section) {
+      const current = days.length
+        ? (days.find((d) => d.id === u.section!.dayId)?.sections ?? [])
+        : (ev?.packSections ?? [])
+      if (!current.includes(u.section.name)) {
+        const next = [...current]
+        next.splice(Math.min(u.section.at, next.length), 0, u.section.name)
+        await setSections(next, u.section.dayId)
+      }
     }
     for (const l of u.lines) await restorePackLine(l)
     void syncNow()
@@ -406,8 +443,23 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     window.addEventListener('pointercancel', up)
   }
 
+  /** Day 2 is often Day 1 again: start from another day's list and adjust. */
+  async function copyDay(fromId: string) {
+    const from = days.find((d) => d.id === fromId)
+    if (!from || !day) return
+    const src = lines.filter((l) => lineDay(l) === fromId)
+    await setSections([...from.sections])
+    for (const l of src.sort((a, b) => a.sortIndex - b.sortIndex)) {
+      const { id: _id, updatedAt: _u, ...rest } = l
+      void _id
+      void _u
+      await addPackLine({ ...rest, dayId: day.id })
+    }
+    void syncNow()
+  }
+
   async function addUsual(section: string, label: string, kind?: string) {
-    const line = await addPackLine({ eventId, section, label, itemType: kind ?? '', qtyRequested: 0 })
+    const line = await addPackLine({ eventId, dayId, section, label, itemType: kind ?? '', qtyRequested: 0 })
     if (kind) setEditing({ id: line.id, focus: 'choice' })
     void syncNow()
   }
@@ -416,6 +468,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     const kind = kindOfProduct(p.product)
     await addPackLine({
       eventId,
+      dayId,
       section,
       productId: p.product?.id ?? null,
       label: kind || p.label,
@@ -430,7 +483,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     if (!clean) return
     // Something we don't stock: somebody has to go get it, and by default
     // that is the planner — she can change it on the line.
-    await addPackLine({ eventId, section, label: clean, who: defaultWho(section) === 'kitchen' ? '' : 'planner' })
+    await addPackLine({ eventId, dayId, section, label: clean, who: defaultWho(section) === 'kitchen' ? '' : 'planner' })
     setSpecial(null)
     setSpecialName('')
     void syncNow()
@@ -482,7 +535,8 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
           : l.choice === 'inHouse'
             ? 'In house'
             : ''
-    const choiceTone = p ? 'picked' : custom ? 'custom' : l.choice === 'tbd' ? 'tbd' : l.choice === 'inHouse' ? 'house' : 'empty'
+    const hasKind = !!(l.itemType || kindOfProduct(p))
+    const choiceTone = p ? 'picked' : custom ? 'custom' : l.choice === 'tbd' ? 'tbd' : l.choice === 'inHouse' ? 'house' : hasKind ? 'empty' : 'optional'
     const stockNote = p && p.storage === 'beverage' ? `${stock.get(p.id) ?? 0} in stock` : custom ? 'not on our shelf' : p?.location ?? ''
     return (
       <div
@@ -520,7 +574,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
                 disabled={locked}
                 onClick={() => setEditing({ id: l.id, focus: 'choice' })}
               >
-                <span className="pb-choice-text">{choiceText || 'Choose brand'}</span>
+                <span className="pb-choice-text">{choiceText || (hasKind ? 'Choose brand' : 'Specify (optional)')}</span>
                 {!locked && <span className="pb-caret" aria-hidden="true">▾</span>}
               </button>
             ) : (
@@ -618,16 +672,57 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
         </div>
       )}
 
+      {days.length > 0 && (
+        <nav className="pb-days" aria-label="Days">
+          {days.map((d) => {
+            const n = lines.filter((l) => lineDay(l) === d.id && isAsked(l)).length
+            return (
+              <button key={d.id} className={`pb-day${d.id === dayId ? ' on' : ''}`} onClick={() => setDayPick(d.id)}>
+                <span className="pb-day-label">{d.label || 'Day'}</span>
+                <span className="pb-day-date">{dayTitle(d).split(' · ')[1]}</span>
+                <span className="pb-day-n">{n ? `${n} line${n === 1 ? '' : 's'}` : 'empty'}</span>
+              </button>
+            )
+          })}
+        </nav>
+      )}
+      {day && (day.eventTime || day.kitchenPickup || day.iceNeeds) && (
+        <div className="pb-dayinfo">
+          {[
+            day.eventTime && `Event ${day.eventTime}`,
+            day.kitchenPickup && `Kitchen pickup ${day.kitchenPickup}`,
+            day.kitchenDelivery && `drop off ${day.kitchenDelivery}`,
+            day.iceNeeds && `Ice ${day.iceNeeds}${day.iceDeliveryTime ? ` at ${day.iceDeliveryTime}` : ''}`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      )}
+
       {sections.length === 0 && (
         <div className="pb-emptystate">
-          <div className="pb-emptystate-title">Start the pack list</div>
-          <div>Add a section — start it with the usual lines, or blank.</div>
+          <div className="pb-emptystate-title">{day ? `Pack list for ${day.label || 'this day'}` : 'Start the pack list'}</div>
+          <div>
+            Add a section — start it with the usual lines, or blank.
+            {day && ' A set-up day may only need office items and a few drinks; nothing from the kitchen is fine.'}
+          </div>
+          {!locked && day && days.some((d) => d.id !== day.id && d.sections.length > 0) && (
+            <div className="pb-copy">
+              {days
+                .filter((d) => d.id !== day.id && d.sections.length > 0)
+                .map((d) => (
+                  <button key={d.id} className="pb-btn" onClick={() => void copyDay(d.id)}>
+                    Copy {d.label || 'that day'}&rsquo;s list
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
       {sections.map((section) => {
         const rows = sorted(section)
-        const have = new Set(lines.filter((l) => l.section === section).map((l) => l.label.toLowerCase()))
+        const have = new Set(dayLines.filter((l) => l.section === section).map((l) => l.label.toLowerCase()))
         const usual = (PRESETS[section] ?? []).filter((p) => !have.has(p.label.toLowerCase()))
         const dept = defaultWho(section)
         const included = rows.filter(isAsked).length

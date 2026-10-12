@@ -12,7 +12,7 @@ import { supabase } from './supabase'
 import { saveImport } from './packStore'
 import { isoDate, weekStartIso } from './packWeeks'
 import { syncNow } from './sync'
-import type { LineWho, PackImport, PackLine, Product } from './types'
+import type { EventDay, EventRec, LineWho, PackImport, PackLine, Product } from './types'
 import { displayName } from './types'
 
 /** The planners today. Initials are how they sign lines: "PJ to order". */
@@ -85,14 +85,15 @@ export const PRESETS: Record<string, PresetItem[]> = {
     { label: 'Dry Vermouth', kind: 'Vermouth', group: 'Liquor' },
     { label: 'Sweet Vermouth', kind: 'Vermouth', group: 'Liquor' },
     { label: 'Triple Sec', kind: 'Liqueur', group: 'Liquor' },
-    { label: 'Angostura Bitters', group: 'Liquor' },
+    // They ask for all sorts — Angostura, walnut, chocolate — so it's written in.
+    { label: 'Bitters', group: 'Liquor' },
     { label: 'Cabernet Sauvignon', kind: 'Cabernet Sauvignon', group: 'Wine' },
     { label: 'Sauvignon Blanc', kind: 'Sauvignon Blanc', group: 'Wine' },
     { label: 'Pinot Grigio', kind: 'Pinot Grigio', group: 'Wine' },
     { label: 'Rosé', kind: 'Rosé', group: 'Wine' },
     { label: 'Prosecco', kind: 'Prosecco', group: 'Wine' },
     { label: 'Stella Artois', group: 'Beer' },
-    { label: 'Heineken Silver', group: 'Beer' },
+    { label: 'Heineken', group: 'Beer' },
     { label: 'Amstel Light', group: 'Beer' },
     { label: 'Staff Water (16.9fl oz/24/case)', group: 'N/A' },
     { label: 'Large Bottled Sparkling Water', group: 'N/A' },
@@ -190,6 +191,48 @@ export function areaOf(l: PackLine, product?: Product): string {
 const DEPT_TITLES: Record<string, string> = { kitchen: 'Kitchen', storied: 'Storied' }
 export const deptTitle = (d: string) => DEPT_TITLES[d] ?? d
 
+/** "STORAGE BEVERAGE" → "Storage Beverage": their template shouts; the screens don't need to. */
+export const titled = (s: string) => s.toLowerCase().replace(/(^|[\s/(-])([a-z])/g, (_, a, b) => a + b.toUpperCase())
+
+/**
+ * The heading a department sees on its link. "Storage Beverage" is the
+ * warehouse — his — so a line the kitchen or Storied brings from it reads as
+ * their beverage, not his storage. The kitchen's own sections keep their names.
+ */
+export function shareSection(dept: string, section: string): string {
+  if (/KITCHEN/i.test(section)) return titled(section)
+  if (/BEVERAGE/i.test(section)) return `${deptTitle(dept)} Beverage`
+  if (/OFFICE|DRY|DISPOSABLE/i.test(section)) return `${deptTitle(dept)} Items`
+  return titled(section.replace(/^STORAGE\s*/i, ''))
+}
+
+/** The days in the order they happen. */
+export const daysOf = (ev: Pick<EventRec, 'days'>): EventDay[] => [...(ev.days ?? [])].sort((a, b) => a.date - b.date)
+
+export const shortDay = (ms: number) =>
+  new Date(ms).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+/** "Set-up day · Tue, Oct 13" */
+export const dayTitle = (d: EventDay) => `${d.label || 'Day'} · ${shortDay(d.date)}`
+
+export function newDay(partial: Partial<EventDay>): EventDay {
+  return {
+    id: uuid(),
+    label: '',
+    date: Date.now(),
+    eventTime: '',
+    callTime: '',
+    guestCount: null,
+    iceNeeds: '',
+    iceDeliveryTime: '',
+    kitchenPickup: '',
+    kitchenDelivery: '',
+    notes: '',
+    sections: [],
+    ...partial,
+  }
+}
+
 export const shareUrl = (id: string) => `${location.origin}${import.meta.env.BASE_URL}?list=${id}`
 
 export interface SendResult {
@@ -211,8 +254,17 @@ function prettyDay(ms: number): string {
 export async function sendEvent(eventId: string): Promise<SendResult> {
   const ev = await db.events.get(eventId)
   if (!ev) throw new Error('event not found')
+  const days = daysOf(ev)
+  const multi = days.length > 0
+  // A line from before the event had days belongs to the first one.
+  const dayOfLine = (l: PackLine) => (multi ? (days.find((d) => d.id === l.dayId) ?? days[0]) : undefined)
+  const order = (l: PackLine) => {
+    const d = dayOfLine(l)
+    const secs = d ? d.sections : (ev.packSections ?? [])
+    return (d ? days.indexOf(d) : 0) * 1000 + Math.max(0, secs.indexOf(l.section))
+  }
   const lines = (await db.packLines.where('eventId').equals(eventId).toArray()).sort(
-    (a, b) => (ev.packSections ?? []).indexOf(a.section) - (ev.packSections ?? []).indexOf(b.section) || a.sortIndex - b.sortIndex,
+    (a, b) => order(a) - order(b) || a.sortIndex - b.sortIndex,
   )
   const ids = lines.map((l) => l.productId).filter((x): x is string => !!x)
   const products = new Map((await db.products.bulkGet(ids)).flatMap((p) => (p ? [[p.id, p] as const] : [])))
@@ -226,29 +278,60 @@ export async function sendEvent(eventId: string): Promise<SendResult> {
   // Operations: everything that isn't the kitchen's. What a planner, Storied
   // or the client brings still comes along, marked, so he knows it's covered
   // — and can say "don't order that, I have it".
-  const iso = isoDate(new Date(ev.date))
+  const first = days[0]
+  const iso = isoDate(new Date(first?.date ?? ev.date))
   const mine = asked.filter((l) => whoOf(l) !== 'kitchen')
+  const guests = (n: number | null | undefined) => (n == null ? '' : String(n))
   const rec: PackImport = {
     id: uuid(),
     eventKey: `app:${ev.id}`,
     weekStart: weekStartIso(iso),
     filename: `${ev.name} · from the app`,
     eventName: ev.name,
-    eventDate: prettyDay(ev.date),
+    eventDate: prettyDay(first?.date ?? ev.date),
     eventIso: iso,
-    eventTime: ev.eventTime,
+    eventTime: first?.eventTime ?? ev.eventTime,
     venue: ev.location,
     address: ev.address,
     serviceEntrance: ev.serviceEntrance,
     onsiteContact: ev.onsiteContact,
     planner: ev.planner,
-    guestCount: ev.guestCount == null ? '' : String(ev.guestCount),
-    iceNeeds: ev.iceNeeds,
-    iceDeliveryTime: ev.iceDeliveryTime,
-    kitchenPickup: ev.kitchenPickup,
-    kitchenDelivery: ev.kitchenDelivery,
-    specialNotes: ev.notes,
-    additionalNotes: '',
+    guestCount: guests(first ? first.guestCount : ev.guestCount),
+    iceNeeds: first?.iceNeeds ?? ev.iceNeeds,
+    iceDeliveryTime: first?.iceDeliveryTime ?? ev.iceDeliveryTime,
+    kitchenPickup: first?.kitchenPickup ?? ev.kitchenPickup,
+    kitchenDelivery: first?.kitchenDelivery ?? ev.kitchenDelivery,
+    specialNotes: multi ? '' : ev.notes,
+    // On a multi-day event each day has its own notes; these are the event's.
+    additionalNotes: multi ? ev.notes : '',
+    // Each day as its own MO, and its own delivery on his screen — the way
+    // Imagination's file arrived, so it splits by day like that one.
+    days: multi
+      ? days.map((d) => ({
+          label: d.label || 'Day',
+          date: isoDate(new Date(d.date)),
+          eventTime: d.eventTime,
+          guestCount: guests(d.guestCount),
+          iceNeeds: d.iceNeeds,
+          iceDeliveryTime: d.iceDeliveryTime,
+          runs: d.kitchenPickup || d.kitchenDelivery ? [{ pickup: d.kitchenPickup, delivery: d.kitchenDelivery }] : [],
+          specialNotes: d.notes,
+        }))
+      : undefined,
+    drops: multi
+      ? days.map((d) => ({
+          key: d.id,
+          label: dayTitle(d),
+          // Written the way the planners' red line reads, so it sorts and shows the same.
+          delivered: d.kitchenDelivery
+            ? `DELIVERED ${new Date(d.date).getMonth() + 1}/${new Date(d.date).getDate()} - at ${d.kitchenDelivery}`
+            : '',
+          date: isoDate(new Date(d.date)),
+          eventTime: d.eventTime,
+          callTime: d.callTime,
+          guestCount: guests(d.guestCount),
+        }))
+      : undefined,
     legend: {},
     emailSubject: '',
     emailFrom: '',
@@ -265,6 +348,7 @@ export async function sendEvent(eventId: string): Promise<SendResult> {
         note: noteOf(l),
         who,
         whoLabel: who === 'ops' ? '' : whoText(who, initials),
+        ...(multi ? { drop: dayOfLine(l)!.id } : {}),
       }
     }),
     importedAt: Date.now(),
@@ -296,14 +380,31 @@ export async function sendEvent(eventId: string): Promise<SendResult> {
         event_id: ev.id,
         dept: d,
         event_name: ev.name,
-        event_date: prettyDay(ev.date),
+        event_date: multi
+          ? `${prettyDay(first!.date)} – ${prettyDay(days[days.length - 1].date)}`
+          : prettyDay(ev.date),
         venue: ev.location,
         address: ev.address,
         planner: ev.planner,
         lines: ls.map((l) => {
           const p = l.productId ? products.get(l.productId) : undefined
-          return { item: lineName(l, p), qty: qtyText(l), note: noteOf(l), section: l.section }
+          return {
+            item: lineName(l, p),
+            qty: qtyText(l),
+            note: noteOf(l),
+            section: shareSection(d, l.section),
+            day: multi ? dayOfLine(l)!.id : '',
+          }
         }),
+        // What the kitchen needs around the list: when it goes out, per day.
+        days: (multi ? days : [null]).map((day) => ({
+          key: day?.id ?? '',
+          label: day ? dayTitle(day) : '',
+          eventTime: day ? day.eventTime : ev.eventTime,
+          guestCount: guests(day ? day.guestCount : ev.guestCount),
+          kitchenPickup: day ? day.kitchenPickup : ev.kitchenPickup,
+          kitchenDelivery: day ? day.kitchenDelivery : ev.kitchenDelivery,
+        })),
         updated_at: new Date().toISOString(),
       }))
       const { error } = await supabase.from('pack_shares').upsert(rows, { onConflict: 'event_id,dept' })

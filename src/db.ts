@@ -322,6 +322,7 @@ export async function createEvent(partial: Partial<EventRec>): Promise<EventRec>
     status: 'draft',
     sentAt: null,
     shares: {},
+    days: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...partial,

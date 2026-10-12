@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, createEvent, deleteEvent, restoreEvent, type DeletedEvent } from '../db'
 import { syncNow } from '../sync'
-import { stillTbd } from '../packBuilder'
+import { newDay, stillTbd } from '../packBuilder'
 import type { EventRec } from '../types'
 import SwipeRow from './SwipeRow'
 
@@ -34,6 +34,10 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [day, setDay] = useState(toInputDay(Date.now()))
+  // Multi-day: asked up front, so Imagination-style events start as one event with its days.
+  const [multi, setMulti] = useState(false)
+  const [dayCount, setDayCount] = useState(3)
+  const [setup, setSetup] = useState(false)
   const [undo, setUndo] = useState<DeletedEvent | null>(null)
   const undoTimer = useRef<number | undefined>(undefined)
 
@@ -45,9 +49,19 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
 
   async function submit() {
     if (!name.trim()) return
-    const ev = await createEvent({ name: name.trim(), date: parseDay(day) })
+    const start = parseDay(day)
+    const DAY = 86400000
+    const days = multi
+      ? [
+          ...(setup ? [newDay({ label: 'Set-up day', date: start - DAY })] : []),
+          ...Array.from({ length: dayCount }, (_, i) => newDay({ label: `Day ${i + 1}`, date: start + i * DAY })),
+        ]
+      : []
+    const ev = await createEvent({ name: name.trim(), date: days[0]?.date ?? start, days })
     setCreating(false)
     setName('')
+    setMulti(false)
+    setSetup(false)
     onOpen(ev)
     void syncNow()
   }
@@ -77,6 +91,7 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
                   <span className={`pl-status ${e.status === 'sent' ? 'sent' : e.sentAt ? 'editing' : 'draft'}`}>
                     {e.status === 'sent' ? 'Sent' : e.sentAt ? 'Editing' : 'Draft'}
                   </span>
+                  {(e.days?.length ?? 0) > 0 && <span className="pl-status">{e.days!.length} days</span>}
                   {(tbdBy.get(e.id) ?? 0) > 0 && <span className="pl-status tbd">{tbdBy.get(e.id)} TBD</span>}
                 </div>
                 <div className="muted small">
@@ -144,13 +159,46 @@ export default function EventsView({ onOpen }: { onOpen: (e: EventRec) => void }
               autoFocus
               onKeyDown={(ev) => ev.key === 'Enter' && void submit()}
             />
-            <label className="field-label">Date</label>
+            <label className="field-label">{multi ? 'Day 1' : 'Date'}</label>
             <input
               type="date"
               value={day}
               onChange={(ev) => setDay(ev.target.value)}
               onKeyDown={(ev) => ev.key === 'Enter' && void submit()}
             />
+            <label className="field-label">Is it a multi-day event?</label>
+            <div className="ev-seg">
+              <button className={!multi ? 'on' : ''} onClick={() => setMulti(false)}>
+                One day
+              </button>
+              <button className={multi ? 'on' : ''} onClick={() => setMulti(true)}>
+                Several days
+              </button>
+            </div>
+            {multi && (
+              <div className="ev-multi-opts">
+                <div className="ev-multi-row">
+                  <span>Event days</span>
+                  <div className="qty sm">
+                    <button onClick={() => setDayCount((n) => Math.max(2, n - 1))} aria-label="Fewer days">
+                      −
+                    </button>
+                    <input readOnly value={dayCount} aria-label="Event days" />
+                    <button onClick={() => setDayCount((n) => Math.min(10, n + 1))} aria-label="More days">
+                      ＋
+                    </button>
+                  </div>
+                </div>
+                <label className="ev-multi-row">
+                  <span>Set-up day the day before</span>
+                  <input type="checkbox" checked={setup} onChange={(e) => setSetup(e.target.checked)} />
+                </label>
+                <div className="field-hint">
+                  Each day gets its own times, ice, kitchen runs and pack list — all in this one event. Days can be added,
+                  removed or renamed later.
+                </div>
+              </div>
+            )}
             <button className="big-btn green" style={{ marginTop: 14 }} disabled={!name.trim()} onClick={submit}>
               Create event
             </button>
