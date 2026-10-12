@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, addPackLine, updatePackLine, deletePackLine, restorePackLine, updateEvent } from '../db'
 import { syncNow } from '../sync'
@@ -8,7 +8,6 @@ import {
   defaultWho,
   deptTitle,
   isAsked,
-  lineName,
   plannerInitials,
   sendEvent,
   shareUrl,
@@ -26,109 +25,74 @@ function when(ms: number): string {
   return new Date(ms).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
+/** "STORAGE BEVERAGE" → "Storage Beverage": their template shouts; the screen doesn't need to. */
+const titled = (s: string) => s.toLowerCase().replace(/(^|[\s/(-])([a-z])/g, (_, a, b) => a + b.toUpperCase())
+
+/** Beverage products have a kind ("Gin") the line is named after; office trays don't. */
+const kindOfProduct = (p?: Product) => (p && p.storage === 'beverage' && p.subcategory && p.subcategory !== 'Unknown' ? p.subcategory : '')
+
 /**
- * A row that can be dragged out of the list to remove it — sideways, with a
- * finger or the mouse. The bin button does the same in one click; both offer
- * Undo.
+ * The two halves of a line as the planner reads it: what was asked for (Gin)
+ * and which one (Bombay Sapphire / TBD / In house). The first never changes
+ * once picked, so she can always see what the line is and change her mind.
  */
-function DragOut({ disabled, onRemove, children }: { disabled: boolean; onRemove: () => void; children: ReactNode }) {
-  const [dx, setDx] = useState(0)
-  const st = useRef<{ x: number; y: number; active: boolean; moved: boolean } | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
-  const width = () => ref.current?.offsetWidth ?? 320
-  return (
-    <div
-      ref={ref}
-      className={`pl-row-wrap${dx ? ' dragging' : ''}`}
-      style={{ transform: dx ? `translateX(${dx}px)` : undefined, opacity: dx ? Math.max(0.15, 1 - Math.abs(dx) / width()) : 1 }}
-      onPointerDown={(e) => {
-        if (disabled || (e.target as Element).closest('input,textarea,select')) return
-        st.current = { x: e.clientX, y: e.clientY, active: false, moved: false }
-      }}
-      onPointerMove={(e) => {
-        const s = st.current
-        if (!s) return
-        const d = e.clientX - s.x
-        if (!s.active) {
-          if (Math.abs(d) < 12 || Math.abs(d) < Math.abs(e.clientY - s.y)) return
-          s.active = true
-          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-        }
-        s.moved = true
-        setDx(d)
-      }}
-      onPointerUp={() => {
-        const s = st.current
-        st.current = null
-        if (s?.active && Math.abs(dx) > width() * 0.35) {
-          setDx(0)
-          onRemove()
-          return
-        }
-        setDx(0)
-        if (s?.moved) {
-          // swallow the click the drag would otherwise end with
-          const stop = (ev: Event) => ev.stopPropagation()
-          ref.current?.addEventListener('click', stop, { capture: true, once: true })
-          setTimeout(() => ref.current?.removeEventListener('click', stop, { capture: true }), 50)
-        }
-      }}
-      onPointerCancel={() => {
-        st.current = null
-        setDx(0)
-      }}
-    >
-      {children}
-    </div>
-  )
+function partsOf(l: PackLine, p?: Product): { item: string; hasChoice: boolean } {
+  if (l.itemType) return { item: l.label || l.itemType, hasChoice: true }
+  const kind = kindOfProduct(p)
+  if (kind) return { item: kind, hasChoice: true }
+  if (p) return { item: displayName(p) || p.name, hasChoice: false }
+  return { item: l.label, hasChoice: false }
 }
 
-function Qty({ line, locked }: { line: PackLine; locked: boolean }) {
-  if (locked) return <div className="pl-qty-ro">{line.qtyTbd ? 'TBD' : line.qtyRequested || '—'}</div>
+function Qty({ line }: { line: PackLine }) {
   const step = (d: number) =>
     void updatePackLine(line.id, { qtyRequested: Math.max(0, line.qtyRequested + d), qtyTbd: false })
+  if (line.qtyTbd) {
+    return (
+      <div className="pb-qty">
+        <button className="pb-tbd-on" onClick={() => void updatePackLine(line.id, { qtyTbd: false })} title="The quantity is known now">
+          Qty TBD <span aria-hidden="true">×</span>
+        </button>
+      </div>
+    )
+  }
   return (
-    <div className="pl-qty">
-      {line.qtyTbd ? (
-        <button className="pl-tbd on" onClick={() => void updatePackLine(line.id, { qtyTbd: false })} title="Quantity known now">
-          TBD
+    <div className="pb-qty">
+      <div className="pb-stepper">
+        <button onClick={() => step(-1)} aria-label="Less">
+          −
         </button>
-      ) : (
-        <div className="qty sm">
-          <button onClick={() => step(-1)} aria-label="Less">
-            −
-          </button>
-          {/* typed as well as stepped: 200 skewers is typed, 6 bottles is tapped */}
-          <input
-            inputMode="numeric"
-            value={line.qtyRequested || ''}
-            placeholder="–"
-            onChange={(e) => {
-              const n = Number(e.target.value.replace(/\D/g, ''))
-              void updatePackLine(line.id, { qtyRequested: Number.isFinite(n) ? n : 0 })
-            }}
-            onFocus={(e) => e.target.select()}
-          />
-          <button onClick={() => step(1)} aria-label="More">
-            ＋
-          </button>
-        </div>
-      )}
-      {!line.qtyTbd && (
-        <button className="pl-tbd" onClick={() => void updatePackLine(line.id, { qtyTbd: true })} title="Quantity not known yet">
-          TBD
+        {/* typed as well as stepped: 200 skewers is typed, 6 bottles is tapped */}
+        <input
+          inputMode="numeric"
+          value={line.qtyRequested || ''}
+          placeholder="–"
+          aria-label="Quantity"
+          onChange={(e) => {
+            const n = Number(e.target.value.replace(/\D/g, ''))
+            void updatePackLine(line.id, { qtyRequested: Number.isFinite(n) ? n : 0 })
+          }}
+          onFocus={(e) => e.target.select()}
+        />
+        <button onClick={() => step(1)} aria-label="More">
+          ＋
         </button>
-      )}
+      </div>
+      <button className="pb-tbd" onClick={() => void updatePackLine(line.id, { qtyTbd: true })} title="Quantity not known yet">
+        TBD
+      </button>
     </div>
   )
 }
 
 /**
- * One line's choices: the brand (only the shelf of its kind — the gins when
- * the line is Gin), or TBD / In house / blank, and who brings it.
+ * One line's choice — which brand, or TBD / In house / blank — or who brings
+ * it. Only the shelf of its kind is offered: the gins when the line is Gin.
  */
 function LinePicker({
   line,
+  focus,
+  item,
   products,
   stock,
   inInventory,
@@ -136,6 +100,8 @@ function LinePicker({
   onClose,
 }: {
   line: PackLine
+  focus: 'choice' | 'who'
+  item: string
   products: Product[]
   stock: Map<string, number>
   inInventory: Set<string>
@@ -143,63 +109,90 @@ function LinePicker({
   onClose: () => void
 }) {
   const current = line.productId ? products.find((p) => p.id === line.productId) : undefined
-  const kind = line.itemType || current?.subcategory || ''
+  const kind = line.itemType || kindOfProduct(current)
   const brands = useMemo(
     () =>
       kind
         ? products
             .filter((p) => p.subcategory === kind && inInventory.has(p.id) && (displayName(p) || p.name).trim())
-            .sort((a, b) => (stock.get(b.id) ?? 0) - (stock.get(a.id) ?? 0) || (displayName(a) || a.name).localeCompare(displayName(b) || b.name))
+            .sort(
+              (a, b) =>
+                (stock.get(b.id) ?? 0) - (stock.get(a.id) ?? 0) ||
+                (displayName(a) || a.name).localeCompare(displayName(b) || b.name),
+            )
         : [],
     [kind, products, stock, inInventory],
   )
   const who = whoOf(line)
-  const set = (changes: Partial<PackLine>, close = true) => {
-    void updatePackLine(line.id, changes)
+  const set = (changes: Partial<PackLine>) => {
+    // A line picked straight from the shelf learns its kind here, so it keeps
+    // reading "Vodka" whatever is chosen next.
+    void updatePackLine(line.id, kind && !line.itemType ? { ...changes, itemType: kind, label: kind } : changes)
     void syncNow()
-    if (close) onClose()
+    onClose()
   }
-  const opt = (on: boolean, label: string, sub: string, onClick: () => void) => (
-    <button className={`pl-opt${on ? ' on' : ''}`} onClick={onClick}>
-      <span>{label}</span>
-      <span className="muted small">{sub}</span>
+  const opt = (on: boolean, label: string, sub: string, onClick: () => void, tone = '') => (
+    <button key={label} className={`pb-opt${on ? ' on' : ''} ${tone}`} onClick={onClick}>
+      <span className="pb-opt-label">{label}</span>
+      {sub && <span className="pb-opt-sub">{sub}</span>}
     </button>
   )
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet tall" onClick={(e) => e.stopPropagation()}>
-        <h2>{line.itemType ? line.label || kind : kind || line.label}</h2>
-        {kind && (
+      <div className="sheet tall pb-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="pb-sheet-kicker">{focus === 'choice' ? 'Choose one' : 'Who brings it'}</div>
+        <h2>{item}</h2>
+        {focus === 'choice' && (
           <>
-            <div className="pick-heading">Which one</div>
-            {brands.map((p) =>
-              opt(
-                line.productId === p.id,
-                displayName(p) || p.name,
-                (stock.get(p.id) ?? 0) > 0 ? `${stock.get(p.id)} in stock` : 'none counted',
-                () => set({ productId: p.id, choice: '' }),
-              ),
-            )}
-            {brands.length === 0 && <div className="muted small" style={{ padding: '6px 2px' }}>No {kind.toLowerCase()} on the shelf right now.</div>}
-            {opt(!line.productId && line.choice === 'tbd', 'TBD', 'decide later', () => set({ productId: null, choice: 'tbd' }))}
-            {opt(!line.productId && line.choice === 'inHouse', 'In house', `any ${kind.toLowerCase()} will do`, () =>
-              set({ productId: null, choice: 'inHouse' }),
-            )}
-            {opt(!line.productId && !line.choice, 'Leave blank', `just “${line.label || kind}”`, () => set({ productId: null, choice: '' }))}
+            <div className="pb-opt-group">
+              {opt(!line.productId && line.choice === 'tbd', 'TBD', 'decide later — stays flagged until it’s picked', () =>
+                set({ productId: null, choice: 'tbd' }),
+              'tbd')}
+              {opt(!line.productId && line.choice === 'inHouse', 'In house', `any ${kind.toLowerCase()} we have`, () =>
+                set({ productId: null, choice: 'inHouse' }),
+              )}
+              {opt(!line.productId && !line.choice, 'Leave blank', `just “${item}”`, () => set({ productId: null, choice: '' }))}
+            </div>
+            <div className="pb-sheet-sub">On the shelf</div>
+            <div className="pb-opt-group">
+              {brands.map((p) =>
+                opt(
+                  line.productId === p.id,
+                  displayName(p) || p.name,
+                  (stock.get(p.id) ?? 0) > 0 ? `${stock.get(p.id)} in stock${p.location ? ` · ${p.location}` : ''}` : 'none counted',
+                  () => set({ productId: p.id, choice: '' }),
+                ),
+              )}
+              {brands.length === 0 && <div className="pb-empty">No {kind.toLowerCase()} on the shelf right now.</div>}
+            </div>
           </>
         )}
-        <div className="pick-heading">Who brings it</div>
-        {WHO_ORDER.map((w) =>
-          opt(who === w, whoText(w, initials), w === defaultWho(line.section) ? 'usual for this section' : '', () =>
-            set({ who: w === defaultWho(line.section) ? '' : w }, false),
-          ),
+        {focus === 'who' && (
+          <div className="pb-opt-group">
+            {WHO_ORDER.map((w) =>
+              opt(
+                who === w,
+                whoText(w, initials),
+                w === defaultWho(line.section) ? 'usual for this section' : '',
+                () => set({ who: w === defaultWho(line.section) ? '' : w }),
+                `who-${w}`,
+              ),
+            )}
+          </div>
         )}
-        <button className="big-btn green" style={{ marginTop: 12 }} onClick={onClose}>
-          Done
-        </button>
       </div>
     </div>
   )
+}
+
+interface Drag {
+  id: string
+  section: string
+  axis: 'x' | 'y'
+  dx: number
+  dy: number
+  /** Where it would land, counted among the section's other lines. */
+  over: number
 }
 
 export default function PackList({ eventId, onBack }: { eventId: string; onBack: () => void }) {
@@ -224,13 +217,14 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   const [addingSection, setAddingSection] = useState(false)
   const [startFor, setStartFor] = useState<string | null>(null)
   const [customSection, setCustomSection] = useState('')
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ id: string; focus: 'choice' | 'who' } | null>(null)
   const [undo, setUndo] = useState<{ lines: PackLine[]; section?: { name: string; at: number }; label: string } | null>(null)
   const undoTimer = useRef<number | undefined>(undefined)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState<SendResult | null>(null)
   const [sendError, setSendError] = useState('')
   const [copied, setCopied] = useState('')
+  const [drag, setDrag] = useState<Drag | null>(null)
 
   useEffect(() => () => window.clearTimeout(undoTimer.current), [])
 
@@ -249,14 +243,18 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
   /**
    * A section someone invented has no shelf behind it — "PJ to order" is not a
-   * place in the warehouse. Opening the product picker there just shows an
-   * empty list, so these sections only ever take typed-in items.
+   * place in the warehouse — so it only ever takes typed-in items.
    */
   const isCustom = (section: string) => !PACK_SECTIONS.includes(section as (typeof PACK_SECTIONS)[number])
 
+  const sorted = (section: string) =>
+    lines
+      .filter((l) => l.section === section && (!locked || isAsked(l)))
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+
   const tbd = lines.flatMap((l) => {
     const what = stillTbd(l)
-    return what.length ? [`${lineName(l, l.productId ? productMap.get(l.productId) : undefined)} (${what.join(' and ')})`] : []
+    return what.length ? [`${partsOf(l, l.productId ? productMap.get(l.productId) : undefined).item} (${what.join(' and ')})`] : []
   })
   const asked = lines.filter(isAsked)
   const empty = lines.length - asked.length
@@ -264,7 +262,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   function offerUndo(u: NonNullable<typeof undo>) {
     setUndo(u)
     window.clearTimeout(undoTimer.current)
-    undoTimer.current = window.setTimeout(() => setUndo(null), 6000)
+    undoTimer.current = window.setTimeout(() => setUndo(null), 7000)
   }
 
   async function addSection(name: string, start: 'usual' | 'blank') {
@@ -293,13 +291,13 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     const at = sections.indexOf(section)
     for (const l of rows) await deletePackLine(l.id)
     await updateEvent(eventId, { packSections: sections.filter((s) => s !== section) })
-    offerUndo({ lines: rows, section: { name: section, at }, label: `Removed ${section}` })
+    offerUndo({ lines: rows, section: { name: section, at }, label: `Removed ${titled(section)}` })
     void syncNow()
   }
 
   async function removeLine(l: PackLine) {
     await deletePackLine(l.id)
-    offerUndo({ lines: [l], label: `Removed ${lineName(l, l.productId ? productMap.get(l.productId) : undefined)}` })
+    offerUndo({ lines: [l], label: `Removed ${partsOf(l, l.productId ? productMap.get(l.productId) : undefined).item}` })
   }
 
   async function restore() {
@@ -316,18 +314,97 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     void syncNow()
   }
 
+  /** Her order, not ours: liquor together, soft drinks together, whatever she likes. */
+  async function moveTo(section: string, id: string, over: number) {
+    const rows = sorted(section)
+    const moving = rows.find((l) => l.id === id)
+    if (!moving) return
+    const others = rows.filter((l) => l.id !== id)
+    others.splice(Math.max(0, Math.min(over, others.length)), 0, moving)
+    for (let i = 0; i < others.length; i++) {
+      if (others[i].sortIndex !== i) await updatePackLine(others[i].id, { sortIndex: i })
+    }
+    void syncNow()
+  }
+
+  /**
+   * One gesture for both: up or down moves the line, sideways throws it out.
+   * On a phone the grip starts a move (the rest of the row scrolls the page);
+   * with a mouse the whole row does.
+   */
+  function startGesture(e: React.PointerEvent, l: PackLine, fromGrip: boolean) {
+    if (locked || e.button > 0) return
+    if ((e.target as Element).closest('input,textarea,select')) return
+    const rowEl = (e.currentTarget as HTMLElement).closest('[data-line]') as HTMLElement | null
+    const sectionEl = rowEl?.closest('.pb-section')
+    if (!rowEl || !sectionEl) return
+    const mouse = e.pointerType === 'mouse'
+    if (mouse) e.preventDefault()
+    const x0 = e.clientX
+    const y0 = e.clientY
+    const width = rowEl.offsetWidth
+    // Midpoints of the other rows, measured once: they don't move while dragging.
+    const mids = [...sectionEl.querySelectorAll<HTMLElement>('[data-line]')]
+      .filter((el) => el !== rowEl)
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top + r.height / 2
+      })
+    const start = mids.filter((m) => m < rowEl.getBoundingClientRect().top + rowEl.offsetHeight / 2).length
+    let axis: 'x' | 'y' | null = null
+    let state: Drag | null = null
+
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - x0
+      const dy = ev.clientY - y0
+      if (!axis) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return
+        axis = Math.abs(dx) > Math.abs(dy) ? 'x' : fromGrip || mouse ? 'y' : null
+        if (!axis) return cleanup()
+      }
+      ev.preventDefault()
+      state =
+        axis === 'x'
+          ? { id: l.id, section: l.section, axis, dx, dy: 0, over: start }
+          : { id: l.id, section: l.section, axis, dx: 0, dy, over: mids.filter((m) => m < ev.clientY).length }
+      setDrag(state)
+    }
+    const up = () => {
+      cleanup()
+      const s = state
+      setDrag(null)
+      if (!s) return
+      // the click that ends a drag isn't a tap on the brand or the bin
+      const swallow = (ce: Event) => ce.stopPropagation()
+      window.addEventListener('click', swallow, { capture: true, once: true })
+      setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 60)
+      if (s.axis === 'x' && Math.abs(s.dx) > width * 0.33) void removeLine(l)
+      if (s.axis === 'y' && s.over !== start) void moveTo(l.section, l.id, s.over)
+    }
+    function cleanup() {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   async function addUsual(section: string, label: string, kind?: string) {
     const line = await addPackLine({ eventId, section, label, itemType: kind ?? '', qtyRequested: 0 })
-    if (kind) setEditing(line.id)
+    if (kind) setEditing({ id: line.id, focus: 'choice' })
     void syncNow()
   }
 
   async function pick(section: string, p: Picked) {
+    const kind = kindOfProduct(p.product)
     await addPackLine({
       eventId,
       section,
       productId: p.product?.id ?? null,
-      label: p.label,
+      label: kind || p.label,
+      itemType: kind,
       qtyRequested: p.qty,
     })
     void syncNow()
@@ -374,188 +451,257 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   const week = weekLabel(weekStartIso(isoDate(new Date(ev.date))))
   const links = Object.entries(ev.shares ?? {})
 
+  const renderRow = (l: PackLine) => {
+    const p = l.productId ? productMap.get(l.productId) : undefined
+    const { item, hasChoice } = partsOf(l, p)
+    const who = whoOf(l)
+    const open = stillTbd(l)
+    const dragging = drag?.id === l.id
+    const choiceText = p ? displayName(p) || p.name : l.choice === 'tbd' ? 'TBD' : l.choice === 'inHouse' ? 'In house' : ''
+    const choiceTone = p ? 'picked' : l.choice === 'tbd' ? 'tbd' : l.choice === 'inHouse' ? 'house' : 'empty'
+    const stockNote = p && p.storage === 'beverage' ? `${stock.get(p.id) ?? 0} in stock` : p?.location ?? ''
+    return (
+      <div
+        key={l.id}
+        data-line={l.id}
+        className={`pb-row${isAsked(l) ? '' : ' unasked'}${dragging ? ` dragging ${drag!.axis}` : ''}${locked ? ' locked' : ''}`}
+        style={
+          dragging
+            ? {
+                transform: `translate(${drag!.dx}px, ${drag!.dy}px)`,
+                opacity: drag!.axis === 'x' ? Math.max(0.2, 1 - Math.abs(drag!.dx) / 420) : 1,
+              }
+            : undefined
+        }
+        onPointerDown={(e) => startGesture(e, l, false)}
+      >
+        {!locked && (
+          <span className="pb-grip" title="Drag up or down to move · sideways to remove" onPointerDown={(e) => {
+            e.stopPropagation()
+            startGesture(e, l, true)
+          }}>
+            ⠿
+          </span>
+        )}
+        <div className="pb-item">
+          {open.length > 0 && <span className="pb-flag" title={`Still TBD: ${open.join(' and ')}`} />}
+          <span className="pb-item-name">{item}</span>
+          {p?.contents && <span className="pb-kit">kit: {p.contents}</span>}
+        </div>
+        <div className="pb-meta">
+          <div className="pb-choice-cell">
+            {hasChoice ? (
+              <button
+                className={`pb-choice ${choiceTone}`}
+                disabled={locked}
+                onClick={() => setEditing({ id: l.id, focus: 'choice' })}
+              >
+                <span className="pb-choice-text">{choiceText || 'Choose brand'}</span>
+                {!locked && <span className="pb-caret" aria-hidden="true">▾</span>}
+              </button>
+            ) : (
+              <span className="pb-choice-none">{stockNote}</span>
+            )}
+            {hasChoice && stockNote && <span className="pb-stock">{stockNote}</span>}
+          </div>
+          <button className={`pb-who who-${who}${who === defaultWho(l.section) ? ' usual' : ''}`} disabled={locked} onClick={() => setEditing({ id: l.id, focus: 'who' })}>
+            <span className="pb-dot" aria-hidden="true" />
+            {whoText(who, initials)}
+          </button>
+        </div>
+        <div className="pb-note-cell">
+          {locked ? (
+            l.note && <span className="pb-note-ro">{l.note}</span>
+          ) : (
+            <input
+              className="pb-note"
+              value={l.note}
+              placeholder="Add a note"
+              onChange={(e) => void updatePackLine(l.id, { note: e.target.value })}
+            />
+          )}
+        </div>
+        {locked ? <div className="pb-qty-ro">{l.qtyTbd ? 'TBD' : l.qtyRequested}</div> : <Qty line={l} />}
+        {!locked && (
+          <button className="pb-del" onClick={() => void removeLine(l)} title="Remove" aria-label={`Remove ${item}`}>
+            ×
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="screen">
+    <div className="screen pb">
       <button className="link-btn" onClick={onBack}>
         ‹ Back to event
       </button>
 
-      {locked && (
-        <div className="pl-banner sent">
-          <div>
-            <b>Sent</b> {ev.sentAt ? when(ev.sentAt) : ''} — Operations has it in the week of {week}.
+      <div className="pb-top">
+        <div>
+          <div className="pb-kicker">Pack list</div>
+          <h1 className="pb-title">{ev.name}</h1>
+          <div className="pb-subtitle">
+            {new Date(ev.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            {ev.location && ` · ${ev.location}`}
+            {ev.planner && ` · ${ev.planner}`}
           </div>
+        </div>
+        <span className={`pb-state ${locked ? 'sent' : ev.sentAt ? 'editing' : 'draft'}`}>
+          {locked ? 'Sent' : ev.sentAt ? 'Editing' : 'Draft'}
+        </span>
+      </div>
+
+      {locked && (
+        <div className="pb-banner sent">
+          <div className="pb-banner-title">Sent {ev.sentAt ? when(ev.sentAt) : ''}</div>
+          <div>Operations has it in the week of {week}.</div>
           {links.map(([dept, id]) => (
-            <div className="pl-link" key={dept}>
-              <span>{deptTitle(dept)} link</span>
-              <button className="chip-btn" onClick={() => void copy(dept, id)}>
+            <div className="pb-link" key={dept}>
+              <span>{deptTitle(dept)}</span>
+              <button className="pb-btn" onClick={() => void copy(dept, id)}>
                 {copied === dept ? 'Copied ✓' : 'Copy link'}
               </button>
-              <a className="chip-btn" href={shareUrl(id)} target="_blank" rel="noreferrer">
+              <a className="pb-btn" href={shareUrl(id)} target="_blank" rel="noreferrer">
                 Open
               </a>
             </div>
           ))}
-          {links.length > 0 && (
-            <div className="muted small">Send each link once — it always shows the latest version of their list.</div>
-          )}
+          {links.length > 0 && <div className="pb-hint">Send each link once — it always shows the latest version of their list.</div>}
           {sent?.linkError && (
             <div className="wk-err">The links couldn&rsquo;t be updated ({sent.linkError}). Edit again and send when you&rsquo;re online.</div>
           )}
           <button
-            className="big-btn ghost"
-            style={{ marginTop: 10 }}
+            className="pb-btn primary"
             onClick={() => {
               setSent(null)
               void updateEvent(eventId, { status: 'draft' })
               void syncNow()
             }}
           >
-            ✎ Edit again
+            Edit again
           </button>
         </div>
       )}
       {!locked && ev.sentAt && (
-        <div className="pl-banner editing">
-          Editing. Everyone still has what you sent {when(ev.sentAt)} — tap <b>Done, send</b> when you finish and they get
-          the changes.
+        <div className="pb-banner editing">
+          Editing. Everyone still has what you sent {when(ev.sentAt)} until you send the changes.
         </div>
       )}
-
       {tbd.length > 0 && (
-        <div className="pl-banner tbd">
-          ⚠ Still TBD: {tbd.join(', ')}
+        <div className="pb-banner tbd">
+          <span className="pb-flag" /> Still TBD: {tbd.join(', ')}
         </div>
       )}
 
       {sections.length === 0 && (
-        <div className="muted" style={{ textAlign: 'center', margin: '30px 0 20px', lineHeight: 1.6 }}>
-          Empty pack list.
-          <br />
-          Add a section to start.
+        <div className="pb-emptystate">
+          <div className="pb-emptystate-title">Start the pack list</div>
+          <div>Add a section — start it with the usual lines, or blank.</div>
         </div>
       )}
 
       {sections.map((section) => {
-        // Once sent, the rows nobody asked for are just noise — the list reads as it went out.
-        const rows = lines
-          .filter((l) => l.section === section && (!locked || isAsked(l)))
-          .sort((a, b) => a.sortIndex - b.sortIndex)
-        const have = new Set(rows.map((l) => l.label.toLowerCase()))
+        const rows = sorted(section)
+        const have = new Set(lines.filter((l) => l.section === section).map((l) => l.label.toLowerCase()))
         const usual = (PRESETS[section] ?? []).filter((p) => !have.has(p.label.toLowerCase()))
         const dept = defaultWho(section)
+        const included = rows.filter(isAsked).length
+        const draggingHere = drag?.axis === 'y' && drag.section === section ? drag : null
+        let other = 0
         return (
-          <div key={section} className="pack-section">
-            <div className="pack-section-head">
-              <div className="ev-section-title" style={{ margin: 0 }}>
-                {section}
-              </div>
-              <span className={`pl-dept ${dept}`}>{dept === 'kitchen' ? 'Kitchen' : dept === 'planner' ? 'You order' : 'Operations'}</span>
-              <span className="muted small">{rows.filter(isAsked).length}</span>
+          <section key={section} className={`pb-section dept-${dept}`}>
+            <header className="pb-section-head">
+              <div className="pb-section-title">{titled(section)}</div>
+              <span className={`pb-dept who-${dept}`}>
+                <span className="pb-dot" aria-hidden="true" />
+                {dept === 'kitchen' ? 'Kitchen' : dept === 'planner' ? 'You order' : 'Operations'}
+              </span>
+              <span className="pb-count">
+                {included} {locked ? 'lines' : `of ${rows.length} included`}
+              </span>
               {!locked && (
-                <button className="row-action danger" title={`Remove ${section}`} onClick={() => void removeSection(section)}>
-                  🗑
+                <button className="pb-icon" title={`Remove ${titled(section)}`} onClick={() => void removeSection(section)}>
+                  Remove
                 </button>
               )}
-            </div>
-            {rows.map((l) => {
-              const p = l.productId ? productMap.get(l.productId) : undefined
-              const who = whoOf(l)
-              const open = stillTbd(l)
-              const sub = [
-                who !== dept ? whoText(who, initials) : '',
-                l.choice === 'tbd' ? 'brand TBD' : '',
-                who === 'ops' && p?.location ? p.location : '',
-              ].filter(Boolean)
-              return (
-                <DragOut key={l.id} disabled={locked} onRemove={() => void removeLine(l)}>
-                  <div className={`pack-row${isAsked(l) ? '' : ' pl-unasked'}${open.length ? ' pl-open' : ''}`}>
-                    <div className="pack-main">
-                      <button className="pl-name" disabled={locked} onClick={() => setEditing(l.id)}>
-                        {lineName(l, p)}
-                        {!locked && (l.itemType || p) && !l.productId && !l.choice && <span className="pl-pick"> · pick ▾</span>}
-                      </button>
-                      {sub.length > 0 && <div className={`muted small${who !== 'ops' ? ' pl-who' : ''}`}>{sub.join(' · ')}</div>}
-                      {p?.contents && (
-                        <div className="pack-contents">
-                          <span className="pack-contents-title">Packed in a {p.name.toLowerCase()}</span>
-                          {p.contents}
-                        </div>
-                      )}
-                      {locked ? (
-                        l.note && <div className="muted small">{l.note}</div>
-                      ) : (
-                        <input
-                          className="pack-note"
-                          value={l.note}
-                          placeholder="Note"
-                          onChange={(e) => void updatePackLine(l.id, { note: e.target.value })}
-                        />
-                      )}
-                    </div>
-                    <Qty line={l} locked={locked} />
-                    {!locked && (
-                      <button className="row-action danger" onClick={() => void removeLine(l)} title="Remove">
-                        🗑
-                      </button>
-                    )}
-                  </div>
-                </DragOut>
-              )
-            })}
-            {rows.length === 0 && (
-              <div className="muted small" style={{ padding: '4px 2px 2px' }}>
-                Nothing here yet.
+            </header>
+
+            {rows.length > 0 && (
+              <div className="pb-cols" aria-hidden="true">
+                <span />
+                <span>Item</span>
+                <span>Brand / choice</span>
+                <span>Who brings it</span>
+                <span>Note</span>
+                <span>Qty</span>
+                <span />
               </div>
             )}
+            <div className="pb-rows">
+              {rows.map((l) => {
+                const isMoving = draggingHere?.id === l.id
+                const line = (
+                  <>
+                    {draggingHere && !isMoving && other === draggingHere.over && <div className="pb-drop" />}
+                    {renderRow(l)}
+                  </>
+                )
+                if (!isMoving) other++
+                return <div key={l.id}>{line}</div>
+              })}
+              {draggingHere && other === draggingHere.over && <div className="pb-drop" />}
+            </div>
+            {rows.length === 0 && <div className="pb-empty">Nothing here yet.</div>}
+
             {!locked && usual.length > 0 && (
-              <div className="pl-usual">
+              <div className="pb-quick">
+                <span className="pb-quick-label">Quick add</span>
                 {usual.map((u) => (
-                  <button key={u.label} className="chip-btn" onClick={() => void addUsual(section, u.label, u.kind)}>
+                  <button key={u.label} className="pb-chip" onClick={() => void addUsual(section, u.label, u.kind)}>
                     ＋ {u.label}
                   </button>
                 ))}
               </div>
             )}
             {!locked && (
-              <div className="pack-actions">
+              <div className="pb-section-foot">
                 {!isCustom(section) && (
-                  <button className="chip-btn" onClick={() => setPicking(section)}>
-                    🔍 Search inventory
+                  <button className="pb-btn" onClick={() => setPicking(section)}>
+                    Search inventory
                   </button>
                 )}
-                <button className="chip-btn" onClick={() => setSpecial(section)}>
-                  ＋ Something else
+                <button className="pb-btn" onClick={() => setSpecial(section)}>
+                  Add something we don&rsquo;t keep
                 </button>
               </div>
             )}
-          </div>
+          </section>
         )
       })}
 
       {!locked && (
         <>
-          <button className="big-btn ghost" style={{ marginTop: 18 }} onClick={() => setAddingSection(true)}>
+          <button className="pb-add-section" onClick={() => setAddingSection(true)}>
             ＋ Add section
           </button>
 
           {sections.length > 0 && (
-            <div className="pl-send">
-              {empty > 0 && (
-                <div className="muted small">
-                  {empty} row{empty === 1 ? '' : 's'} without a quantity won&rsquo;t be sent.
+            <div className="pb-send">
+              <div className="pb-send-text">
+                <b>{asked.length}</b> line{asked.length === 1 ? '' : 's'} will go out
+                {empty > 0 && <span> · {empty} without a quantity stay here</span>}
+                <div className="pb-hint">
+                  Operations gets its part in the week of {week}; the kitchen and Storied each get a link with theirs.
                 </div>
-              )}
-              {!ev.planner && lines.some((l) => whoOf(l) === 'planner') && (
-                <div className="muted small">Add the planner on the event so these lines say &ldquo;PJ to order&rdquo;.</div>
-              )}
-              {sendError && <div className="wk-err">{sendError}</div>}
-              <button className="big-btn green" disabled={sending} onClick={() => void send()}>
-                {sending ? 'Sending…' : ev.sentAt ? '✓ Done, send the changes' : '✓ Done, send'}
-              </button>
-              <div className="muted small">
-                Operations gets its part in the week of {week}. The kitchen and Storied each get a link with theirs.
+                {!ev.planner && lines.some((l) => whoOf(l) === 'planner') && (
+                  <div className="pb-hint">Pick the planner on the event so these lines say &ldquo;PJ to order&rdquo;.</div>
+                )}
+                {sendError && <div className="wk-err">{sendError}</div>}
               </div>
+              <button className="pb-btn send" disabled={sending} onClick={() => void send()}>
+                {sending ? 'Sending…' : ev.sentAt ? 'Done, send the changes' : 'Done, send'}
+              </button>
             </div>
           )}
         </>
@@ -570,10 +716,12 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
       {editing &&
         (() => {
-          const l = lines.find((x) => x.id === editing)
+          const l = lines.find((x) => x.id === editing.id)
           return l ? (
             <LinePicker
               line={l}
+              focus={editing.focus}
+              item={partsOf(l, l.productId ? productMap.get(l.productId) : undefined).item}
               products={products}
               stock={stock}
               inInventory={inInventory}
@@ -589,25 +737,21 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
       {special && (
         <div className="sheet-backdrop" onClick={() => setSpecial(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>Add to {special}</h2>
-            <div className="muted small" style={{ marginBottom: 12 }}>
-              Something we don&rsquo;t keep. Tap it afterwards to say who brings it.
+          <div className="sheet pb-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pb-sheet-kicker">{titled(special)}</div>
+            <h2>Something we don&rsquo;t keep</h2>
+            <div className="pb-hint" style={{ marginBottom: 12 }}>
+              Goes down as yours to order — tap who brings it on the line to change that.
             </div>
-            <label className="field-label">What is it?</label>
             <input
               value={specialName}
               onChange={(e) => setSpecialName(e.target.value)}
+              placeholder="e.g. Mezcal Vago, 2 bottles of rosé from the client…"
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && void addSpecial(special)}
             />
-            <button
-              className="big-btn green"
-              style={{ marginTop: 14 }}
-              disabled={!specialName.trim()}
-              onClick={() => void addSpecial(special)}
-            >
-              Add to {special}
+            <button className="pb-btn primary wide" disabled={!specialName.trim()} onClick={() => void addSpecial(special)}>
+              Add
             </button>
           </div>
         </div>
@@ -615,56 +759,65 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
 
       {startFor && (
         <div className="sheet-backdrop" onClick={() => setStartFor(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h2>{startFor}</h2>
-            <button className="pl-opt" onClick={() => void addSection(startFor, 'usual')}>
-              <span>Start with the usual</span>
-              <span className="muted small">
-                {(PRESETS[startFor] ?? []).length} lines — remove what you don&rsquo;t need
-              </span>
-            </button>
-            <div className="muted small" style={{ margin: '-2px 2px 8px' }}>
-              {(PRESETS[startFor] ?? []).map((p) => p.label).join(', ')}
+          <div className="sheet pb-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pb-sheet-kicker">New section</div>
+            <h2>{titled(startFor)}</h2>
+            <div className="pb-opt-group">
+              <button className="pb-opt" onClick={() => void addSection(startFor, 'usual')}>
+                <span className="pb-opt-label">Start with the usual</span>
+                <span className="pb-opt-sub">
+                  {(PRESETS[startFor] ?? []).length} lines you can fill, move or remove —{' '}
+                  {(PRESETS[startFor] ?? [])
+                    .slice(0, 6)
+                    .map((p) => p.label)
+                    .join(', ')}
+                  …
+                </span>
+              </button>
+              <button className="pb-opt" onClick={() => void addSection(startFor, 'blank')}>
+                <span className="pb-opt-label">Start blank</span>
+                <span className="pb-opt-sub">add only what you pick</span>
+              </button>
             </div>
-            <button className="pl-opt" onClick={() => void addSection(startFor, 'blank')}>
-              <span>Start blank</span>
-              <span className="muted small">add only what you pick</span>
-            </button>
           </div>
         </div>
       )}
 
       {addingSection && (
         <div className="sheet-backdrop" onClick={() => setAddingSection(false)}>
-          <div className="sheet tall" onClick={(e) => e.stopPropagation()}>
-            <h2>Add section</h2>
-            <div className="pick-list">
-              {unusedSections.map((s) => (
-                <button
-                  key={s}
-                  className="pick-row"
-                  onClick={() => {
-                    setAddingSection(false)
-                    chooseSection(s)
-                  }}
-                >
-                  <div className="info">
-                    <div className="name">{s}</div>
-                    <div className="muted small">{defaultWho(s) === 'kitchen' ? 'goes to the kitchen' : defaultWho(s) === 'planner' ? 'you order it' : 'goes to Operations'}</div>
-                  </div>
-                  <div className="pick-add">＋</div>
-                </button>
-              ))}
+          <div className="sheet tall pb-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pb-sheet-kicker">Pack list</div>
+            <h2>Add a section</h2>
+            <div className="pb-opt-group">
+              {unusedSections.map((s) => {
+                const d = defaultWho(s)
+                return (
+                  <button
+                    key={s}
+                    className={`pb-opt who-${d}`}
+                    onClick={() => {
+                      setAddingSection(false)
+                      chooseSection(s)
+                    }}
+                  >
+                    <span className="pb-opt-label">{titled(s)}</span>
+                    <span className="pb-opt-sub">
+                      <span className="pb-dot" aria-hidden="true" />{' '}
+                      {d === 'kitchen' ? 'goes to the kitchen' : d === 'planner' ? 'you order it' : 'goes to Operations'}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-            <label className="field-label">Or name your own</label>
+            <div className="pb-sheet-sub">Or name your own</div>
             <input
               value={customSection}
               onChange={(e) => setCustomSection(e.target.value)}
+              placeholder="e.g. Signage, Bar décor"
               onKeyDown={(e) => e.key === 'Enter' && void addSection(customSection, 'blank')}
             />
             <button
-              className="big-btn green"
-              style={{ marginTop: 12 }}
+              className="pb-btn primary wide"
               disabled={!customSection.trim()}
               onClick={() => void addSection(customSection, 'blank')}
             >
@@ -676,3 +829,4 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     </div>
   )
 }
+

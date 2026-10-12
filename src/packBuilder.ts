@@ -51,7 +51,7 @@ export const whoOf = (l: Pick<PackLine, 'who' | 'section'>): LineWho => l.who ||
 export function whoText(who: LineWho, initials: string): string {
   switch (who) {
     case 'ops':
-      return 'Operations packs it'
+      return 'Operations'
     case 'kitchen':
       return 'Kitchen'
     case 'planner':
