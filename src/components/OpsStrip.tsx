@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, uuid } from '../db'
 import { opsId, saveOps } from '../packStore'
 import { parseEventDate } from '../packWeeks'
+import { iceSummary, readIce, type IceRead } from '../packUnits'
 import type { OpsIce, OpsVehicle, PackImport, PackOps } from '../types'
 
 // His jobs around an event — the ones that live in his head and a Google
@@ -14,6 +15,8 @@ export const VEHICLES = ['Cargo Van', '15 Passenger Van', 'Box Truck', 'Ref Truc
 export const LOCATIONS = ['CC-LIC', 'CC Chelsea', 'Edge']
 export const ICE_COMPANIES = ['United Ice', 'Apple Ice']
 const DEFAULT_ICE = 'United Ice'
+/** Deli ice is picked up, not ordered — and never goes on the ice company's sheet. */
+const DELI = 'Deli'
 const OUR_VAN = 'Our van'
 
 const BY_KEY = 'mgce.ops.by'
@@ -48,6 +51,9 @@ export interface OpsDay {
   date: string
   iceNeeds: string
   iceTime: string
+  /** The notes that sit beside the ice on the MO. */
+  notes: string
+  ice: IceRead
 }
 
 /** One entry for a one-day event; one per MO day on a multi-day one. */
@@ -56,16 +62,29 @@ export function opsDaysOf(imp: PackImport): OpsDay[] {
   if (days.length > 1) {
     return days.map((d) => {
       const iso = parseEventDate(d.date) ?? imp.eventIso
-      return { key: iso || d.label, label: d.label, date: iso, iceNeeds: d.iceNeeds, iceTime: d.iceDeliveryTime }
+      const notes = `${d.specialNotes}\n${imp.additionalNotes}`
+      return {
+        key: iso || d.label,
+        label: d.label,
+        date: iso,
+        iceNeeds: d.iceNeeds,
+        iceTime: d.iceDeliveryTime,
+        notes,
+        ice: readIce(d.iceNeeds, notes),
+      }
     })
   }
+  const iceNeeds = days[0]?.iceNeeds || imp.iceNeeds
+  const notes = `${days[0]?.specialNotes || imp.specialNotes}\n${imp.additionalNotes}`
   return [
     {
       key: '',
       label: '',
       date: imp.eventIso,
-      iceNeeds: days[0]?.iceNeeds || imp.iceNeeds,
+      iceNeeds,
       iceTime: days[0]?.iceDeliveryTime || imp.iceDeliveryTime,
+      notes,
+      ice: readIce(iceNeeds, notes),
     },
   ]
 }
@@ -119,25 +138,46 @@ export default function OpsStrip({
       {days.map((d) => {
         const o = get(d)
         const soon = daysUntil(d.date)
-        const iceLate = !o?.ice && !!d.iceNeeds.trim() && soon >= 0 && soon <= 2
+        const ice = d.ice
+        // Only an order from the ice company is something to order; deli ice
+        // is something to pick up; no ice is nothing at all.
+        const iceLate = !o?.ice && ice.status === 'order' && soon >= 0 && soon <= 2
+        const special = ice.specials.length > 0
+        const flagged = ice.warnings.some((w) => !/deli bags/i.test(w))
         return (
           <div className="ops-row" key={d.key || 'one'}>
             {days.length > 1 && <span className="ops-day">{d.label || md(d.date)}</span>}
 
-            <button
-              className={`ops-chip${o?.ice ? ' done' : iceLate ? ' late' : ''}${!d.iceNeeds.trim() && !o?.ice ? ' quiet' : ''}`}
-              onClick={() => setSheet({ kind: 'ice', day: d })}
-              title={d.iceNeeds ? `Ice needs: ${d.iceNeeds}${d.iceTime ? ` at ${d.iceTime}` : ''}` : 'No ice on the MO'}
-            >
-              <Icon name="ice" />
-              {o?.ice
-                ? `Ice ordered ${md(o.ice.at)}${o.ice.company !== DEFAULT_ICE ? ` · ${o.ice.company}` : ''}`
-                : iceLate
-                  ? `Order ice · ${soon === 0 ? 'today' : soon === 1 ? 'tomorrow' : 'in 2 days'}`
-                  : d.iceNeeds.trim()
-                    ? 'Order ice'
-                    : 'No ice'}
-            </button>
+            {ice.status === 'none' && !o?.ice ? (
+              <span className="ops-chip none" title={d.iceNeeds ? `MO says: ${d.iceNeeds}` : 'No ice on the MO'}>
+                <Icon name="ice" />
+                No ice
+              </span>
+            ) : (
+              <button
+                className={`ops-chip${o?.ice ? ' done' : iceLate || flagged ? ' late' : ''}${special && !o?.ice ? ' special' : ''}`}
+                onClick={() => setSheet({ kind: 'ice', day: d })}
+                title={`MO: ${d.iceNeeds}${d.iceTime ? ` at ${d.iceTime}` : ''}`}
+              >
+                <Icon name="ice" />
+                {o?.ice
+                  ? o.ice.company === DELI
+                    ? `Deli ice picked up ${md(o.ice.at)}`
+                    : `Ice ordered ${md(o.ice.at)}${o.ice.company !== DEFAULT_ICE ? ` · ${o.ice.company}` : ''}`
+                  : ice.status === 'deli'
+                    ? `Deli ice · ${iceSummary(ice).replace(/^Deli · /, '')}`
+                    : ice.status === 'client'
+                      ? 'Client brings ice?'
+                      : ice.status === 'tbd'
+                        ? 'Ice TBD'
+                        : flagged
+                          ? 'Check the ice'
+                          : iceLate
+                            ? `Order ice · ${soon === 0 ? 'today' : soon === 1 ? 'tomorrow' : 'in 2 days'}`
+                            : 'Order ice'}
+                {special && !o?.ice && <span className="ops-special">{ice.specials.length > 1 ? 'special' : ice.specials[0].length > 18 ? 'special' : ice.specials[0]}</span>}
+              </button>
+            )}
 
             {(o?.vehicles ?? []).map((v) => (
               <button key={v.id} className="ops-chip done" onClick={() => setSheet({ kind: 'vehicle', day: d, vehicle: v })}>
@@ -269,22 +309,48 @@ function IceSheet({
   onSave: (p: { ice: OpsIce | null }) => void
   onClose: () => void
 }) {
-  const [company, setCompany] = useState(ice?.company ?? DEFAULT_ICE)
+  const deli = day.ice.status === 'deli'
+  const [company, setCompany] = useState(ice?.company ?? (deli ? DELI : DEFAULT_ICE))
   const [by, setBy] = useState(ice?.by ?? remembered())
   const [date, setDate] = useState(toInput(ice?.at ?? Date.now()))
   return (
     <Frame kicker="Ice" title={title} onClose={onClose}>
       <div className="ops-facts">
-        <span>Needs</span>
+        <span>The MO says</span>
         <b>{day.iceNeeds || '—'}</b>
-        <span>Delivery</span>
+        {day.ice.parts.length > 0 && (
+          <>
+            <span>That is</span>
+            <span className="ops-ice-parts">
+              {day.ice.parts.map((p, i) => (
+                <span key={i} className={p.special ? 'ops-ice-part special' : 'ops-ice-part'}>
+                  {[p.qty ?? '', p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : '', p.special].filter(Boolean).join(' ')}
+                </span>
+              ))}
+            </span>
+          </>
+        )}
+        <span>{deli ? 'When' : 'Delivery'}</span>
         <b>{day.iceTime || '—'}</b>
       </div>
+      {day.ice.warnings.map((w) => (
+        <div key={w} className="ops-warn">
+          ⚠ {w}
+        </div>
+      ))}
+      {day.ice.notes.length > 0 && (
+        <div className="ops-notes">
+          <span>Notes about the ice</span>
+          {day.ice.notes.map((n) => (
+            <div key={n}>{n}</div>
+          ))}
+        </div>
+      )}
       <div className="ops-form">
         <label className="ed-field">
           <span className="ed-label">Company</span>
           <div className="ops-seg">
-            {ICE_COMPANIES.map((c) => (
+            {[...ICE_COMPANIES, DELI].map((c) => (
               <button key={c} type="button" className={company === c ? 'on' : ''} onClick={() => setCompany(c)}>
                 {c}
               </button>
@@ -309,7 +375,7 @@ function IceSheet({
               onClose()
             }}
           >
-            Not ordered
+            {ice.company === DELI ? 'Not picked up' : 'Not ordered'}
           </button>
         )}
         <button
@@ -322,7 +388,7 @@ function IceSheet({
             onClose()
           }}
         >
-          {ice ? 'Save' : 'Mark ice ordered'}
+          {ice ? 'Save' : company === DELI ? 'Mark picked up' : 'Mark ice ordered'}
         </button>
       </div>
     </Frame>
@@ -519,7 +585,7 @@ export function OpsCopy({ weekStart, imports }: { weekStart: string; imports: Pa
       const day = opsDaysOf(imp).find((d) => d.key === r.dayKey) ?? opsDaysOf(imp)[0]
       const date = day.date ? md(day.date) : imp.eventDate
       const name = cleanName(imp.eventName)
-      if (r.ice) {
+      if (r.ice && r.ice.company !== DELI) {
         ice.push({
           row: r,
           date: day.date,

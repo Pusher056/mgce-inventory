@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { createProduct, db } from '../db'
 import { ingestFiles, type IngestReport } from '../packIngest'
 import { diffPackLists, dropLabel } from '../packlistParse'
-import { describeIce, describeQty, packageOf, parseIce, parseQty } from '../packUnits'
+import { describeQty, iceSummary, packageOf, parseQty, readIce } from '../packUnits'
 import type { LineRef } from '../packStore'
 import { findMaybeSame, itemKey } from '../packMatch'
 import { ownerOf, ownerRules, sectionIsKnown, sectionRuleKey, whereIs, type Ownership } from '../packOwner'
@@ -739,14 +739,62 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
    * Ice by the delivery: "6 tins | 6 tins" at "6-7am | 10-11am" is two drops
    * of ice, paired like the kitchen trips. One drop stays one line.
    */
-  const iceRows = (needs: string, time: string) => {
+  /**
+   * The ice exactly as the MO asks for it: every piece, the special ones
+   * (1.5" cubes, branded) marked so they can't slip by, deli ice called deli
+   * ice, and a warning when the notes contradict the order.
+   */
+  const iceText = (needs: string, notes: string) => {
+    const r = readIce(needs, notes)
+    if (r.status === 'none') return <span className="ice-none">No ice</span>
+    return (
+      <span className="ice-read">
+        <span className={r.status === 'deli' ? 'ice-deli' : r.status === 'tbd' ? 'ice-tbd' : ''}>
+          {r.parts.length
+            ? r.parts.map((p, i) => (
+                <span key={i}>
+                  {i > 0 && ' + '}
+                  {[p.qty ?? '', p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ')}
+                  {p.special && <span className="ice-special"> {p.special}</span>}
+                </span>
+              ))
+            : iceSummary(r)}
+          {r.status === 'deli' && <span className="ice-tag">Deli · pick up</span>}
+          {r.status === 'client' && <span className="ice-tag">Client / venue</span>}
+        </span>
+        {r.specials
+          .filter((s) => !r.parts.some((p) => p.special === s))
+          .map((s) => (
+            <span key={s} className="ice-note special">
+              {s}
+            </span>
+          ))}
+        {r.warnings
+          .filter((w) => !/deli bags/i.test(w))
+          .map((w) => (
+            <span key={w} className="ice-note warn">
+              ⚠ {w}
+            </span>
+          ))}
+      </span>
+    )
+  }
+
+  const iceRows = (needs: string, time: string, notes = '') => {
     const n = needs.split(/\s*\|\s*/).filter(Boolean)
     const t = time.split(/\s*\|\s*/).filter(Boolean)
     if (n.length > 1 || t.length > 1) {
       return (
         <>
           <span>Ice</span>
-          <span>{n.map((x, i) => `${describeIce(parseIce(x))}${t[i] ? ` at ${t[i]}` : ''}`).join(' · ')}</span>
+          <span className="ice-runs">
+            {n.map((x, i) => (
+              <span key={i}>
+                {iceText(x, i === 0 ? notes : '')}
+                {t[i] ? <span className="muted"> at {t[i]}</span> : null}
+              </span>
+            ))}
+          </span>
         </>
       )
     }
@@ -754,9 +802,9 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
     return (
       <>
         <span>Ice needs</span>
-        <span>{needs ? describeIce(parseIce(needs)) : '—'}</span>
+        <span>{needs ? iceText(needs, notes) : '—'}</span>
         <span>Est. ice delivery</span>
-        <span>{time || '—'}</span>
+        <span>{readIce(needs).status === 'none' ? '—' : time || '—'}</span>
       </>
     )
   }
@@ -1687,7 +1735,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                         </div>
                       )}
                       <div className="wk-dl" style={{ marginTop: 8 }}>
-                        {iceRows(d.iceNeeds, d.iceDeliveryTime)}
+                        {iceRows(d.iceNeeds, d.iceDeliveryTime, d.specialNotes)}
                       </div>
                       {d.specialNotes && (
                         <div className="wk-notes">
@@ -1710,7 +1758,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                   <span>{g.latest.kitchenPickup || '—'}</span>
                   <span>Est. drop off</span>
                   <span>{g.latest.kitchenDelivery || '—'}</span>
-                  {iceRows(g.latest.iceNeeds, g.latest.iceDeliveryTime)}
+                  {iceRows(g.latest.iceNeeds, g.latest.iceDeliveryTime, `${g.latest.specialNotes}\n${g.latest.additionalNotes}`)}
                   {g.latest.eventTime && (
                     <>
                       <span>Event time</span>

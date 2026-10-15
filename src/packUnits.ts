@@ -123,6 +123,99 @@ export function parseIce(raw: string): IceNeed {
   }
 }
 
+/**
+ * One thing on the ice line: "2 Bags 1.5" Cubes" is 2 · bag · '1.5" cubes'.
+ * `special` is anything that isn't plain ice — cube sizes, branded, dry,
+ * crushed — the part that is easy to miss and costly to get wrong.
+ */
+export interface IcePart {
+  qty: number | null
+  unit: 'tin' | 'bag' | ''
+  special: string
+  text: string
+}
+
+/**
+ * The whole story of an event's ice, read from the MO the way he reads it:
+ *  - none   "N/A", empty
+ *  - tbd    "TBD"
+ *  - deli   "pick up 2 bags from deli" — small deli bags, not the ice company's
+ *  - client the client or venue brings it
+ *  - order  the ice company (the big tins and bags)
+ * plus every special kind on the line, and the notes that talk about ice —
+ * "Client providing all beverages & Ice" beside an order of 4 tins is a
+ * contradiction he has to see.
+ */
+export interface IceRead {
+  status: 'none' | 'tbd' | 'deli' | 'client' | 'order'
+  parts: IcePart[]
+  specials: string[]
+  notes: string[]
+  warnings: string[]
+  raw: string
+}
+
+const SPECIAL_ICE = /\d+(?:\.\d+)?\s*(?:"|”|''|in\b|inch)|cube|sphere|branded|logo|custom|crushed|shaved|dry\s*ice|block|clear|collins|pebble|nugget/i
+
+export function readIce(raw: string, notes = ''): IceRead {
+  const text = String(raw ?? '').trim()
+  const low = text.toLowerCase()
+  const noteLines = String(notes ?? '')
+    .split(/\n+/)
+    .map((l) => l.replace(/^[\s*•-]+/, '').trim())
+    .filter((l) => /\bice\b/i.test(l))
+
+  let status: IceRead['status'] = 'order'
+  if (!text || /^(n\/?a|none|no ice|no|-+)\b/.test(low)) status = 'none'
+  else if (/^tbd\b|^to be determined/.test(low)) status = 'tbd'
+  else if (/\bdeli\b|bodega/.test(low)) status = 'deli'
+  else if (/\b(client|venue)\b.*\b(provid|bring|suppl|has)/.test(low)) status = 'client'
+
+  const parts: IcePart[] = []
+  if (status !== 'none' && status !== 'tbd') {
+    // "1 Bag of 1.5"x1.5" Cubes, 2 Bags Regular Ice, 1 Tin Regular Ice",
+    // "3 Tins + 2 Bags", "7 tins | 3 tins" — every piece on its own.
+    for (const seg of text.split(/\s*(?:\||,|\+|&|\band\b|;)\s*/i)) {
+      const s = seg.replace(/^(pick\s*up|get|grab)\s+/i, '').trim()
+      if (!s) continue
+      const m = /^(\d+)\s*(tins?|bags?)?\b\s*(?:of\s+)?(.*)$/i.exec(s)
+      const qty = m ? Number(m[1]) : null
+      const unit = m?.[2] ? (/tin/i.test(m[2]) ? 'tin' : 'bag') : /\btins?\b/i.test(s) ? 'tin' : /\bbags?\b/i.test(s) ? 'bag' : ''
+      const rest = (m ? m[3] : s)
+        .replace(/\b(regular|reg\.?)\s*ice\b|\bfrom\s+(the\s+)?deli\b|\bice\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      const special = SPECIAL_ICE.test(rest) ? rest.replace(/\s*cubes?\s*$/i, ' cubes').trim() : ''
+      if (qty === null && !unit && !special) continue
+      parts.push({ qty, unit, special, text: s })
+    }
+  }
+
+  const specials = [
+    ...parts.filter((p) => p.special).map((p) => p.special),
+    ...noteLines.filter((l) => SPECIAL_ICE.test(l) && !/machine/i.test(l)).map((l) => l),
+  ]
+  const warnings: string[] = []
+  const notesSayClient = noteLines.some((l) => /\b(client|venue)\b.*\b(provid|bring|suppl)/i.test(l))
+  if (notesSayClient && status === 'order') warnings.push('The notes say the client or venue provides the ice')
+  if (status === 'deli') warnings.push('Small deli bags — not from the ice company')
+
+  return { status, parts, specials: [...new Set(specials)], notes: noteLines, warnings, raw: text }
+}
+
+/** "1 bag 1.5"x1.5" cubes + 2 bags + 1 tin" — every piece, the special ones kept whole. */
+export function iceSummary(r: IceRead): string {
+  if (r.status === 'none') return 'No ice'
+  if (r.status === 'tbd') return 'Ice TBD'
+  if (!r.parts.length) return r.raw
+  const piece = (p: IcePart) => {
+    const unit = p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : ''
+    return [p.qty ?? '', unit, p.special].filter(Boolean).join(' ')
+  }
+  const text = r.parts.map(piece).join(' + ')
+  return r.status === 'deli' ? `Deli · ${text}` : r.status === 'client' ? `Client · ${text}` : text
+}
+
 export function describeIce(ice: IceNeed): string {
   if (ice.none && !ice.tins && !ice.bags) return ice.raw || 'None'
   const parts: string[] = []

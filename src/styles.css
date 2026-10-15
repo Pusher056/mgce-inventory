@@ -1251,7 +1251,8 @@ textarea {
   gap: 7px 14px;
   font-size: 13px;
 }
-.wk-dl span:nth-child(odd) { color: var(--muted); }
+/* only the labels — not the pieces inside a value, like the parts of the ice */
+.wk-dl > span:nth-child(odd) { color: var(--muted); }
 .wk-notes { margin-top: 12px; border-top: 1px solid var(--bg3); padding-top: 10px; }
 .wk-notes-t {
   font-size: 10.5px;
@@ -2809,3 +2810,41 @@ textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .ops-copy-row { flex-direction: column; align-items: stretch; }
   .ops-copy-btns { flex-direction: row; }
 }
+
+/* ice, read the way the MO wrote it */
+.ice-read { display: inline-flex; flex-direction: column; gap: 4px; }
+.ice-special { color: #e9d5ff; background: rgba(167, 139, 250, 0.18); border-radius: 5px; padding: 0 5px; font-weight: 700; }
+.ice-deli { color: #fde68a; }
+.ice-tbd { color: #fde68a; }
+.ice-none { color: var(--muted); }
+.ice-tag { margin-left: 8px; font-size: 11px; font-weight: 700; color: #fcd34d; background: rgba(251, 191, 36, 0.12); border-radius: 999px; padding: 1px 8px; }
+.ice-note { font-size: 12.5px; line-height: 1.4; }
+.ice-note.special { color: #ddd6fe; }
+.ice-note.warn { color: #fcd34d; }
+.ice-runs { display: inline-flex; flex-direction: column; gap: 4px; }
+
+.ops-chip.none { cursor: default; border-style: solid; border-color: transparent; opacity: 0.5; padding-left: 4px; }
+.ops-chip.none:hover { color: #9fb0c6; border-color: transparent; }
+.ops-chip.special:not(.done) { border-style: solid; border-color: rgba(167, 139, 250, 0.5); }
+.ops-special {
+  font-size: 11px;
+  font-weight: 800;
+  color: #e9d5ff;
+  background: rgba(167, 139, 250, 0.22);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.ops-ice-parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-ice-part { font-weight: 700; }
+.ops-ice-part.special { color: #e9d5ff; background: rgba(167, 139, 250, 0.2); border-radius: 6px; padding: 0 6px; }
+.ops-warn {
+  font-size: 13.5px;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin: -4px 0 12px;
+}
+.ops-notes { font-size: 13px; line-height: 1.5; margin: -4px 0 14px; padding: 9px 12px; border-left: 2px solid var(--line); }
+.ops-notes > span { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
