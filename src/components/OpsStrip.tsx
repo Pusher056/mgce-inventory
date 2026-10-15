@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, uuid } from '../db'
 import { opsId, saveOps } from '../packStore'
-import { parseEventDate } from '../packWeeks'
+import { parseEventDate, prettyDate } from '../packWeeks'
 import { iceSummary, readIce, type IceRead } from '../packUnits'
 import type { OpsIce, OpsVehicle, PackImport, PackOps } from '../types'
 
@@ -54,6 +55,8 @@ export interface OpsDay {
   /** The notes that sit beside the ice on the MO. */
   notes: string
   ice: IceRead
+  /** When the kitchen run leaves — the driver's day starts around it. */
+  kitchenPickup: string
 }
 
 /** One entry for a one-day event; one per MO day on a multi-day one. */
@@ -71,6 +74,7 @@ export function opsDaysOf(imp: PackImport): OpsDay[] {
         iceTime: d.iceDeliveryTime,
         notes,
         ice: readIce(d.iceNeeds, notes),
+        kitchenPickup: d.runs.map((r) => r.pickup).filter(Boolean).join(' | '),
       }
     })
   }
@@ -85,6 +89,7 @@ export function opsDaysOf(imp: PackImport): OpsDay[] {
       iceTime: days[0]?.iceDeliveryTime || imp.iceDeliveryTime,
       notes,
       ice: readIce(iceNeeds, notes),
+      kitchenPickup: days[0]?.runs.map((r) => r.pickup).filter(Boolean).join(' | ') || imp.kitchenPickup,
     },
   ]
 }
@@ -245,16 +250,14 @@ function OpsSheet({
       ].sort(),
     [all],
   )
-  const day = sheet.day
-  const title = `${cleanName(imp.eventName)}${day.label ? ` · ${day.label}` : ''}`
-
   if (sheet.kind === 'ice') {
-    return <IceSheet title={title} day={day} ice={current?.ice ?? null} onSave={onSave} onClose={onClose} />
+    return <IceDialog imp={imp} day={sheet.day} ice={current?.ice ?? null} onSave={onSave} onClose={onClose} />
   }
   if (sheet.kind === 'route') {
     return (
-      <RouteSheet
-        title={title}
+      <RouteDialog
+        imp={imp}
+        day={sheet.day}
         route={current?.route ?? null}
         drivers={drivers}
         suggested={current?.vehicles.find((v) => v.driver)?.driver ?? ''}
@@ -264,8 +267,9 @@ function OpsSheet({
     )
   }
   return (
-    <VehicleSheet
-      title={title}
+    <VehicleDialog
+      imp={imp}
+      day={sheet.day}
       vehicle={sheet.vehicle}
       list={current?.vehicles ?? []}
       drivers={drivers}
@@ -275,15 +279,150 @@ function OpsSheet({
   )
 }
 
-function Frame({ kicker, title, children, onClose }: { kicker: string; title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet pb-sheet ops-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="pb-sheet-kicker">{kicker}</div>
-        <h2>{title}</h2>
-        {children}
+/* ---------- the rows, exactly as the Google Sheet has its columns ---------- */
+
+export const ICE_COLUMNS = ['Date', 'Time', 'Address', 'Onsite contact', 'Ice needs', 'Event', 'Ordered', 'Company']
+export const VEHICLE_COLUMNS = ['Date', 'Event', 'Pickup', 'Location', 'Vehicle', 'Ord. placed', 'Driver']
+
+export function iceRow(imp: PackImport, day: OpsDay, ice: { at: number; company: string }): string[] {
+  return [
+    day.date ? md(day.date) : imp.eventDate,
+    day.iceTime,
+    imp.address ?? '',
+    imp.onsiteContact ?? '',
+    day.iceNeeds,
+    cleanName(imp.eventName),
+    md(ice.at),
+    ice.company === DEFAULT_ICE ? '' : ice.company,
+  ]
+}
+
+export function vehicleRow(imp: PackImport, day: OpsDay, v: { pickup: string; location: string; type: string; by: string; at: number; driver: string }): string[] {
+  return [day.date ? md(day.date) : imp.eventDate, cleanName(imp.eventName), v.pickup, v.location, v.type, `${v.by} ${md(v.at)}`, v.driver]
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    window.prompt('Copy this', text)
+  }
+}
+
+/* ---------- the dialog frame ---------- */
+
+/**
+ * A real dialog: drawn on top of the whole page — not inside the event, whose
+ * faded "packed" look and clipping would bleed into it — with a close button,
+ * Esc, and the page held still behind it.
+ */
+function Modal({
+  kicker,
+  title,
+  sub,
+  onClose,
+  children,
+  footer,
+  wide,
+}: {
+  kicker: string
+  title: string
+  sub?: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+  wide?: boolean
+}) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', key)
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', key)
+      document.body.style.overflow = overflow
+    }
+  }, [onClose])
+  return createPortal(
+    <div className="om-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`om${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+        <header className="om-head">
+          <div className="om-head-text">
+            <div className="om-kicker">{kicker}</div>
+            <h2 className="om-title">{title}</h2>
+            {sub && <div className="om-sub">{sub}</div>}
+          </div>
+          <button className="om-x" onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div className="om-body">{children}</div>
+        {footer && <footer className="om-foot">{footer}</footer>}
       </div>
+    </div>,
+    document.body,
+  )
+}
+
+function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="om-sec">
+      <div className="om-sec-head">
+        <h3>{title}</h3>
+        {aside}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** The row as it will land in the Google Sheet — every column, filled or flagged. */
+function SheetRow({
+  columns,
+  values,
+  highlight = {},
+  empty = {},
+}: {
+  columns: string[]
+  values: string[]
+  highlight?: Record<number, ReactNode>
+  /** What an empty cell means, when it isn't "missing from the pack list". */
+  empty?: Record<number, string>
+}) {
+  return (
+    <dl className="om-row">
+      {columns.map((c, i) => (
+        <div key={c} className="om-row-cell">
+          <dt>{c}</dt>
+          <dd className={values[i] ? '' : empty[i] ? 'blank' : 'empty'}>
+            {highlight[i] ?? (values[i] || empty[i] || 'not on the pack list')}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function Seg({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="om-seg" role="radiogroup">
+      {options.map((o) => (
+        <button key={o} type="button" role="radio" aria-checked={value === o} className={value === o ? 'on' : ''} onClick={() => onChange(o)}>
+          {o}
+        </button>
+      ))}
     </div>
+  )
+}
+
+function FieldBox({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+  return (
+    <label className={`om-field${wide ? ' wide' : ''}`}>
+      <span>{label}</span>
+      {children}
+    </label>
   )
 }
 
@@ -296,14 +435,34 @@ const fromInput = (v: string) => {
   return new Date(y, (m ?? 1) - 1, d ?? 1, 12).getTime()
 }
 
-function IceSheet({
-  title,
+/** "Saturday, Oct 17 · Storied" */
+const daySub = (imp: PackImport, day: OpsDay) =>
+  [day.date ? prettyDate(day.date) : imp.eventDate, day.label, imp.venue].filter(Boolean).join(' · ')
+
+/** The ice as asked: every piece, the special ones marked. */
+function IcePieces({ ice }: { ice: IceRead }) {
+  if (!ice.parts.length) return <>{iceSummary(ice)}</>
+  return (
+    <span className="om-ice">
+      {ice.parts.map((p, i) => (
+        <span key={i} className={p.special ? 'om-ice-part special' : 'om-ice-part'}>
+          {[p.qty ?? '', p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : '', p.special].filter(Boolean).join(' ')}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/* ---------- ice ---------- */
+
+function IceDialog({
+  imp,
   day,
   ice,
   onSave,
   onClose,
 }: {
-  title: string
+  imp: PackImport
   day: OpsDay
   ice: OpsIce | null
   onSave: (p: { ice: OpsIce | null }) => void
@@ -313,97 +472,146 @@ function IceSheet({
   const [company, setCompany] = useState(ice?.company ?? (deli ? DELI : DEFAULT_ICE))
   const [by, setBy] = useState(ice?.by ?? remembered())
   const [date, setDate] = useState(toInput(ice?.at ?? Date.now()))
+  const [copied, setCopied] = useState(false)
+  const isDeli = company === DELI
+  const values = iceRow(imp, day, { at: fromInput(date), company })
+
+  const record = (copiedAt: number | null): OpsIce => ({
+    at: fromInput(date),
+    company,
+    by: by.trim() || 'Fabio',
+    copiedAt,
+  })
+
+  async function copyRow() {
+    await copyText(values.join('\t'))
+    setCopied(true)
+    // Already marked: remember it went to the sheet, so the week's copy skips it.
+    if (ice) onSave({ ice: { ...record(Date.now()) } })
+  }
+
   return (
-    <Frame kicker="Ice" title={title} onClose={onClose}>
-      <div className="ops-facts">
-        <span>The MO says</span>
-        <b>{day.iceNeeds || '—'}</b>
-        {day.ice.parts.length > 0 && (
-          <>
-            <span>That is</span>
-            <span className="ops-ice-parts">
-              {day.ice.parts.map((p, i) => (
-                <span key={i} className={p.special ? 'ops-ice-part special' : 'ops-ice-part'}>
-                  {[p.qty ?? '', p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : '', p.special].filter(Boolean).join(' ')}
-                </span>
-              ))}
-            </span>
-          </>
-        )}
-        <span>{deli ? 'When' : 'Delivery'}</span>
-        <b>{day.iceTime || '—'}</b>
-      </div>
-      {day.ice.warnings.map((w) => (
-        <div key={w} className="ops-warn">
-          ⚠ {w}
-        </div>
-      ))}
-      {day.ice.notes.length > 0 && (
-        <div className="ops-notes">
-          <span>Notes about the ice</span>
-          {day.ice.notes.map((n) => (
-            <div key={n}>{n}</div>
-          ))}
-        </div>
-      )}
-      <div className="ops-form">
-        <label className="ed-field">
-          <span className="ed-label">Company</span>
-          <div className="ops-seg">
-            {[...ICE_COMPANIES, DELI].map((c) => (
-              <button key={c} type="button" className={company === c ? 'on' : ''} onClick={() => setCompany(c)}>
-                {c}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="ed-field">
-          <span className="ed-label">Ordered on</span>
-          <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
-        </label>
-        <label className="ed-field">
-          <span className="ed-label">Ordered by</span>
-          <input value={by} onChange={(e) => setBy(e.target.value)} />
-        </label>
-      </div>
-      <div className="ops-actions">
-        {ice && (
+    <Modal
+      kicker={isDeli ? 'Deli ice' : 'Ice order'}
+      title={cleanName(imp.eventName)}
+      sub={daySub(imp, day)}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {ice && (
+            <button
+              className="om-btn ghost danger"
+              onClick={() => {
+                onSave({ ice: null })
+                onClose()
+              }}
+            >
+              {ice.company === DELI ? 'Not picked up' : 'Not ordered'}
+            </button>
+          )}
+          <span className="om-foot-gap" />
+          {!isDeli && (
+            <button className="om-btn" onClick={() => void copyRow()}>
+              {copied ? 'Row copied ✓' : 'Copy row'}
+            </button>
+          )}
           <button
-            className="pb-btn ops-undo"
+            className="om-btn primary"
             onClick={() => {
-              onSave({ ice: null })
+              remember(by.trim() || 'Fabio')
+              onSave({ ice: record(copied ? Date.now() : (ice?.copiedAt ?? null)) })
               onClose()
             }}
           >
-            {ice.company === DELI ? 'Not picked up' : 'Not ordered'}
+            {ice ? 'Save' : isDeli ? 'Mark picked up' : 'Mark ice ordered'}
           </button>
+        </>
+      }
+    >
+      {day.ice.warnings
+        .filter((w) => !isDeli || !/deli bags/i.test(w))
+        .map((w) => (
+          <div key={w} className="om-alert">
+            {w}
+          </div>
+        ))}
+
+      <Section title="What the MO asks for">
+        <div className="om-facts">
+          <div>
+            <span>Ice</span>
+            <b>
+              <IcePieces ice={day.ice} />
+            </b>
+          </div>
+          <div>
+            <span>{deli ? 'Pick up' : 'Delivery'}</span>
+            <b>{day.iceTime || '—'}</b>
+          </div>
+          <div className="wide">
+            <span>Written as</span>
+            <em>{day.iceNeeds || '—'}</em>
+          </div>
+        </div>
+        {day.ice.notes.length > 0 && (
+          <div className="om-notes">
+            {day.ice.notes.map((n) => (
+              <p key={n}>{n}</p>
+            ))}
+          </div>
         )}
-        <button
-          className="pb-btn primary"
-          onClick={() => {
-            remember(by.trim() || 'Fabio')
-            onSave({
-              ice: { at: fromInput(date), company, by: by.trim() || 'Fabio', copiedAt: ice?.copiedAt ?? null },
-            })
-            onClose()
-          }}
-        >
-          {ice ? 'Save' : company === DELI ? 'Mark picked up' : 'Mark ice ordered'}
-        </button>
-      </div>
-    </Frame>
+      </Section>
+
+      <Section title={isDeli ? 'Picked up' : 'The order'}>
+        <div className="om-form">
+          <FieldBox label="Company" wide>
+            <Seg options={[...ICE_COMPANIES, DELI]} value={company} onChange={setCompany} />
+          </FieldBox>
+          <FieldBox label={isDeli ? 'Picked up on' : 'Ordered on'}>
+            <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+          </FieldBox>
+          <FieldBox label={isDeli ? 'Picked up by' : 'Ordered by'}>
+            <input value={by} onChange={(e) => setBy(e.target.value)} />
+          </FieldBox>
+        </div>
+      </Section>
+
+      {isDeli ? (
+        <p className="om-muted">Deli ice is picked up on the way — it doesn&rsquo;t go on the ice company sheet.</p>
+      ) : (
+        <Section title="Google Sheet row" aside={<span className="om-aside">8 columns · paste into the first empty row</span>}>
+          <SheetRow
+            columns={ICE_COLUMNS}
+            values={values}
+            highlight={{ 4: values[4] ? <IcePieces ice={day.ice} /> : undefined }}
+            empty={{ 7: 'left blank — United Ice' }}
+          />
+          {(!imp.address || !imp.onsiteContact) && (
+            <p className="om-muted">
+              This version of the pack list came in before the app read addresses. Upload its latest version and the
+              address and contact fill in.
+            </p>
+          )}
+        </Section>
+      )}
+    </Modal>
   )
 }
 
-function VehicleSheet({
-  title,
+/* ---------- vehicle ---------- */
+
+function VehicleDialog({
+  imp,
+  day,
   vehicle,
   list,
   drivers,
   onSave,
   onClose,
 }: {
-  title: string
+  imp: PackImport
+  day: OpsDay
   vehicle: OpsVehicle | null
   list: OpsVehicle[]
   drivers: string[]
@@ -411,109 +619,147 @@ function VehicleSheet({
   onClose: () => void
 }) {
   const [type, setType] = useState(vehicle?.type ?? 'Cargo Van')
-  const [location, setLocation] = useState(vehicle?.location ?? 'CC-LIC')
+  const [location, setLocation] = useState(vehicle?.location || 'CC-LIC')
   const [pickup, setPickup] = useState(vehicle?.pickup ?? '')
   const [driver, setDriver] = useState(vehicle?.driver ?? '')
   const [by, setBy] = useState(vehicle?.by ?? remembered())
   const [date, setDate] = useState(toInput(vehicle?.at ?? Date.now()))
+  const [copied, setCopied] = useState(false)
   const ours = type === OUR_VAN
+
+  const build = (copiedAt: number | null): OpsVehicle => ({
+    id: vehicle?.id ?? uuid(),
+    type,
+    location: ours ? '' : location,
+    pickup: pickup.trim(),
+    driver: driver.trim(),
+    by: by.trim() || 'Fabio',
+    at: fromInput(date),
+    copiedAt,
+  })
+  const values = vehicleRow(imp, day, build(null))
+  const put = (v: OpsVehicle) => (vehicle ? list.map((x) => (x.id === vehicle.id ? v : x)) : [...list, v])
+
+  async function copyRow() {
+    await copyText(values.join('\t'))
+    setCopied(true)
+    if (vehicle) onSave({ vehicles: put(build(Date.now())) })
+  }
+
   return (
-    <Frame kicker="Vehicle" title={title} onClose={onClose}>
-      <div className="ops-form">
-        <div className="ed-field ops-wide">
-          <span className="ed-label">Vehicle</span>
-          <div className="ops-seg">
-            {VEHICLES.map((v) => (
-              <button key={v} type="button" className={type === v ? 'on' : ''} onClick={() => setType(v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
-        {!ours && (
-          <div className="ed-field ops-wide">
-            <span className="ed-label">Location</span>
-            <div className="ops-seg">
-              {LOCATIONS.map((l) => (
-                <button key={l} type="button" className={location === l ? 'on' : ''} onClick={() => setLocation(l)}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <label className="ed-field">
-          <span className="ed-label">Pickup time</span>
-          <input value={pickup} placeholder="2:00 PM — the driver's start" onChange={(e) => setPickup(e.target.value)} />
-        </label>
-        <label className="ed-field">
-          <span className="ed-label">Driver</span>
-          <input value={driver} list="ops-drivers" placeholder="Sasha, Christopher…" onChange={(e) => setDriver(e.target.value)} />
-        </label>
-        {!ours && (
-          <>
-            <label className="ed-field">
-              <span className="ed-label">Booked on</span>
-              <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
-            </label>
-            <label className="ed-field">
-              <span className="ed-label">Booked by</span>
-              <input value={by} onChange={(e) => setBy(e.target.value)} />
-            </label>
-          </>
-        )}
-        <datalist id="ops-drivers">
-          {drivers.map((d) => (
-            <option key={d} value={d} />
-          ))}
-        </datalist>
-      </div>
-      <div className="ops-actions">
-        {vehicle && (
+    <Modal
+      kicker={ours ? 'Our van' : 'Vehicle booking'}
+      title={cleanName(imp.eventName)}
+      sub={daySub(imp, day)}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {vehicle && (
+            <button
+              className="om-btn ghost danger"
+              onClick={() => {
+                onSave({ vehicles: list.filter((v) => v.id !== vehicle.id) })
+                onClose()
+              }}
+            >
+              Remove vehicle
+            </button>
+          )}
+          <span className="om-foot-gap" />
+          {!ours && (
+            <button className="om-btn" onClick={() => void copyRow()}>
+              {copied ? 'Row copied ✓' : 'Copy row'}
+            </button>
+          )}
           <button
-            className="pb-btn ops-undo"
+            className="om-btn primary"
             onClick={() => {
-              onSave({ vehicles: list.filter((v) => v.id !== vehicle.id) })
+              remember(by.trim() || 'Fabio')
+              onSave({ vehicles: put(build(copied ? Date.now() : (vehicle?.copiedAt ?? null))) })
               onClose()
             }}
           >
-            Remove vehicle
+            {vehicle ? 'Save' : ours ? 'Mark our van' : 'Mark booked'}
           </button>
-        )}
-        <button
-          className="pb-btn primary"
-          onClick={() => {
-            remember(by.trim() || 'Fabio')
-            const next: OpsVehicle = {
-              id: vehicle?.id ?? uuid(),
-              type,
-              location: ours ? '' : location,
-              pickup: pickup.trim(),
-              driver: driver.trim(),
-              by: by.trim() || 'Fabio',
-              at: fromInput(date),
-              copiedAt: vehicle?.copiedAt ?? null,
-            }
-            onSave({ vehicles: vehicle ? list.map((v) => (v.id === vehicle.id ? next : v)) : [...list, next] })
-            onClose()
-          }}
-        >
-          {vehicle ? 'Save' : ours ? 'Mark our van' : 'Mark booked'}
-        </button>
-      </div>
-    </Frame>
+        </>
+      }
+    >
+      <Section title="The event">
+        <div className="om-facts">
+          <div className="wide">
+            <span>Address</span>
+            <b>{imp.address || '—'}</b>
+          </div>
+          <div>
+            <span>Kitchen pickup</span>
+            <b>{day.kitchenPickup || '—'}</b>
+          </div>
+          <div>
+            <span>Onsite contact</span>
+            <b>{imp.onsiteContact || '—'}</b>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="The vehicle">
+        <div className="om-form">
+          <FieldBox label="Vehicle" wide>
+            <Seg options={VEHICLES} value={type} onChange={setType} />
+          </FieldBox>
+          {!ours && (
+            <FieldBox label="Location" wide>
+              <Seg options={LOCATIONS} value={location} onChange={setLocation} />
+            </FieldBox>
+          )}
+          <FieldBox label="Pickup time (driver's start)">
+            <input value={pickup} placeholder="2:00 PM" onChange={(e) => setPickup(e.target.value)} />
+          </FieldBox>
+          <FieldBox label="Driver">
+            <input value={driver} list="om-drivers" placeholder="Sasha, Christopher…" onChange={(e) => setDriver(e.target.value)} />
+          </FieldBox>
+          {!ours && (
+            <>
+              <FieldBox label="Booked on">
+                <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+              </FieldBox>
+              <FieldBox label="Booked by">
+                <input value={by} onChange={(e) => setBy(e.target.value)} />
+              </FieldBox>
+            </>
+          )}
+          <datalist id="om-drivers">
+            {drivers.map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
+        </div>
+      </Section>
+
+      {ours ? (
+        <p className="om-muted">Our own van isn&rsquo;t a rental — it doesn&rsquo;t go on the vehicle sheet.</p>
+      ) : (
+        <Section title="Google Sheet row" aside={<span className="om-aside">7 columns · paste into the first empty row</span>}>
+          <SheetRow columns={VEHICLE_COLUMNS} values={values} empty={{ 2: 'fill in above', 6: 'fill in above' }} />
+        </Section>
+      )}
+    </Modal>
   )
 }
 
-function RouteSheet({
-  title,
+/* ---------- route ---------- */
+
+function RouteDialog({
+  imp,
+  day,
   route,
   drivers,
   suggested,
   onSave,
   onClose,
 }: {
-  title: string
+  imp: PackImport
+  day: OpsDay
   route: { at: number; driver: string } | null
   drivers: string[]
   suggested: string
@@ -522,43 +768,64 @@ function RouteSheet({
 }) {
   const [driver, setDriver] = useState(route?.driver ?? suggested)
   return (
-    <Frame kicker="Route" title={title} onClose={onClose}>
-      <div className="ops-form">
-        <label className="ed-field ops-wide">
-          <span className="ed-label">Driver</span>
-          <input autoFocus value={driver} list="ops-drivers-r" placeholder="Who's driving it" onChange={(e) => setDriver(e.target.value)} />
-          <datalist id="ops-drivers-r">
-            {drivers.map((d) => (
-              <option key={d} value={d} />
-            ))}
-          </datalist>
-        </label>
-      </div>
-      <div className="ops-actions">
-        {route && (
+    <Modal
+      kicker="Route"
+      title={cleanName(imp.eventName)}
+      sub={daySub(imp, day)}
+      onClose={onClose}
+      footer={
+        <>
+          {route && (
+            <button
+              className="om-btn ghost danger"
+              onClick={() => {
+                onSave({ route: null })
+                onClose()
+              }}
+            >
+              Not on the route
+            </button>
+          )}
+          <span className="om-foot-gap" />
           <button
-            className="pb-btn ops-undo"
+            className="om-btn primary"
             onClick={() => {
-              onSave({ route: null })
+              onSave({ route: { at: route?.at ?? Date.now(), driver: driver.trim() } })
               onClose()
             }}
           >
-            Not on the route
+            {route ? 'Save' : 'Mark on the route'}
           </button>
-        )}
-        <button
-          className="pb-btn primary"
-          onClick={() => {
-            onSave({ route: { at: route?.at ?? Date.now(), driver: driver.trim() } })
-            onClose()
-          }}
-        >
-          {route ? 'Save' : 'Mark on the route'}
-        </button>
-      </div>
-    </Frame>
+        </>
+      }
+    >
+      <Section title="On the route">
+        <div className="om-facts">
+          <div className="wide">
+            <span>Address</span>
+            <b>{imp.address || '—'}</b>
+          </div>
+          <div>
+            <span>Kitchen pickup</span>
+            <b>{day.kitchenPickup || '—'}</b>
+          </div>
+        </div>
+        <div className="om-form" style={{ marginTop: 14 }}>
+          <FieldBox label="Driver" wide>
+            <input autoFocus value={driver} list="om-drivers-r" placeholder="Who's driving it" onChange={(e) => setDriver(e.target.value)} />
+            <datalist id="om-drivers-r">
+              {drivers.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
+          </FieldBox>
+        </div>
+      </Section>
+    </Modal>
   )
 }
+
+/* ---------- the week's rows for the sheet ---------- */
 
 /**
  * The week's ice orders and vehicle bookings as rows for the Google Sheet —
@@ -576,76 +843,70 @@ export function OpsCopy({ weekStart, imports }: { weekStart: string; imports: Pa
     return m
   }, [imports])
 
+  type Built = { values: string[]; row: PackOps; fresh: boolean; date: string; vid?: string }
   const built = useMemo(() => {
-    const ice: { tsv: string; row: PackOps; fresh: boolean; date: string; v?: OpsVehicle }[] = []
-    const veh: { tsv: string; row: PackOps; v: OpsVehicle; fresh: boolean; date: string }[] = []
+    const ice: Built[] = []
+    const veh: Built[] = []
     for (const r of rows) {
       const imp = latest.get(r.eventKey)
       if (!imp) continue
       const day = opsDaysOf(imp).find((d) => d.key === r.dayKey) ?? opsDaysOf(imp)[0]
-      const date = day.date ? md(day.date) : imp.eventDate
-      const name = cleanName(imp.eventName)
       if (r.ice && r.ice.company !== DELI) {
-        ice.push({
-          row: r,
-          date: day.date,
-          fresh: !r.ice.copiedAt,
-          // Date | Time | Address | Onsite contact | Ice needs | Event | Ordered | Company
-          tsv: [
-            date,
-            day.iceTime,
-            imp.address ?? '',
-            imp.onsiteContact ?? '',
-            day.iceNeeds,
-            name,
-            md(r.ice.at),
-            r.ice.company === DEFAULT_ICE ? '' : r.ice.company,
-          ].join('\t'),
-        })
+        ice.push({ row: r, date: day.date, fresh: !r.ice.copiedAt, values: iceRow(imp, day, r.ice) })
       }
       for (const v of r.vehicles ?? []) {
         if (v.type === OUR_VAN) continue // nothing rented, nothing for the sheet
-        veh.push({
-          row: r,
-          v,
-          date: day.date,
-          fresh: !v.copiedAt,
-          // Date | Event | Pickup | Location | Vehicle | Ord. placed | Driver
-          tsv: [date, name, v.pickup, v.location, v.type, `${v.by} ${md(v.at)}`, v.driver].join('\t'),
-        })
+        veh.push({ row: r, vid: v.id, date: day.date, fresh: !v.copiedAt, values: vehicleRow(imp, day, v) })
       }
     }
-    const byDate = <T extends { date: string }>(a: T, b: T) => a.date.localeCompare(b.date)
+    const byDate = (a: Built, b: Built) => a.date.localeCompare(b.date)
     return { ice: ice.sort(byDate), veh: veh.sort(byDate) }
   }, [rows, latest])
 
   async function copy(kind: 'ice' | 'veh', onlyNew: boolean) {
     const list = (kind === 'ice' ? built.ice : built.veh).filter((x) => !onlyNew || x.fresh)
     if (!list.length) return
-    const text = list.map((x) => x.tsv).join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      window.prompt('Copy these rows', text)
-    }
+    await copyText(list.map((x) => x.values.join('\t')).join('\n'))
     const now = Date.now()
     // Remember what went to the sheet, so the next copy only brings what's new.
     const touched = new Map<string, PackOps>()
     for (const x of list) {
       const r = touched.get(x.row.id) ?? { ...x.row, vehicles: [...(x.row.vehicles ?? [])] }
       if (kind === 'ice' && r.ice) r.ice = { ...r.ice, copiedAt: now }
-      const vid = x.v?.id ?? ''
-      if (kind === 'veh') r.vehicles = r.vehicles.map((v) => (v.id === vid ? { ...v, copiedAt: now } : v))
+      if (kind === 'veh') r.vehicles = r.vehicles.map((v) => (v.id === x.vid ? { ...v, copiedAt: now } : v))
       touched.set(r.id, r)
     }
-    for (const r of touched.values()) {
-      await saveOps(r.weekStart, r.eventKey, r.dayKey, { ice: r.ice, vehicles: r.vehicles })
-    }
+    for (const r of touched.values()) await saveOps(r.weekStart, r.eventKey, r.dayKey, { ice: r.ice, vehicles: r.vehicles })
     setDone(list.length === 1 ? '1 row copied — paste it into the sheet' : `${list.length} rows copied — paste them into the sheet`)
   }
 
   const newIce = built.ice.filter((x) => x.fresh).length
   const newVeh = built.veh.filter((x) => x.fresh).length
+
+  const table = (columns: string[], list: Built[]) => (
+    <div className="om-table-wrap">
+      <table className="om-table">
+        <thead>
+          <tr>
+            <th />
+            {columns.map((c) => (
+              <th key={c}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((x, i) => (
+            <tr key={i} className={x.fresh ? 'fresh' : ''}>
+              <td>{x.fresh ? <span className="om-new">new</span> : <span className="om-old">copied</span>}</td>
+              {x.values.map((v, j) => (
+                <td key={j}>{v || <span className="om-empty">—</span>}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 
   return (
     <>
@@ -654,41 +915,34 @@ export function OpsCopy({ weekStart, imports }: { weekStart: string; imports: Pa
         {newIce + newVeh > 0 && <span className="ops-badge">{newIce + newVeh}</span>}
       </button>
       {open && (
-        <div className="sheet-backdrop" onClick={() => setOpen(false)}>
-          <div className="sheet pb-sheet ops-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="pb-sheet-kicker">Google Sheet</div>
-            <h2>Copy this week&rsquo;s rows</h2>
-            <div className="pb-hint" style={{ marginBottom: 14 }}>
-              Click the first empty cell of the sheet and paste — each value lands in its column.
-            </div>
-            {(
-              [
-                ['ice', 'Ice orders', 'Date · Time · Address · Onsite contact · Ice needs · Event · Ordered · Company', built.ice.length, newIce],
-                ['veh', 'Vehicle bookings', 'Date · Event · Pickup · Location · Vehicle · Ord. placed · Driver', built.veh.length, newVeh],
-              ] as const
-            ).map(([kind, label, cols, total, fresh]) => (
-              <div className="ops-copy-row" key={kind}>
-                <div>
-                  <div className="ops-copy-title">
-                    {label} <span className="ops-copy-n">{total}</span>
-                  </div>
-                  <div className="ops-copy-cols">{cols}</div>
-                </div>
-                <div className="ops-copy-btns">
-                  <button className="pb-btn primary" disabled={!fresh} onClick={() => void copy(kind, true)}>
-                    {fresh ? `Copy ${fresh} new` : 'Nothing new'}
-                  </button>
-                  {total > 0 && (
-                    <button className="pb-btn" onClick={() => void copy(kind, false)}>
-                      Copy all {total}
+        <Modal kicker="Google Sheet" title="This week's rows" sub="Click the first empty cell of the sheet and paste — each value lands in its column." onClose={() => setOpen(false)} wide>
+          {done && <div className="om-ok">{done}</div>}
+          {(
+            [
+              ['ice', 'Ice orders', ICE_COLUMNS, built.ice, newIce],
+              ['veh', 'Vehicle bookings', VEHICLE_COLUMNS, built.veh, newVeh],
+            ] as const
+          ).map(([kind, label, columns, list, fresh]) => (
+            <Section
+              key={kind}
+              title={`${label} · ${list.length}`}
+              aside={
+                <div className="om-aside-btns">
+                  {list.length > 0 && (
+                    <button className="om-btn" onClick={() => void copy(kind, false)}>
+                      Copy all {list.length}
                     </button>
                   )}
+                  <button className="om-btn primary" disabled={!fresh} onClick={() => void copy(kind, true)}>
+                    {fresh ? `Copy ${fresh} new` : 'Nothing new'}
+                  </button>
                 </div>
-              </div>
-            ))}
-            {done && <div className="ops-copied">{done}</div>}
-          </div>
-        </div>
+              }
+            >
+              {list.length ? table([...columns], list) : <p className="om-muted">Nothing marked yet this week.</p>}
+            </Section>
+          ))}
+        </Modal>
       )}
     </>
   )

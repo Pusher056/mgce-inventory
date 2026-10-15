@@ -111,6 +111,9 @@ function isHeading(s: string) {
  * Scanned over the whole sheet, not just the top — ice needs and the driver
  * timings sit at the very bottom of the MO.
  */
+/** The words of the colour key printed beside the header — never a header value. */
+const LEGEND_WORD = /^(NEW|DONE|UPDATED?|CHANGED?|STORIED|KITCHEN|CLIENT|VENUE|RENTALS?|OPS|OPERATIONS)$/i
+
 function readHeader(rows: string[][]): Record<string, string> {
   const found: Record<string, string> = {}
   for (const row of rows) {
@@ -123,6 +126,9 @@ function readHeader(rows: string[][]): Record<string, string> {
         const v = clean(row[k])
         // Reached the next label ("ADDITIONAL NOTES:") — this one was left blank.
         if (v.endsWith(':')) break
+        // Or reached the colour key beside the header (NEW / STORIED / KITCHEN):
+        // a blank SERVICE ENTRANCE isn't "KITCHEN".
+        if (LEGEND_WORD.test(v)) break
         if (v && v !== '0') {
           if (!found[key]) found[key] = v
           break
