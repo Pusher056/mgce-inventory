@@ -6,9 +6,9 @@ import { db, pushDelete, uuid } from './db'
 import { supabase } from './supabase'
 import { itemKey } from './packMatch'
 import { weekIdOf, weekLabel } from './packWeeks'
-import type { ItemAlias, PackFile, PackImport, PackLineState, SyncTable } from './types'
+import type { ItemAlias, PackFile, PackImport, PackLineState, PackOps, SyncTable } from './types'
 
-type InboxTable = 'packWeeks' | 'packImports' | 'packPacked' | 'packLineStates' | 'itemAliases' | 'packFiles'
+type InboxTable = 'packWeeks' | 'packImports' | 'packPacked' | 'packLineStates' | 'itemAliases' | 'packFiles' | 'packOps'
 
 const SERVER: Record<InboxTable, SyncTable> = {
   packWeeks: 'pack_weeks',
@@ -17,6 +17,7 @@ const SERVER: Record<InboxTable, SyncTable> = {
   packLineStates: 'pack_line_states',
   itemAliases: 'item_aliases',
   packFiles: 'pack_files',
+  packOps: 'pack_ops',
 }
 
 async function queue(name: InboxTable, id: string) {
@@ -47,6 +48,36 @@ export async function removeRows(name: InboxTable, ids: string[]) {
   for (const id of ids) await pushDelete(table, id)
 }
 
+/* ---------- his jobs per event ---------- */
+
+export const opsId = (weekStart: string, eventKey: string, dayKey = '') => `${weekStart}|${eventKey}|${dayKey}`
+
+/** Change one event's (or day's) jobs; a row with nothing left in it goes away. */
+export async function saveOps(
+  weekStart: string,
+  eventKey: string,
+  dayKey: string,
+  patch: Partial<Pick<PackOps, 'ice' | 'vehicles' | 'staff' | 'route'>>,
+) {
+  const id = opsId(weekStart, eventKey, dayKey)
+  const prev = await db.packOps.get(id)
+  const next: PackOps = {
+    id,
+    weekStart,
+    eventKey,
+    dayKey,
+    ice: null,
+    vehicles: [],
+    staff: null,
+    route: null,
+    ...prev,
+    ...patch,
+    updatedAt: Date.now(),
+  }
+  if (!next.ice && !next.staff && !next.route && next.vehicles.length === 0) await removeRows('packOps', [id])
+  else await putRow('packOps', next)
+}
+
 /* ---------- weeks ---------- */
 
 export async function createWeek(startIso: string) {
@@ -71,12 +102,14 @@ export async function setWeekOrder(startIso: string, order: string[]) {
 
 /** A week and everything dropped into it: the pack lists, the ticks, the pictures. */
 export async function deleteWeek(startIso: string) {
-  const [imports, packed, states, files] = await Promise.all([
+  const [imports, packed, states, files, ops] = await Promise.all([
     db.packImports.where('weekStart').equals(startIso).primaryKeys(),
     db.packPacked.where('weekStart').equals(startIso).primaryKeys(),
     db.packLineStates.where('weekStart').equals(startIso).primaryKeys(),
     db.packFiles.where('weekStart').equals(startIso).toArray(),
+    db.packOps.where('weekStart').equals(startIso).primaryKeys(),
   ])
+  await removeRows('packOps', ops as string[])
   await removeRows('packImports', imports as string[])
   await removeRows('packPacked', packed as string[])
   await removeRows('packLineStates', states as string[])
@@ -87,17 +120,19 @@ export async function deleteWeek(startIso: string) {
 /* ---------- events ---------- */
 
 async function eventRows(weekStart: string, eventKey: string) {
-  const [imports, packed, states] = await Promise.all([
+  const [imports, packed, states, ops] = await Promise.all([
     db.packImports.where('eventKey').equals(eventKey).filter((i) => i.weekStart === weekStart).toArray(),
     db.packPacked.where('[weekStart+eventKey]').equals([weekStart, eventKey]).toArray(),
     db.packLineStates.where('[weekStart+eventKey]').equals([weekStart, eventKey]).toArray(),
+    db.packOps.where('[weekStart+eventKey]').equals([weekStart, eventKey]).toArray(),
   ])
-  return { imports, packed, states }
+  return { imports, packed, states, ops }
 }
 
 /** Every version of an event, and what was packed or decided for it. */
 export async function deleteEvent(weekStart: string, eventKey: string) {
-  const { imports, packed, states } = await eventRows(weekStart, eventKey)
+  const { imports, packed, states, ops } = await eventRows(weekStart, eventKey)
+  await removeRows('packOps', ops.map((o) => o.id))
   // The kept workbooks go with the event they belong to.
   const ids = new Set(imports.map((i) => i.id))
   await deleteFiles(
@@ -120,8 +155,10 @@ export async function undoVersion(importId: string) {
  */
 export async function moveEvent(fromWeek: string, eventKey: string, toWeek: string) {
   if (fromWeek === toWeek) return
-  const { imports, packed, states } = await eventRows(fromWeek, eventKey)
+  const { imports, packed, states, ops } = await eventRows(fromWeek, eventKey)
   for (const i of imports) await putRow('packImports', { ...i, weekStart: toWeek })
+  for (const o of ops) await putRow('packOps', { ...o, id: opsId(toWeek, eventKey, o.dayKey), weekStart: toWeek })
+  await removeRows('packOps', ops.map((o) => o.id))
   for (const p of packed) {
     await putRow('packPacked', { ...p, id: `${toWeek}|${eventKey}|${p.itemKey}`, weekStart: toWeek })
   }

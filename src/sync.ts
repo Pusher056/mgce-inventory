@@ -25,6 +25,7 @@ import type {
   PackImport,
   PackPacked,
   PackLineState,
+  PackOps,
   ItemAlias,
   PackFile,
 } from './types'
@@ -323,6 +324,12 @@ function packLineStateToRow(x: PackLineState) {
     status: x.status, product_id: x.productId, only_have: x.onlyHave ?? null, updated_at: iso(x.updatedAt),
   }
 }
+function packOpsToRow(o: PackOps) {
+  return {
+    id: o.id, week_start: o.weekStart, event_key: o.eventKey, day_key: o.dayKey,
+    ice: o.ice, vehicles: o.vehicles ?? [], staff: o.staff, route: o.route, updated_at: iso(o.updatedAt),
+  }
+}
 function itemAliasToRow(a: ItemAlias) {
   return {
     id: a.id, alias: a.alias, canonical: a.canonical, kind: a.kind ?? 'same',
@@ -381,6 +388,7 @@ async function pushOutbox() {
     pack_line_states: new Set<string>(),
     item_aliases: new Set<string>(),
     pack_files: new Set<string>(),
+    pack_ops: new Set<string>(),
   }
   for (const it of items) byTable[it.table].add(it.id)
 
@@ -404,6 +412,7 @@ async function pushOutbox() {
     'pack_line_states',
     'item_aliases',
     'pack_files',
+    'pack_ops',
   ] as const) {
     const ids = [...byTable[table]]
     if (ids.length === 0) continue
@@ -440,6 +449,8 @@ async function pushOutbox() {
       rows = (await db.packLineStates.bulkGet(ids)).filter((x): x is PackLineState => !!x).map(packLineStateToRow)
     } else if (table === 'item_aliases') {
       rows = (await db.itemAliases.bulkGet(ids)).filter((x): x is ItemAlias => !!x).map(itemAliasToRow)
+    } else if (table === 'pack_ops') {
+      rows = (await db.packOps.bulkGet(ids)).filter((x): x is PackOps => !!x).map(packOpsToRow)
     } else if (table === 'pack_files') {
       rows = (await db.packFiles.bulkGet(ids)).filter((x): x is PackFile => !!x).map(packFileToRow)
     } else {
@@ -941,13 +952,14 @@ export async function pullFromServer() {
       supabase.from('route_stops').select('*').limit(PULL_LIMIT),
       supabase.from('route_lines').select('*').limit(PULL_LIMIT),
     ])
-    const [pWeeks, pImports, pPacked, pStates, pAliases, pFiles] = await Promise.all([
+    const [pWeeks, pImports, pPacked, pStates, pAliases, pFiles, pOps] = await Promise.all([
       supabase.from('pack_weeks').select('*').limit(PULL_LIMIT),
       supabase.from('pack_imports').select('*').limit(PULL_LIMIT),
       supabase.from('pack_packed').select('*').limit(PULL_LIMIT),
       supabase.from('pack_line_states').select('*').limit(PULL_LIMIT),
       supabase.from('item_aliases').select('*').limit(PULL_LIMIT),
       supabase.from('pack_files').select('*').limit(PULL_LIMIT),
+      supabase.from('pack_ops').select('*').limit(PULL_LIMIT),
     ])
 
     // Read the local queues now, not alongside the requests: anything the user
@@ -1051,6 +1063,7 @@ export async function pullFromServer() {
     await dropLocallyIfGoneFromServer(db.packLineStates, pStates, pendingIds, askedAt)
     await dropLocallyIfGoneFromServer(db.itemAliases, pAliases, pendingIds, askedAt)
     await dropLocallyIfGoneFromServer(db.packFiles, pFiles, pendingIds, askedAt)
+    await dropLocallyIfGoneFromServer(db.packOps, pOps, pendingIds, askedAt)
 
     /** Server rows worth taking: unknown here, or written more recently there. */
     const newer = <R extends { id: string; updated_at: string }, T extends { updatedAt: number }>(
@@ -1135,6 +1148,21 @@ export async function pullFromServer() {
           itemKey: r.item_key,
           packedAt: ms(r.packed_at),
           qty: r.qty === null || r.qty === undefined ? null : Number(r.qty),
+          updatedAt: ms(r.updated_at),
+        })),
+      )
+    }
+    if (pOps.data?.length) {
+      await db.packOps.bulkPut(
+        newer(pOps.data, await held<PackOps>(db.packOps, pOps.data)).map((r) => ({
+          id: r.id,
+          weekStart: r.week_start,
+          eventKey: r.event_key,
+          dayKey: r.day_key ?? '',
+          ice: r.ice ?? null,
+          vehicles: r.vehicles ?? [],
+          staff: r.staff ?? null,
+          route: r.route ?? null,
           updatedAt: ms(r.updated_at),
         })),
       )

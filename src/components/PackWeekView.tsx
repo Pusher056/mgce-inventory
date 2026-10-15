@@ -52,6 +52,7 @@ import {
 import { totalBottles, type PackFile, type PackImport, type Storage } from '../types'
 import ActionRow, { inTapZone } from './ActionRow'
 import SheetViewer from './SheetViewer'
+import OpsStrip, { OpsCopy } from './OpsStrip'
 
 const ACCEPT_BOOK =
   '.xls,.xlsx,.xlsm,.eml,.msg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -115,6 +116,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
   )
   const packed = useLiveQuery(() => db.packPacked.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const states = useLiveQuery(() => db.packLineStates.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
+  // His jobs per event: ice, vehicle, StaffMate, route.
+  const opsRows = useLiveQuery(() => db.packOps.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   const files = useLiveQuery(() => db.packFiles.where('weekStart').equals(weekStart).toArray(), [weekStart]) ?? []
   // The workbooks themselves are kept for "View pack list", not listed with the photos.
   const pictures = files.filter((f) => f.kind !== 'sheet')
@@ -910,6 +913,7 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
         </button>
         {busy && <span className="muted small">Reading…</span>}
         {!busy && <span className="wk-drag-hint">or drag files here</span>}
+        {(imports?.length ?? 0) > 0 && <OpsCopy weekStart={weekStart} imports={imports ?? []} />}
       </div>
 
       {fileOver && (
@@ -1566,6 +1570,8 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                 </button>
               </div>
             </div>
+
+            <OpsStrip weekStart={weekStart} imp={g.latest} rows={opsRows.filter((o) => o.eventKey === key)} />
 
             {menuFor === key && (
               <div className="wk-menu">

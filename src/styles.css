@@ -2675,3 +2675,137 @@ textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .pb-bulk { display: none; }
 @media (max-width: 860px) { .pb-bulk { display: inline-flex; } }
 .ib-del-none { visibility: hidden !important; }
+
+/* the design tokens, for every screen — not only the ones wrapped in .pb */
+:root {
+  --line: rgba(148, 163, 184, 0.14);
+  --surface: #162033;
+  --surface-2: #1b2740;
+}
+
+/* ==========================================================================
+   His jobs per event — ice, vehicle, StaffMate, route
+   ========================================================================== */
+.ops { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 12px 40px; }
+.ops-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ops-day {
+  min-width: 74px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ops-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9fb0c6;
+  background: transparent;
+  border: 1px dashed rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  padding: 4px 11px 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.ops-chip:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.55); }
+.ops-chip .ops-ic { flex: none; opacity: 0.9; }
+.ops-chip.quiet { opacity: 0.55; }
+.ops-chip.done {
+  color: #86efac;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.08);
+}
+.ops-chip.late {
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.ops-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  margin-left: auto;
+}
+.ops-copy-btn:hover { border-color: rgba(148, 163, 184, 0.4); }
+.ops-badge { font-size: 11px; font-weight: 800; color: #062033; background: var(--accent); border-radius: 999px; padding: 1px 7px; }
+
+.ops-sheet { max-width: 560px; }
+.ops-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 13.5px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ops-facts span { color: var(--muted); }
+.ops-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.ops-form .ops-wide { grid-column: 1 / -1; }
+.ops-form input {
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+}
+.ops-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15); }
+.ops-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-seg button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.ops-seg button:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.4); }
+.ops-seg button.on { color: var(--accent); border-color: var(--accent); background: rgba(56, 189, 248, 0.1); }
+.ops-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.ops-actions .pb-btn.primary { margin-top: 0; padding: 10px 18px; }
+.ops-undo { margin-right: auto; color: var(--muted); }
+.ops-undo:hover { color: #fca5a5; }
+.ops-copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.ops-copy-title { font-weight: 700; font-size: 15px; }
+.ops-copy-n { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+.ops-copy-cols { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.ops-copy-btns { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.ops-copy-btns .pb-btn.primary { margin-top: 0; }
+.ops-copied { margin-top: 10px; font-size: 13px; color: #86efac; }
+
+@media (max-width: 640px) {
+  .ops { padding: 0 10px 12px; }
+  .ops-form { grid-template-columns: minmax(0, 1fr); }
+  .ops-copy-row { flex-direction: column; align-items: stretch; }
+  .ops-copy-btns { flex-direction: row; }
+}

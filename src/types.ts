@@ -273,6 +273,7 @@ export type SyncTable =
   | 'pack_line_states'
   | 'item_aliases'
   | 'pack_files'
+  | 'pack_ops'
 
 export interface OutboxItem {
   seq?: number
@@ -634,6 +635,51 @@ export interface ItemAlias {
  * he is sending when they only wrote "Rum". Keyed like PackPacked so it
  * survives the next version of the pack list.
  */
+/**
+ * The jobs around an event that are his and nobody else's: ordering the ice,
+ * booking the vehicle, putting people on StaffMate, putting it on the route.
+ * One per event — per day on a multi-day one — so he can see at a glance what
+ * is done and when he did it, and copy it into the Google Sheet.
+ */
+export interface PackOps {
+  /** weekStart|eventKey|dayKey */
+  id: string
+  weekStart: string
+  eventKey: string
+  /** '' for a one-day event; the MO day's date (yyyy-mm-dd) otherwise. */
+  dayKey: string
+  ice: OpsIce | null
+  vehicles: OpsVehicle[]
+  staff: { at: number } | null
+  route: { at: number; driver: string } | null
+  updatedAt: number
+}
+
+export interface OpsIce {
+  /** When he marked it ordered. */
+  at: number
+  /** United Ice unless said otherwise — outside NYC it's Apple Ice. */
+  company: string
+  /** Who placed the order. */
+  by: string
+  /** Already pasted into the sheet. */
+  copiedAt: number | null
+}
+
+export interface OpsVehicle {
+  id: string
+  /** Cargo Van / 15 Passenger Van / Box Truck / Ref Truck / Our van */
+  type: string
+  /** CC-LIC almost always; CC Chelsea, Edge… */
+  location: string
+  /** Pickup time = the driver's start time. */
+  pickup: string
+  by: string
+  at: number
+  driver: string
+  copiedAt: number | null
+}
+
 export interface PackLineState {
   id: string
   weekStart: string

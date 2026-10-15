@@ -29,6 +29,7 @@ import type {
   PackFile,
   ItemAlias,
   PackLineState,
+  PackOps,
 } from './types'
 
 export const db = new Dexie('mgce-inventory') as Dexie & {
@@ -57,6 +58,7 @@ export const db = new Dexie('mgce-inventory') as Dexie & {
   packFiles: EntityTable<PackFile, 'id'>
   itemAliases: EntityTable<ItemAlias, 'id'>
   packLineStates: EntityTable<PackLineState, 'id'>
+  packOps: EntityTable<PackOps, 'id'>
 }
 
 db.version(1).stores({
@@ -173,6 +175,11 @@ db.version(10)
       kind: digits(r.alias) !== digits(r.canonical) ? 'different' : 'same',
     }))
   })
+
+// v11 adds his jobs per event — ice, vehicles, StaffMate, route. Additive.
+db.version(11).stores({
+  packOps: 'id, weekStart, [weekStart+eventKey]',
+})
 
 export function uuid(): string {
   return crypto.randomUUID()
