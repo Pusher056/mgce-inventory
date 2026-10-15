@@ -17,7 +17,7 @@ export interface Ownership {
   /** Why, in a few words he can check at a glance. */
   why: string
   /** Where the answer came from: his own ruling, a note, or the sheet. */
-  source: 'ruling' | 'note' | 'section' | 'sheet' | 'unknown'
+  source: 'ruling' | 'note' | 'section' | 'sheet' | 'unknown' | 'mention'
 }
 
 /** The planners and creatives. Their initials on a line mean they handle it. */
@@ -194,19 +194,25 @@ export function ownerOf(
   // The note on its own as well: "IS" alone in the notes column is a signature.
   const hit = rx.exec(text) ?? rx.exec((line.note ?? '').trim())
   const initials = hit ? [hit[0], hit.slice(1).find(Boolean) ?? hit[0]] : null
+  // A planner's initials or name on a line is NOT a hand-off. "At GJ's desk",
+  // "ask NS about the size", "PJ will confirm" — the line is still his more
+  // often than not, and a line taken off his list is a line he never sees and
+  // that never goes out. So it stays on his list, flagged; if it really isn't
+  // his, "Not mine" is one tap. (His call, 2026-10-15.)
   if (initials) {
-    // "BW ordered": she bought it and it is hers to bring. He marked Amazon's
-    // "BW ordered" lines not-his by hand, so that is the rule.
-    if (/\b(ordered|ordering|bought|purchased)\b/i.test(line.note ?? '')) {
-      return { whose: 'notMine', why: `${initials[1]} ordered it`, source: 'note' }
-    }
-    return { whose: 'notMine', why: `${initials[1]} handles it`, source: 'note' }
+    const ordered = /\b(ordered|ordering|bought|purchased)\b/i.test(line.note ?? '')
+    return { whose: 'mine', why: ordered ? `${initials[1]} ordered it?` : `mentions ${initials[1]}`, source: 'mention' }
   }
 
   const doer = SOMEONE_DOES_IT.exec(`${line.note ?? ''} ${line.item}`)
   if (doer && !NOT_A_PERSON.has(doer[1].toLowerCase())) {
     const who = doer[1][0].toUpperCase() + doer[1].slice(1).toLowerCase()
-    return { whose: 'notMine', why: `note says ${who} does it`, source: 'note' }
+    // The client, the venue, Storied or the kitchen bringing it is a real
+    // hand-off. A person's name is only a mention — see above.
+    if (/^(client|venue|storied|kitchen|chef|rental|rentals|vendor|florist)$/i.test(doer[1])) {
+      return { whose: 'notMine', why: `note says ${who} does it`, source: 'note' }
+    }
+    return { whose: 'mine', why: `mentions ${who}`, source: 'mention' }
   }
 
   const colour = colourSays(line.fills, legend)

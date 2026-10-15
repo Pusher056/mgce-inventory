@@ -1314,6 +1314,17 @@ export default function PackWeekView({ weekStart, label }: { weekStart: string; 
                     : describeQty(parseQty(l.qty, l.item, l.size), l.item)}
                 </span>
               </ActionRow>
+              {/* Names a planner: stays his, flagged, with "Not mine" one tap away. */}
+              {own.get(l)?.source === 'mention' && !whereIs(l.note) && (
+                <div className="wk-match">
+                  <div className="wk-match-line">
+                    <span className="wk-mention">{own.get(l)?.why}</span>
+                    <button className="wk-link" onClick={() => void setLineState(weekStart, key, l, { status: 'notMine' })}>
+                      Not mine
+                    </button>
+                  </div>
+                </div>
+              )}
               {(ps.state === 'partial' || ps.state === 'over' || whereIs(l.note)) && (
                 <div className="wk-match">
                   <div className="wk-match-line">

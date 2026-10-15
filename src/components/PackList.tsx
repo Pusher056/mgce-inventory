@@ -249,6 +249,7 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
   const [copied, setCopied] = useState('')
   const [drag, setDrag] = useState<Drag | null>(null)
   const [dayPick, setDayPick] = useState<string | null>(null)
+  const [bulkFor, setBulkFor] = useState<string | null>(null)
 
   useEffect(() => () => window.clearTimeout(undoTimer.current), [])
 
@@ -441,6 +442,20 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
+  }
+
+  /**
+   * Who brings it, for the whole section at once — when the client or Storied
+   * brings all the liquor, nobody should have to go line by line. The lines
+   * that are someone else's are then changed one at a time, as before. Undo
+   * puts every line back the way it was.
+   */
+  async function setAllWho(section: string, w: LineWho) {
+    const rows = dayLines.filter((l) => l.section === section)
+    for (const l of rows) await updatePackLine(l.id, { who: w === defaultWho(section) ? '' : w })
+    offerUndo({ lines: rows, label: `${titled(section)}: all lines → ${whoText(w, initials)}` })
+    setBulkFor(null)
+    void syncNow()
   }
 
   /** Day 2 is often Day 1 again: start from another day's list and adjust. */
@@ -739,6 +754,11 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
                 <span className="pb-dot" aria-hidden="true" />
                 {dept === 'kitchen' ? 'Kitchen' : dept === 'planner' ? 'You order' : 'Operations'}
               </span>
+              {!locked && rows.length > 1 && (
+                <button className="pb-bulk" onClick={() => setBulkFor(section)}>
+                  Set who brings all ▾
+                </button>
+              )}
               <span className="pb-count">
                 {included} {locked ? 'lines' : `of ${rows.length} included`}
               </span>
@@ -750,11 +770,17 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
             </header>
 
             {rows.length > 0 && (
-              <div className="pb-cols" aria-hidden="true">
+              <div className="pb-cols">
                 <span />
                 <span>Item</span>
                 {withChoice && <span>Brand / choice</span>}
-                <span>Who brings it</span>
+                {locked ? (
+                  <span>Who brings it</span>
+                ) : (
+                  <button className="pb-cols-btn" title="Set who brings every line in this section" onClick={() => setBulkFor(section)}>
+                    Who brings it ▾
+                  </button>
+                )}
                 <span>Note</span>
                 <span>Qty</span>
                 <span />
@@ -852,6 +878,33 @@ export default function PackList({ eventId, onBack }: { eventId: string; onBack:
             />
           ) : null
         })()}
+
+      {bulkFor && (
+        <div className="sheet-backdrop" onClick={() => setBulkFor(null)}>
+          <div className="sheet pb-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pb-sheet-kicker">{titled(bulkFor)}{day ? ` · ${day.label}` : ''}</div>
+            <h2>Who brings every line?</h2>
+            <div className="pb-hint" style={{ marginBottom: 12 }}>
+              Sets all {dayLines.filter((l) => l.section === bulkFor).length} lines at once. Change the odd one out on its
+              own line afterwards.
+            </div>
+            <div className="pb-opt-group">
+              {WHO_ORDER.map((w) => {
+                const rows = dayLines.filter((l) => l.section === bulkFor)
+                const all = rows.length > 0 && rows.every((l) => whoOf(l) === w)
+                return (
+                  <button key={w} className={`pb-opt who-${w}${all ? ' on' : ''}`} onClick={() => void setAllWho(bulkFor, w)}>
+                    <span className="pb-opt-label">{whoText(w, initials)}</span>
+                    <span className="pb-opt-sub">
+                      {all ? 'every line already' : w === defaultWho(bulkFor) ? 'usual for this section' : ''}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {picking && (
         <ProductSearch section={picking} onClose={() => setPicking(null)} onPick={(p) => void pick(picking!, p)} />
