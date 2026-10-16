@@ -651,6 +651,11 @@ export interface PackOps {
   ice: OpsIce | null
   /** Ice bought on the street — deli, bodega, bags by the pound. Never ordered, never on the sheet. */
   buy: { at: number; by: string } | null
+  /**
+   * The captain he put on StaffMate — what the ice sheet calls the onsite
+   * contact. Not on the pack list; he types it.
+   */
+  captain?: string
   vehicles: OpsVehicle[]
   staff: { at: number } | null
   route: { at: number; driver: string } | null
