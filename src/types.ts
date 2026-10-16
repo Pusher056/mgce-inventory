@@ -649,6 +649,8 @@ export interface PackOps {
   /** '' for a one-day event; the MO day's date (yyyy-mm-dd) otherwise. */
   dayKey: string
   ice: OpsIce | null
+  /** Ice bought on the street — deli, bodega, bags by the pound. Never ordered, never on the sheet. */
+  buy: { at: number; by: string } | null
   vehicles: OpsVehicle[]
   staff: { at: number } | null
   route: { at: number; driver: string } | null

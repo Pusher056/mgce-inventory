@@ -57,7 +57,7 @@ export async function saveOps(
   weekStart: string,
   eventKey: string,
   dayKey: string,
-  patch: Partial<Pick<PackOps, 'ice' | 'vehicles' | 'staff' | 'route'>>,
+  patch: Partial<Pick<PackOps, 'ice' | 'buy' | 'vehicles' | 'staff' | 'route'>>,
 ) {
   const id = opsId(weekStart, eventKey, dayKey)
   const prev = await db.packOps.get(id)
@@ -67,6 +67,7 @@ export async function saveOps(
     eventKey,
     dayKey,
     ice: null,
+    buy: null,
     vehicles: [],
     staff: null,
     route: null,
@@ -74,7 +75,7 @@ export async function saveOps(
     ...patch,
     updatedAt: Date.now(),
   }
-  if (!next.ice && !next.staff && !next.route && next.vehicles.length === 0) await removeRows('packOps', [id])
+  if (!next.ice && !next.buy && !next.staff && !next.route && next.vehicles.length === 0) await removeRows('packOps', [id])
   else await putRow('packOps', next)
 }
 

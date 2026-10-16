@@ -327,7 +327,7 @@ function packLineStateToRow(x: PackLineState) {
 function packOpsToRow(o: PackOps) {
   return {
     id: o.id, week_start: o.weekStart, event_key: o.eventKey, day_key: o.dayKey,
-    ice: o.ice, vehicles: o.vehicles ?? [], staff: o.staff, route: o.route, updated_at: iso(o.updatedAt),
+    ice: o.ice, buy: o.buy ?? null, vehicles: o.vehicles ?? [], staff: o.staff, route: o.route, updated_at: iso(o.updatedAt),
   }
 }
 function itemAliasToRow(a: ItemAlias) {
@@ -1160,6 +1160,7 @@ export async function pullFromServer() {
           eventKey: r.event_key,
           dayKey: r.day_key ?? '',
           ice: r.ice ?? null,
+          buy: r.buy ?? null,
           vehicles: r.vehicles ?? [],
           staff: r.staff ?? null,
           route: r.route ?? null,

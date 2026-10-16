@@ -124,38 +124,86 @@ export function parseIce(raw: string): IceNeed {
 }
 
 /**
- * One thing on the ice line: "2 Bags 1.5" Cubes" is 2 · bag · '1.5" cubes'.
+ * One thing on the ice line: "2 Bags 1.5" Cubes" is 2 · bag · '1.5" cubes';
+ * "(2) 10 lb bags" is 2 · bag · 10 lb, bought on the street.
  * `special` is anything that isn't plain ice — cube sizes, branded, dry,
  * crushed — the part that is easy to miss and costly to get wrong.
  */
 export interface IcePart {
   qty: number | null
   unit: 'tin' | 'bag' | ''
+  /** "10 lb" — a weight means a store bag. */
+  size: string
   special: string
+  /** 'order' comes from the ice company; 'street' is bought — deli, bodega, any bag by the pound. */
+  source: 'order' | 'street'
   text: string
 }
 
 /**
  * The whole story of an event's ice, read from the MO the way he reads it:
- *  - none   "N/A", empty
- *  - tbd    "TBD"
- *  - deli   "pick up 2 bags from deli" — small deli bags, not the ice company's
- *  - client the client or venue brings it
- *  - order  the ice company (the big tins and bags)
- * plus every special kind on the line, and the notes that talk about ice —
- * "Client providing all beverages & Ice" beside an order of 4 tins is a
- * contradiction he has to see.
+ *  - none    "N/A", empty
+ *  - tbd     "TBD"
+ *  - client  the client or venue brings it
+ *  - street  all of it is bought on the street — "pick up 2 bags from deli",
+ *            "10 lbs of ice": small bags, never ordered from the ice company
+ *  - order   the ice company (the big tins and bags), possibly with some
+ *            street bags on top — "5 tins + (2) 10 lb bags"
+ * plus every special kind on the line, the notes that talk about ice, and a
+ * delivery on another day — "2 bags with 10/20/26 delivery" comes the day before.
  */
 export interface IceRead {
-  status: 'none' | 'tbd' | 'deli' | 'client' | 'order'
+  status: 'none' | 'tbd' | 'street' | 'client' | 'order'
   parts: IcePart[]
+  /** From the ice company. */
+  orderParts: IcePart[]
+  /** Bought on the street. */
+  buyParts: IcePart[]
   specials: string[]
   notes: string[]
   warnings: string[]
+  /** yyyy-mm-dd when the line says it comes on a particular day. */
+  deliverOn: string
   raw: string
 }
 
 const SPECIAL_ICE = /\d+(?:\.\d+)?\s*(?:"|”|''|in\b|inch)|cube|sphere|branded|logo|custom|crushed|shaved|dry\s*ice|block|clear|collins|pebble|nugget/i
+const STREET = /\bdeli\b|bodega|\bstore\b|street|supermarket|grocery|duane\s*reade|cvs|7-?eleven/i
+const WEIGHT = /\b\d+(?:\.\d+)?\s*(?:lbs?|pounds?)\b/i
+// Dates on the ice line are written with slashes — 10/20/26. A dot is a size: 1.5" cubes.
+const DATE_IN = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/
+
+/** "(2) 10 lb bags" → 2 · bag · 10 lb. */
+function readPart(seg: string, streetLine: boolean): IcePart | null {
+  const s = seg
+    .replace(/^(pick\s*up|get|grab|buy)\s+/i, '')
+    .replace(/\bwith\b.*\bdeliver(y|ed)\b.*$/i, '')
+    .replace(DATE_IN, '')
+    .replace(/\bdeliver(y|ed)\b/gi, '')
+    .trim()
+  if (!s) return null
+  const m = /^\(?(\d+)\)?\s*(?:x\s*)?(?:(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?)\.?\s*)?(tins?|bags?)?\b\s*(?:of\s+)?(.*)$/i.exec(s)
+  let qty = m ? Number(m[1]) : null
+  let size = m?.[2] ? `${m[2]} lb` : ''
+  let rest = m ? m[4] : s
+  // "10 lbs of ice": the number was the weight, not a count.
+  const lead = /^(lbs?|pounds?)\b\.?\s*(?:of\s+)?(.*)$/i.exec(rest)
+  if (lead && qty !== null && !size) {
+    size = `${qty} lb`
+    qty = null
+    rest = lead[2]
+  }
+  const unit: IcePart['unit'] = m?.[3] ? (/tin/i.test(m[3]) ? 'tin' : 'bag') : /\btins?\b/i.test(s) ? 'tin' : /\bbags?\b/i.test(s) ? 'bag' : ''
+  rest = rest
+    .replace(/\b(tins?|bags?)\b/gi, ' ')
+    .replace(/\b(regular|reg\.?)\s*ice\b|\bfrom\s+(the\s+)?(deli|bodega|store)\b|\bice\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const special = SPECIAL_ICE.test(rest) ? rest.replace(/\s*cubes?\s*$/i, ' cubes').trim() : ''
+  if (qty === null && !unit && !special && !size) return null
+  const source: IcePart['source'] = streetLine || !!size || STREET.test(seg) ? 'street' : 'order'
+  return { qty, unit, size, special, source, text: seg.trim() }
+}
 
 export function readIce(raw: string, notes = ''): IceRead {
   const text = String(raw ?? '').trim()
@@ -163,57 +211,72 @@ export function readIce(raw: string, notes = ''): IceRead {
   const noteLines = String(notes ?? '')
     .split(/\n+/)
     .map((l) => l.replace(/^[\s*•-]+/, '').trim())
-    .filter((l) => /\bice\b/i.test(l))
+    .filter((l) => /\bice\b|freezer|\bcooler\b/i.test(l) || WEIGHT.test(l))
 
   let status: IceRead['status'] = 'order'
   if (!text || /^(n\/?a|none|no ice|no|-+)\b/.test(low)) status = 'none'
   else if (/^tbd\b|^to be determined/.test(low)) status = 'tbd'
-  else if (/\bdeli\b|bodega/.test(low)) status = 'deli'
   else if (/\b(client|venue)\b.*\b(provid|bring|suppl|has)/.test(low)) status = 'client'
 
-  const parts: IcePart[] = []
-  if (status !== 'none' && status !== 'tbd') {
-    // "1 Bag of 1.5"x1.5" Cubes, 2 Bags Regular Ice, 1 Tin Regular Ice",
-    // "3 Tins + 2 Bags", "7 tins | 3 tins" — every piece on its own.
-    for (const seg of text.split(/\s*(?:\||,|\+|&|\band\b|;)\s*/i)) {
-      const s = seg.replace(/^(pick\s*up|get|grab)\s+/i, '').trim()
-      if (!s) continue
-      const m = /^(\d+)\s*(tins?|bags?)?\b\s*(?:of\s+)?(.*)$/i.exec(s)
-      const qty = m ? Number(m[1]) : null
-      const unit = m?.[2] ? (/tin/i.test(m[2]) ? 'tin' : 'bag') : /\btins?\b/i.test(s) ? 'tin' : /\bbags?\b/i.test(s) ? 'bag' : ''
-      const rest = (m ? m[3] : s)
-        .replace(/\b(regular|reg\.?)\s*ice\b|\bfrom\s+(the\s+)?deli\b|\bice\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-      const special = SPECIAL_ICE.test(rest) ? rest.replace(/\s*cubes?\s*$/i, ' cubes').trim() : ''
-      if (qty === null && !unit && !special) continue
-      parts.push({ qty, unit, special, text: s })
+  // A date on the ice line: it is delivered that day, not the event's own.
+  const dm = DATE_IN.exec(text)
+  let deliverOn = ''
+  if (dm) {
+    const y = dm[3] ? (dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3])) : new Date().getFullYear()
+    const d = new Date(y, Number(dm[1]) - 1, Number(dm[2]))
+    if (!Number.isNaN(d.getTime())) {
+      deliverOn = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     }
   }
 
+  const parts: IcePart[] = []
+  if (status !== 'none' && status !== 'tbd') {
+    const streetLine = STREET.test(text)
+    // "1 Bag of 1.5"x1.5" Cubes, 2 Bags Regular Ice, 1 Tin Regular Ice",
+    // "5 tins + (2) 10 lb bags", "7 tins | 3 tins" — every piece on its own.
+    for (const seg of text.split(/\s*(?:\||,|\+|&|\band\b|;)\s*/i)) {
+      const p = readPart(seg, streetLine)
+      if (p) parts.push(p)
+    }
+  }
+  const orderParts = parts.filter((p) => p.source === 'order')
+  const buyParts = parts.filter((p) => p.source === 'street')
+  if (status === 'order' && parts.length > 0 && orderParts.length === 0) status = 'street'
+
   const specials = [
     ...parts.filter((p) => p.special).map((p) => p.special),
-    ...noteLines.filter((l) => SPECIAL_ICE.test(l) && !/machine/i.test(l)).map((l) => l),
+    ...noteLines.filter((l) => SPECIAL_ICE.test(l) && !/machine|freezer/i.test(l)).map((l) => l),
   ]
   const warnings: string[] = []
   const notesSayClient = noteLines.some((l) => /\b(client|venue)\b.*\b(provid|bring|suppl)/i.test(l))
   if (notesSayClient && status === 'order') warnings.push('The notes say the client or venue provides the ice')
-  if (status === 'deli') warnings.push('Small deli bags — not from the ice company')
 
-  return { status, parts, specials: [...new Set(specials)], notes: noteLines, warnings, raw: text }
+  return {
+    status,
+    parts,
+    orderParts,
+    buyParts,
+    specials: [...new Set(specials)],
+    notes: noteLines,
+    warnings,
+    deliverOn,
+    raw: text,
+  }
 }
 
-/** "1 bag 1.5"x1.5" cubes + 2 bags + 1 tin" — every piece, the special ones kept whole. */
-export function iceSummary(r: IceRead): string {
+/** "2 × 10 lb bags", "5 tins", "1 bag 1.5"x1.5" cubes". */
+export function icePieceText(p: IcePart): string {
+  const unit = p.unit ? `${p.unit}${p.qty === 1 && !p.size ? '' : 's'}` : ''
+  if (p.size) return [p.qty != null ? `${p.qty} ×` : '', p.size, unit || 'of ice', p.special].filter(Boolean).join(' ')
+  return [p.qty ?? '', unit, p.special].filter(Boolean).join(' ')
+}
+
+/** Every piece, joined: "5 tins + 2 × 10 lb bags". */
+export function iceSummary(r: IceRead, parts: IcePart[] = r.parts): string {
   if (r.status === 'none') return 'No ice'
   if (r.status === 'tbd') return 'Ice TBD'
-  if (!r.parts.length) return r.raw
-  const piece = (p: IcePart) => {
-    const unit = p.unit ? `${p.unit}${p.qty === 1 ? '' : 's'}` : ''
-    return [p.qty ?? '', unit, p.special].filter(Boolean).join(' ')
-  }
-  const text = r.parts.map(piece).join(' + ')
-  return r.status === 'deli' ? `Deli · ${text}` : r.status === 'client' ? `Client · ${text}` : text
+  if (!parts.length) return r.raw
+  return parts.map(icePieceText).join(' + ')
 }
 
 export function describeIce(ice: IceNeed): string {

@@ -3059,3 +3059,21 @@ textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .om-sec-head { flex-wrap: wrap; }
 }
 .om-row dd.blank { color: var(--muted); font-weight: 500; font-style: italic; font-size: 12.5px; }
+
+/* ice bought on the street, and ice that comes on another day */
+.ops-chip.street:not(.done):not(.late) { border-style: solid; border-color: rgba(251, 191, 36, 0.35); color: #fcd34d; }
+.ops-chip.info { opacity: 0.85; color: #9fb0c6; font-style: italic; }
+.ops-chip.ours { color: #bae6fd; border-color: rgba(56, 189, 248, 0.35); background: rgba(56, 189, 248, 0.08); }
+.ice-buy { color: #fde68a; }
+.om-info {
+  margin-top: 14px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #cbd5e1;
+  background: rgba(56, 189, 248, 0.07);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+}
+.om-ice-part.street { color: #fde68a; }
+.om-ice-part small { margin-left: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #fcd34d; }
