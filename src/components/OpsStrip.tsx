@@ -400,7 +400,7 @@ function OpsSheet({
 /* ---------- the rows, exactly as the Google Sheet has its columns ---------- */
 
 export const ICE_COLUMNS = ['Date', 'Time', 'Address', 'Onsite contact', 'Ice needs', 'Event', 'Ordered', 'Company']
-export const VEHICLE_COLUMNS = ['Date', 'Event', 'Pickup', 'Location', 'Vehicle', 'Ord. placed', 'Driver']
+export const VEHICLE_COLUMNS = ['Date', 'Event', 'Pickup', 'Location', 'Vehicle', 'Ord. placed', 'Notes', 'Driver']
 
 /** The sheet's "Onsite contact" is the captain on StaffMate — not the pack list's contact. */
 export function iceRow(imp: PackImport, day: OpsDay, ice: { at: number; company: string }, captain = ''): string[] {
@@ -426,6 +426,7 @@ export function vehicleRow(
     by: string
     at: number
     driver: string
+    note?: string
   },
 ): string[] {
   return [
@@ -435,6 +436,7 @@ export function vehicleRow(
     v.location,
     v.type,
     `${v.by} ${md(v.at)}`,
+    v.note ?? '',
     v.driver,
   ]
 }
@@ -884,6 +886,7 @@ function VehicleDialog({
   const [location, setLocation] = useState(vehicle?.location || 'CC-LIC')
   const [pickup, setPickup] = useState(vehicle?.pickup ?? '')
   const [driver, setDriver] = useState(vehicle?.driver ?? '')
+  const [note, setNote] = useState(vehicle?.note ?? '')
   const [by, setBy] = useState(vehicle?.by ?? remembered())
   const [date, setDate] = useState(toInput(vehicle?.at ?? Date.now()))
   const [copied, setCopied] = useState(false)
@@ -895,11 +898,14 @@ function VehicleDialog({
     location: ours ? '' : location,
     pickup: pickup.trim(),
     driver: driver.trim(),
+    note: note.trim(),
     by: by.trim() || 'Fabio',
     at: fromInput(date),
     copiedAt,
   })
   const values = vehicleRow(imp, day, build(null))
+  // A multi-day event usually keeps one rental for all its days.
+  const eventDays = (imp.days ?? []).length
   const put = (v: OpsVehicle) => (vehicle ? list.map((x) => (x.id === vehicle.id ? v : x)) : [...list, v])
 
   async function copyRow() {
@@ -988,6 +994,27 @@ function VehicleDialog({
             />
           </FieldBox>
           {!ours && (
+            <FieldBox label="Notes — the sheet's Notes column" wide>
+              <div className="om-note-row">
+                <input
+                  value={note}
+                  placeholder={eventDays > 1 ? `For ${eventDays} days` : 'For 2 days'}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+                {[2, 3, 4].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`om-chip${note === `For ${n} days` ? ' on' : ''}`}
+                    onClick={() => setNote(note === `For ${n} days` ? '' : `For ${n} days`)}
+                  >
+                    For {n} days
+                  </button>
+                ))}
+              </div>
+            </FieldBox>
+          )}
+          {!ours && (
             <>
               <FieldBox label="Booked on">
                 <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
@@ -1014,7 +1041,11 @@ function VehicleDialog({
           title="Google Sheet row"
           aside={<span className="om-aside">7 columns · paste into the first empty row</span>}
         >
-          <SheetRow columns={VEHICLE_COLUMNS} values={values} empty={{ 2: 'fill in above', 6: 'fill in above' }} />
+          <SheetRow
+            columns={VEHICLE_COLUMNS}
+            values={values}
+            empty={{ 2: 'fill in above', 6: 'left blank', 7: 'fill in above' }}
+          />
         </Section>
       )}
     </Modal>
@@ -1346,6 +1377,7 @@ export function OpsCopy({ weekStart, imports }: { weekStart: string; imports: Pa
                   <col className="c-loc" />
                   <col className="c-vehicle" />
                   <col className="c-placed" />
+                  <col className="c-notes" />
                   <col className="c-driver" />
                   <col className="c-copy" />
                 </colgroup>
@@ -1368,7 +1400,8 @@ export function OpsCopy({ weekStart, imports }: { weekStart: string; imports: Pa
                       <td data-label="Location">{x.values[3]}</td>
                       <td data-label="Vehicle" className="sx-strong">{x.values[4]}</td>
                       <td data-label="Ord. placed">{x.values[5]}</td>
-                      <td data-label="Driver">{x.values[6] || <span className="sx-empty">—</span>}</td>
+                      <td data-label="Notes">{x.values[6] || <span className="sx-empty">—</span>}</td>
+                      <td data-label="Driver">{x.values[7] || <span className="sx-empty">—</span>}</td>
                       <td>{rowCopy('veh', x)}</td>
                     </tr>
                   ))}

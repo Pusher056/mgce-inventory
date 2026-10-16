@@ -3223,3 +3223,23 @@ textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .sx-table td:last-child::before { content: none; }
   .sx-captain { margin: -4px 0; }
 }
+/* the vehicle sheet's Notes column — "For 2 days" */
+.sx-table.veh .c-event { width: 22%; }
+.sx-table .c-notes { width: 11%; }
+.sx-table.veh .c-driver { width: 12%; }
+.om-note-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.om-note-row input { flex: 1 1 180px; }
+.om-chip {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b6c2d3;
+  background: #0f1729;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.om-chip:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.45); }
+.om-chip.on { color: #e0f2fe; background: rgba(56, 189, 248, 0.16); border-color: var(--accent); }

@@ -684,6 +684,8 @@ export interface OpsVehicle {
   by: string
   at: number
   driver: string
+  /** The sheet's Notes column — "For 2 days" when one rental covers several days. */
+  note?: string
   copiedAt: number | null
 }
 
