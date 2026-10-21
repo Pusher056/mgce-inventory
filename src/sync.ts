@@ -847,7 +847,37 @@ async function uploadReceipts() {
 const TOMBSTONE_GRACE_MS = 5 * 60 * 1000
 
 /** Ceiling for a full-table pull; also the signal that a page was truncated. */
-const PULL_LIMIT = 5000
+/**
+ * The server hands back at most 1000 rows per request, whatever limit is asked
+ * for. Reading only the first page made the 1001st tick look "deleted on
+ * another device", and the app took it off the screen a few seconds after it
+ * was made (2026-10-20, the day pack_packed passed 1000 rows). Every table is
+ * read page by page until the server has nothing more to give.
+ */
+const PAGE = 1000
+/** A sanity ceiling, far above anything real, so a server fault can't loop forever. */
+const MAX_ROWS = 200_000
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Pulled = { data: any[] | null; error: unknown }
+
+/** Every row of a table, in pages, in a stable order so no page skips or repeats a row. */
+async function pullAll(table: string): Promise<Pulled> {
+  const rows = []
+  for (let from = 0; from < MAX_ROWS; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    // A page that failed means the list is incomplete — and an incomplete list
+    // must never be read as "the rest was deleted".
+    if (error || !data) return { data: null, error: error ?? new Error('no data') }
+    rows.push(...data)
+    if (data.length < PAGE) return { data: rows, error: null }
+  }
+  return { data: null, error: new Error(`${table}: more than ${MAX_ROWS} rows`) }
+}
 
 /**
  * Product columns added after the first release. A device that synced before
@@ -903,10 +933,8 @@ async function dropLocallyIfGoneFromServer(
   pendingIds: Set<string>,
   askedAt: number,
 ) {
+  // A failed or partial read is not evidence that anything was deleted.
   if (response.error || !response.data) return
-  // A full page means the list was probably cut short, and a cut-short list is
-  // not evidence that anything was deleted.
-  if (response.data.length >= PULL_LIMIT) return
   const onServer = new Set(response.data.map((r) => r.id))
   const local = await table.toArray()
   const gone = local
@@ -935,31 +963,30 @@ export async function pullFromServer() {
   try {
     const askedAt = Date.now()
     const [prods, sess, ents, evs, lines, vnoI, vnoR, vnoL, liq, rts, rpe, rst, rli] = await Promise.all([
-      // Explicit limits: the server's default page size would silently truncate
-      // one day, and a truncated list read as "the rest was deleted" would take
-      // real counts with it.
-      supabase.from('products').select('*').limit(PULL_LIMIT),
-      supabase.from('sessions').select('*').limit(PULL_LIMIT),
-      supabase.from('entries').select('*').limit(PULL_LIMIT),
-      supabase.from('events').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_lines').select('*').limit(PULL_LIMIT),
-      supabase.from('vno_items').select('*').limit(PULL_LIMIT),
-      supabase.from('vno_reports').select('*').limit(PULL_LIMIT),
-      supabase.from('vno_lines').select('*').limit(PULL_LIMIT),
-      supabase.from('liquor_program').select('*').limit(PULL_LIMIT),
-      supabase.from('routes').select('*').limit(PULL_LIMIT),
-      supabase.from('route_people').select('*').limit(PULL_LIMIT),
-      supabase.from('route_stops').select('*').limit(PULL_LIMIT),
-      supabase.from('route_lines').select('*').limit(PULL_LIMIT),
+      // Whole tables, page by page: a list cut short by the server's page size
+      // and read as "the rest was deleted" would take real work with it.
+      pullAll('products'),
+      pullAll('sessions'),
+      pullAll('entries'),
+      pullAll('events'),
+      pullAll('pack_lines'),
+      pullAll('vno_items'),
+      pullAll('vno_reports'),
+      pullAll('vno_lines'),
+      pullAll('liquor_program'),
+      pullAll('routes'),
+      pullAll('route_people'),
+      pullAll('route_stops'),
+      pullAll('route_lines'),
     ])
     const [pWeeks, pImports, pPacked, pStates, pAliases, pFiles, pOps] = await Promise.all([
-      supabase.from('pack_weeks').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_imports').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_packed').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_line_states').select('*').limit(PULL_LIMIT),
-      supabase.from('item_aliases').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_files').select('*').limit(PULL_LIMIT),
-      supabase.from('pack_ops').select('*').limit(PULL_LIMIT),
+      pullAll('pack_weeks'),
+      pullAll('pack_imports'),
+      pullAll('pack_packed'),
+      pullAll('pack_line_states'),
+      pullAll('item_aliases'),
+      pullAll('pack_files'),
+      pullAll('pack_ops'),
     ])
 
     // Read the local queues now, not alongside the requests: anything the user
